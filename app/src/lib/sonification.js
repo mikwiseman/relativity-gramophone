@@ -147,6 +147,24 @@ export function voiceParameters(body, resonanceStrength = 0) {
   };
 }
 
+export function voicePluckParameters(body, { offset, strength }) {
+  const clampedOffset = clamp(offset, 0, 1);
+  const clampedStrength = clamp(strength, 0, 1);
+  const mass = clamp(body.displayMass ?? body.mass ?? 0.5, 0.1, 1.3);
+  const live = voiceParameters(body);
+
+  return {
+    frequency: live.frequency,
+    pan: live.pan,
+    strength: clampedStrength,
+    gain: clamp(0.028 + clampedStrength * 0.058 + mass * 0.008, 0.02, 0.1),
+    cutoff: clamp(1050 + clampedOffset * 5200, 900, 7500),
+    partialGain: clamp(0.06 + clampedOffset * 0.3, 0.05, 0.4),
+    decay: clamp(0.85 + (1 - clampedOffset) * 1.15 + mass * 0.5, 0.7, 3),
+    detuneCents: 4,
+  };
+}
+
 export function isResonanceChallengeComplete(resonance, target, threshold = 0.82) {
   return Boolean(resonance && resonance.label === target && resonance.strength >= threshold);
 }
@@ -154,6 +172,7 @@ export function isResonanceChallengeComplete(resonance, target, threshold = 0.82
 export function hapticPattern({ kind, strength = 0.5 }) {
   if (kind === "audition") return [Math.round(4 + clamp(strength, 0, 1) * 3)];
   if (kind === "crossing") return [8];
+  if (kind === "pluck") return [Math.round(3 + clamp(strength, 0, 1) * 4)];
   if (kind === "birth") {
     const normalized = clamp(strength, 0, 1);
     return [Math.round(6 + normalized * 6), 30, Math.round(4 + normalized * 3)];

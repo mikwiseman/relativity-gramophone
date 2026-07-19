@@ -10,6 +10,7 @@ import {
   spectralMix,
   visibleWavelengthToAudibleFrequency,
   voiceParameters,
+  voicePluckParameters,
 } from "./sonification.js";
 
 const BODY = {
@@ -55,6 +56,22 @@ test("a real 3:2 orbital resonance is heard as an exact perfect fifth", () => {
   const outer = voiceParameters({ ...BODY, period: 16.2, properRate: 1, doppler: 1 });
 
   assert.ok(Math.abs(inner.frequency / outer.frequency - 3 / 2) < 1e-12);
+});
+
+test("pluck articulation: far plucks brighten, near plucks ring longer, nothing clips", () => {
+  const body = { ...BODY, period: 16.2, properRate: 1, doppler: 1, displayMass: 0.7 };
+  const nearWorld = voicePluckParameters(body, { offset: 0.05, strength: 0.8 });
+  const farOut = voicePluckParameters(body, { offset: 0.95, strength: 0.8 });
+  const soft = voicePluckParameters(body, { offset: 0.5, strength: 0.1 });
+  const hard = voicePluckParameters(body, { offset: 0.5, strength: 3 });
+
+  assert.ok(Math.abs(nearWorld.frequency - 4096 / 16.2) < 1e-9, "a pluck sounds the live Kepler pitch");
+  assert.ok(farOut.cutoff > nearWorld.cutoff);
+  assert.ok(farOut.partialGain > nearWorld.partialGain);
+  assert.ok(nearWorld.decay > farOut.decay);
+  assert.ok(hard.gain > soft.gain);
+  assert.ok(hard.gain <= 0.1);
+  assert.ok(hard.strength <= 1 && soft.strength >= 0);
 });
 
 test("approach/recession drive pitch and cold/warm color in the same direction", () => {
@@ -107,6 +124,7 @@ test("visible light is logarithmically compressed from red to violet across two 
 test("haptic patterns remain short and scale with physical intensity", () => {
   assert.deepEqual(hapticPattern({ kind: "audition", strength: 0.7 }), [6]);
   assert.deepEqual(hapticPattern({ kind: "crossing", strength: 0.7 }), [8]);
+  assert.deepEqual(hapticPattern({ kind: "pluck", strength: 0.5 }), [5]);
   assert.deepEqual(hapticPattern({ kind: "birth", strength: 0.5 }), [9, 30, 6]);
   assert.deepEqual(hapticPattern({ kind: "consumption", strength: 1 }), [12, 26, 6]);
   assert.deepEqual(hapticPattern({ kind: "pericenter", strength: 0.3 }), [5, 22, 4]);

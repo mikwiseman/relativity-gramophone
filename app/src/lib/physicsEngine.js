@@ -133,6 +133,7 @@ function initialPlanetState(body) {
   return {
     id: body.id,
     kind: "planet",
+    ...(body.created ? { created: true } : {}),
     sprite: body.sprite,
     mass: PLANET_MASS_SCALE * body.mass,
     displayMass: body.mass,

@@ -41,11 +41,46 @@ test("a composition survives a URL-safe round trip including unicode", () => {
   assert.deepEqual(decoded, composition);
 });
 
-test("the default score speaks the birth-capable format and Kepler sonification", () => {
+test("the default score speaks the harp-capable format and Kepler sonification", () => {
   const composition = createDefaultComposition();
 
-  assert.equal(composition.format, "tau-record/4");
+  assert.equal(composition.format, "tau-record/5");
   assert.equal(composition.sonification, "cosmic-voices/2");
+});
+
+test("plucked strings are recorded, replayed, and validated against the living roster", () => {
+  const composition = createDefaultComposition();
+  const birth = novaBirthEvent(1);
+  composition.events.push(
+    { kind: "pluck", at: 0.5, bodyId: "io", offset: 0.25, strength: 0.8 },
+    birth,
+    { kind: "pluck", at: 2, bodyId: birth.body.id, offset: 0.9, strength: 0.4 },
+  );
+
+  const decoded = decodeComposition(encodeComposition(composition));
+  assert.deepEqual(decoded, composition);
+
+  const orphanPluck = createDefaultComposition();
+  orphanPluck.events.push({ kind: "pluck", at: 1, bodyId: "nova-4", offset: 0.5, strength: 1 });
+  assert.throws(() => encodeComposition(orphanPluck), /not alive/i);
+
+  const badOffset = createDefaultComposition();
+  badOffset.events.push({ kind: "pluck", at: 1, bodyId: "io", offset: 1.4, strength: 1 });
+  assert.throws(() => encodeComposition(badOffset), /Invalid pluck/i);
+});
+
+test("an existing tau-record/4 link migrates into the harp format unchanged", () => {
+  const previous = createDefaultComposition();
+  previous.format = "tau-record/4";
+  previous.events.push(novaBirthEvent(2.5));
+  const encoded = Buffer.from(JSON.stringify(previous), "utf8").toString("base64url");
+
+  const migrated = decodeComposition(encoded);
+
+  assert.equal(migrated.format, "tau-record/5");
+  assert.equal(migrated.sonification, "cosmic-voices/2");
+  assert.equal(migrated.events.length, 1);
+  assert.equal(migrated.events[0].kind, "add-body");
 });
 
 test("an existing tau-record/3 link migrates and keeps its voices and seals", () => {
@@ -57,7 +92,7 @@ test("an existing tau-record/3 link migrates and keeps its voices and seals", ()
 
   const decoded = decodeComposition(encoded);
 
-  assert.equal(decoded.format, "tau-record/4");
+  assert.equal(decoded.format, "tau-record/5");
   assert.equal(decoded.sonification, "cosmic-voices/2");
   assert.deepEqual(decoded.resonances, ["3:2"]);
   assert.deepEqual(decoded.bodies.map((body) => body.voice), ["earth", "moon", "light"]);
@@ -153,7 +188,7 @@ test("a tau-record/2 link gains deterministic cosmic voice imprints", () => {
 
   const migrated = decodeComposition(encoded);
 
-  assert.equal(migrated.format, "tau-record/4");
+  assert.equal(migrated.format, "tau-record/5");
   assert.equal(migrated.sonification, "cosmic-voices/2");
   assert.deepEqual(migrated.bodies.map((body) => body.voice), ["earth", "moon", "light"]);
   assert.deepEqual(migrated.resonances, []);
@@ -170,7 +205,7 @@ test("a tau-record/1 link migrates into the deterministic N-body format", () => 
 
   const migrated = decodeComposition(encoded);
 
-  assert.equal(migrated.format, "tau-record/4");
+  assert.equal(migrated.format, "tau-record/5");
   assert.equal(migrated.physics, PHYSICS_MODEL);
   assert.equal(migrated.sonification, "cosmic-voices/2");
   assert.deepEqual(migrated.bodies.map((body) => body.voice), ["earth", "moon", "light"]);

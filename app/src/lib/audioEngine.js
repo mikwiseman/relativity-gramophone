@@ -1,4 +1,4 @@
-import { COSMIC_VOICES, voiceParameters } from "./sonification.js";
+import { COSMIC_VOICES, voiceParameters, voicePluckParameters } from "./sonification.js";
 
 const AudioContextClass = globalThis.AudioContext ?? globalThis.webkitAudioContext;
 
@@ -239,6 +239,55 @@ export class AudioEngine {
     fundamental.stop(now + duration + 0.05);
     partial.stop(now + duration + 0.05);
     sub.stop(now + duration + 0.05);
+  }
+
+  playPluck(body, { offset, strength }) {
+    if (!this.context || this.context.state !== "running") return;
+
+    const now = this.context.currentTime;
+    const parameters = voicePluckParameters(body, { offset, strength });
+    const duration = parameters.decay;
+    const first = this.context.createOscillator();
+    const second = this.context.createOscillator();
+    const octave = this.context.createOscillator();
+    const octaveGain = this.context.createGain();
+    const filter = this.context.createBiquadFilter();
+    const gain = this.context.createGain();
+    const panner = this.context.createStereoPanner();
+    const delaySend = this.context.createGain();
+
+    first.type = "triangle";
+    second.type = "sine";
+    octave.type = "sine";
+    for (const [oscillator, ratio] of [[first, 1], [second, 1], [octave, 2]]) {
+      oscillator.frequency.setValueAtTime(parameters.frequency * ratio * 1.006, now);
+      oscillator.frequency.exponentialRampToValueAtTime(parameters.frequency * ratio, now + 0.028);
+    }
+    first.detune.setValueAtTime(parameters.detuneCents, now);
+    second.detune.setValueAtTime(-parameters.detuneCents, now);
+    octaveGain.gain.setValueAtTime(parameters.partialGain, now);
+    octaveGain.gain.exponentialRampToValueAtTime(0.0001, now + duration * 0.45);
+    filter.type = "lowpass";
+    filter.Q.value = 1.35;
+    filter.frequency.setValueAtTime(parameters.cutoff, now);
+    filter.frequency.exponentialRampToValueAtTime(Math.max(320, parameters.cutoff * 0.42), now + duration);
+    panner.pan.setValueAtTime(parameters.pan, now);
+    delaySend.gain.value = 0.2;
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(parameters.gain, now + 0.004);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    first.connect(filter);
+    second.connect(filter);
+    octave.connect(octaveGain).connect(filter);
+    filter.connect(gain).connect(panner).connect(this.master);
+    panner.connect(delaySend).connect(this.delay);
+
+    for (const oscillator of [first, second, octave]) {
+      oscillator.start(now);
+      oscillator.stop(now + duration + 0.1);
+    }
   }
 
   updateGestation({ frequency, pan }) {

@@ -2,7 +2,8 @@ import { MAX_WORLDS, PHYSICS_MODEL } from "./physicsEngine.js";
 import { assertResonanceSeals } from "./gameProgress.js";
 import { defaultVoiceForBody, isCosmicVoice, SONIFICATION_MODEL } from "./sonification.js";
 
-const FORMAT = "tau-record/4";
+const FORMAT = "tau-record/5";
+const FOURTH_FORMAT = "tau-record/4";
 const THIRD_FORMAT = "tau-record/3";
 const PREVIOUS_FORMAT = "tau-record/2";
 const LEGACY_FORMAT = "tau-record/1";
@@ -154,6 +155,13 @@ function assertEvent(event, previousTime, aliveIds) {
     return;
   }
 
+  if (event.kind === "pluck") {
+    if (!aliveIds.has(event.bodyId)) throw new Error(`Score event touches a world that is not alive: ${event.bodyId ?? "missing"}`);
+    if (!isFiniteNumber(event.offset, 0, 1)) throw new Error("Invalid pluck offset");
+    if (!isFiniteNumber(event.strength, 0, 1)) throw new Error("Invalid pluck strength");
+    return;
+  }
+
   if (event.kind === "legacy-orbit") {
     if (!VALID_BODY_IDS.has(event.bodyId)) throw new Error("Invalid score event");
     for (const key of ["semiMajor", "phase"]) {
@@ -208,6 +216,13 @@ function addDefaultVoices(value) {
       body.kind === "planet" ? { ...body, voice: defaultVoiceForBody(body.id) } : body
     ));
   }
+  return migrated;
+}
+
+function migrateFourthComposition(value) {
+  if (!Array.isArray(value?.bodies) || !Array.isArray(value?.events)) throw new Error("Invalid score payload");
+  const migrated = { ...clone(value), format: FORMAT };
+  assertComposition(migrated);
   return migrated;
 }
 
@@ -334,6 +349,7 @@ export function decodeComposition(encoded) {
   if (value?.format === LEGACY_FORMAT) return migrateLegacyComposition(value);
   if (value?.format === PREVIOUS_FORMAT) return migratePreviousComposition(value);
   if (value?.format === THIRD_FORMAT) return migrateThirdComposition(value);
+  if (value?.format === FOURTH_FORMAT) return migrateFourthComposition(value);
   const normalized = addDefaultResonanceSeals(value);
   assertComposition(normalized);
   return normalized;

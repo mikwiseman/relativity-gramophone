@@ -189,3 +189,23 @@ Verified live in the Claude in-app Browser pane against the Vite dev server, the
 - Fixed [P2]: the gestation glow read as a grey smudge on White Time and Sumi; birth accents are now surface-aware (dark → cyan, light → ink).
 - Fixed [P2]: raw velocity aiming made small drags plunge and medium drags near-escape; throws now scale around the local circular speed, so every drag lands a musical orbit.
 - Fixed [P3]: the sound atlas showed `undefined` labels for born worlds; novas now display as `N1…` and state that a born world keeps its birth voice.
+
+## Star-harp release verification — 2026-07-20
+
+Verified live in the Claude in-app Browser pane against the Vite dev server; 63 node tests passing; production build clean.
+
+### Interaction sequence checked
+
+1. Clicked directly on an orbit line in QUINTA: the string sounded its Kepler pitch with a plucked envelope and the whole orbit rang — a traveling transverse wave with a bright contact glint at the pluck point.
+2. Swept radially across the system: each crossed string plucked in spatial order (strum), with per-string cooldown; two strings rang simultaneously with independent ripples.
+3. Opened the harp shelf (Planet icon): QUINTA/OCTAVA/PENTA/COMETA listed with mottos; loading PENTA brought five concentric strings and an immediate `4:3` resonance readout; the switch is a fresh take and keeps the current theme.
+4. Inscribed and decoded the share link: `tau-record/5`, seed `harp-penta`, five roster bodies, strummed `pluck` events recorded with offsets and strengths.
+5. Opened the link as a listener: the replay rang the recorded strums at their score times; the listener plucked the received harp directly (sound + ripple, record untouched).
+6. Switched the listener to White Time and plucked: the ripple renders in ink on paper (surface-aware accents), matching the birth-visual rule.
+7. Fixed while verifying: the fifth control button pushed the theme and harp menus past the right edge at 375 px — both menus now pin to the viewport edge on compact screens (and the harp options meet 44 px targets).
+8. Console: no warnings or errors across composer, strum, harp switching, listener replay, and listener plucking.
+
+### Result
+
+- The instrument layer reads as intended: strings are visible objects, plucking is discoverable from the hover glint and the whisper, and music events flow back into the image as string vibrations.
+- Gesture arbitration held in play: world grab, then string pluck, then void birth; a missed strum starting off-string conceives a seed (visible warning) rather than silently doing nothing.

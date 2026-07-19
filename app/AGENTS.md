@@ -24,3 +24,7 @@ When implementing from a selected generated mock, treat that image as the source
 - Feeding a born world to the star is the only removal gesture; the core trio is permanent. The sky holds at most 12 worlds.
 - Birth visuals follow the surface: dark themes conceive in cyan light, light themes conceive in ink. Consumption always flashes warm coral.
 - The composer's dance never loops or resets on its own; only the listener replay loops at the recorded duration. Restart (↺) begins a fresh take: it clears recorded events so timestamps stay monotonic.
+- Every drawn orbit is a harp string. Touching the line (not the world, not the void) plucks it at its live Kepler pitch; sweeping across lines strums them with per-string cooldown. Pluck position sets timbre (near the world dark and long, far bright), swipe speed sets strength. Gesture priority is fixed: world grab, then string pluck, then void birth.
+- Plucks are recorded as `pluck` events and replay for the listener; listeners may also pluck the received harp locally without touching the record. Plucking never changes physics — strings sound the orbit, they do not push it.
+- The harp shelf loads authored star systems (quinta, octava, penta, cometa) as fresh takes; presets keep the io/europa/callisto trio as the first three strings (extra strings are roster novas in the initial state), keep the player's current theme, and are hidden from listeners.
+- String ripples and hover glints use the same surface rule as births: cyan light on dark themes, ink on light themes.

@@ -71,6 +71,11 @@ button {
   cursor: crosshair;
 }
 
+.orbital-canvas.is-string-hover,
+.orbital-canvas.is-plucking {
+  cursor: pointer;
+}
+
 .topline {
   position: absolute;
   z-index: 3;
@@ -747,6 +752,61 @@ input:focus-visible {
   background-size: cover;
 }
 
+.harp-shelf {
+  position: relative;
+}
+
+.harp-menu {
+  position: absolute;
+  bottom: calc(100% + 13px);
+  left: 0;
+  display: grid;
+  width: 252px;
+  padding: 9px 0;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 30%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 90%, transparent);
+  box-shadow: 0 18px 38px color-mix(in srgb, #000 12%, transparent);
+  backdrop-filter: blur(14px);
+  animation: rise-menu 220ms ease both;
+}
+
+.harp-option {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.harp-option strong {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+}
+
+.harp-option span {
+  font-size: 7px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  opacity: 0.62;
+}
+
+.harp-option:hover,
+.harp-option[aria-checked="true"] {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.harp-option[aria-checked="true"] strong {
+  color: var(--cyan);
+}
+
 .inscribe-action {
   position: absolute;
   z-index: 5;
@@ -1098,12 +1158,20 @@ input:focus-visible {
     min-height: 44px;
   }
 
-  .theme-menu {
-    width: 198px;
+  .theme-menu,
+  .harp-menu {
+    position: fixed;
+    left: 16px;
+    bottom: 84px;
+    width: min(300px, calc(100vw - 32px));
   }
 
   .theme-option {
     min-height: 44px;
+  }
+
+  .harp-option {
+    min-height: 48px;
   }
 
   .relativity-lens {

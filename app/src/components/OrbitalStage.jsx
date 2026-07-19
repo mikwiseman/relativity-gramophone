@@ -16,6 +16,10 @@ import {
   birthMassFromHold,
   previewOrbit,
 } from "../lib/starBirth.js";
+import { nearestStringPoint } from "../lib/harpStrings.js";
+
+const STRING_TOUCH_DISTANCE = 14;
+const STRING_PLUCK_COOLDOWN = 120;
 
 const TAU = Math.PI * 2;
 const MAX_FRAME_DELTA = 0.1;
@@ -458,6 +462,80 @@ function drawBirthHalos(context, theme, halos, engine, width, height) {
   }
 }
 
+function pathMetrics(screenPoints) {
+  const lengths = [0];
+  let total = 0;
+  for (let index = 1; index < screenPoints.length; index += 1) {
+    total += Math.hypot(
+      screenPoints[index].x - screenPoints[index - 1].x,
+      screenPoints[index].y - screenPoints[index - 1].y,
+    );
+    lengths.push(total);
+  }
+  return { lengths, total };
+}
+
+function drawStringRipples(context, theme, ripples, trajectories, width, height) {
+  const accent = birthAccent(theme);
+  for (const ripple of ripples) {
+    const worldPoints = trajectories.get(ripple.bodyId);
+    if (!worldPoints || worldPoints.length < 3) continue;
+    const screenPoints = worldPoints.map((point) => toScreen(point, width, height));
+    const { lengths, total } = pathMetrics(screenPoints);
+    if (total <= 0) continue;
+    const origin = ripple.offset * total;
+    const fade = 1 - ripple.life;
+
+    context.save();
+    context.strokeStyle = accent;
+    context.globalAlpha = fade * 0.72;
+    context.lineWidth = 1.15;
+    context.beginPath();
+    for (let index = 0; index < screenPoints.length; index += 1) {
+      const previous = screenPoints[Math.max(0, index - 1)];
+      const next = screenPoints[Math.min(screenPoints.length - 1, index + 1)];
+      const tangentLength = Math.max(1e-6, Math.hypot(next.x - previous.x, next.y - previous.y));
+      const normalX = -(next.y - previous.y) / tangentLength;
+      const normalY = (next.x - previous.x) / tangentLength;
+      const along = lengths[index] - origin;
+      const envelope = Math.exp(-Math.abs(along) / 96);
+      const wave = Math.sin(along * 0.11 - ripple.life * 15);
+      const amplitude = (4.5 + ripple.strength * 6) * fade * envelope * wave;
+      const x = screenPoints[index].x + normalX * amplitude;
+      const y = screenPoints[index].y + normalY * amplitude;
+      if (index === 0) context.moveTo(x, y);
+      else context.lineTo(x, y);
+    }
+    context.stroke();
+
+    for (let index = 1; index < screenPoints.length; index += 1) {
+      if (lengths[index] < origin) continue;
+      const span = Math.max(1e-6, lengths[index] - lengths[index - 1]);
+      const t = (origin - lengths[index - 1]) / span;
+      const x = screenPoints[index - 1].x + (screenPoints[index].x - screenPoints[index - 1].x) * t;
+      const y = screenPoints[index - 1].y + (screenPoints[index].y - screenPoints[index - 1].y) * t;
+      context.globalAlpha = fade * 0.9;
+      context.fillStyle = accent;
+      context.beginPath();
+      context.arc(x, y, 2.2 + ripple.strength * 2.2, 0, TAU);
+      context.fill();
+      break;
+    }
+    context.restore();
+  }
+}
+
+function drawStringHover(context, theme, hover) {
+  if (!hover) return;
+  context.save();
+  context.globalAlpha = 0.55;
+  context.fillStyle = birthAccent(theme);
+  context.beginPath();
+  context.arc(hover.x, hover.y, 2.6, 0, TAU);
+  context.fill();
+  context.restore();
+}
+
 function drawConsumeFlashes(context, theme, flashes, star, width, height) {
   const center = toScreen(star, width, height);
   for (const flash of flashes) {
@@ -489,6 +567,7 @@ function capturePointer(target, pointerId) {
 }
 
 function applyPlaybackEvent(engine, event) {
+  if (event.kind === "pluck") return;
   if (event.kind === "set-body-state" || event.kind === "add-body" || event.kind === "remove-body") {
     engine.applyEvent(event);
     return;
@@ -529,6 +608,7 @@ export function OrbitalStage({
   onHaptic,
   onNote,
   onPhysicsFrame,
+  onPluckBloom,
   selectedBodyId,
 }) {
   const canvasRef = useRef(null);
@@ -548,6 +628,10 @@ export function OrbitalStage({
   const birthCountRef = useRef(0);
   const birthHalosRef = useRef([]);
   const consumeFlashesRef = useRef([]);
+  const pluckRef = useRef(null);
+  const ripplesRef = useRef([]);
+  const hoverStringRef = useRef(null);
+  const lastHoverCheckRef = useRef(0);
   const latestGestureRef = useRef(null);
   const lastGestureEmitRef = useRef(0);
   const physicalBodiesSignature = useMemo(() => JSON.stringify(
@@ -593,6 +677,9 @@ export function OrbitalStage({
     birthRef.current = null;
     birthHalosRef.current = [];
     consumeFlashesRef.current = [];
+    pluckRef.current = null;
+    ripplesRef.current = [];
+    hoverStringRef.current = null;
     birthCountRef.current = initialStateRef.current.bodies.filter((body) => body.created).length;
     onElapsed(0);
   }, [initialState, onElapsed, physicalBodiesSignature, resetToken]);
@@ -647,6 +734,18 @@ export function OrbitalStage({
             if (victim) {
               consumeFlashesRef.current.push({ life: 0 });
               onConsumptionBloom({ ...victim });
+            }
+          }
+          if (playbackEvent.kind === "pluck") {
+            const plucked = engine.getBody(playbackEvent.bodyId);
+            if (plucked) {
+              ripplesRef.current.push({
+                bodyId: playbackEvent.bodyId,
+                offset: playbackEvent.offset,
+                strength: playbackEvent.strength,
+                life: 0,
+              });
+              onPluckBloom({ ...plucked }, { offset: playbackEvent.offset, strength: playbackEvent.strength });
             }
           }
           applyPlaybackEvent(engine, playbackEvent);
@@ -739,6 +838,12 @@ export function OrbitalStage({
         drawSprite(context, spriteRef.current, body.sprite, position.x, position.y, bodySize, 0.98);
       }
 
+      ripplesRef.current = ripplesRef.current
+        .map((ripple) => ({ ...ripple, life: ripple.life + delta * 1.35 }))
+        .filter((ripple) => ripple.life < 1);
+      drawStringRipples(context, theme, ripplesRef.current, trajectoriesRef.current, width, height);
+      drawStringHover(context, theme, hoverStringRef.current);
+
       birthHalosRef.current = birthHalosRef.current
         .map((halo) => ({ ...halo, life: halo.life + delta * 0.85 }))
         .filter((halo) => halo.life < 1);
@@ -776,11 +881,37 @@ export function OrbitalStage({
       cancelAnimationFrame(frameId);
       observer.disconnect();
     };
-  }, [duration, isListener, isPlaying, onBirthBloom, onConsumptionBloom, onElapsed, onGestationTone, onHaptic, onNote, onPhysicsFrame, playbackEvents, selectedBodyId, theme]);
+  }, [duration, isListener, isPlaying, onBirthBloom, onConsumptionBloom, onElapsed, onGestationTone, onHaptic, onNote, onPhysicsFrame, onPluckBloom, playbackEvents, selectedBodyId, theme]);
 
   const pointerPosition = (event) => {
     const rect = canvasRef.current.getBoundingClientRect();
     return { x: event.clientX - rect.left, y: event.clientY - rect.top, width: rect.width, height: rect.height };
+  };
+
+  const stringPaths = (width, height) => {
+    const paths = [];
+    for (const body of engineRef.current.state.bodies) {
+      if (body.kind !== "planet") continue;
+      const worldPoints = trajectoriesRef.current.get(body.id);
+      if (!worldPoints || worldPoints.length < 2) continue;
+      paths.push({ bodyId: body.id, points: worldPoints.map((point) => toScreen(point, width, height)) });
+    }
+    return paths;
+  };
+
+  const performPluck = (hit, strength) => {
+    const engine = engineRef.current;
+    const body = engine.getBody(hit.bodyId);
+    if (!body) return;
+    const pluck = {
+      offset: Number(Math.min(1, Math.max(0, hit.offset)).toFixed(3)),
+      strength: Number(Math.min(1, Math.max(0, strength)).toFixed(2)),
+    };
+    ripplesRef.current.push({ bodyId: body.id, ...pluck, life: 0 });
+    if (!isListener) {
+      onBodyGesture({ kind: "pluck", at: Number(engine.state.time.toFixed(6)), bodyId: body.id, ...pluck });
+    }
+    onPluckBloom({ ...body }, pluck);
   };
 
   const handlePointerDown = (event) => {
@@ -801,6 +932,17 @@ export function OrbitalStage({
       dragRef.current = { id: target.body.id, startX: pointer.x, startY: pointer.y };
       latestGestureRef.current = null;
       event.currentTarget.classList.add("is-dragging");
+      return;
+    }
+
+    const stringHit = nearestStringPoint({ x: pointer.x, y: pointer.y }, stringPaths(pointer.width, pointer.height), STRING_TOUCH_DISTANCE);
+    if (stringHit) {
+      capturePointer(event.currentTarget, event.pointerId);
+      pluckRef.current = { lastPluckAt: new Map([[stringHit.bodyId, performance.now()]]), lastPoint: { x: pointer.x, y: pointer.y } };
+      hoverStringRef.current = null;
+      performPluck(stringHit, 0.62);
+      onBodySelect(stringHit.bodyId);
+      event.currentTarget.classList.add("is-plucking");
       return;
     }
 
@@ -827,7 +969,41 @@ export function OrbitalStage({
       };
       return;
     }
-    if (!dragRef.current || isListener) return;
+    if (pluckRef.current) {
+      const pointer = pointerPosition(event);
+      const traveled = Math.hypot(pointer.x - pluckRef.current.lastPoint.x, pointer.y - pluckRef.current.lastPoint.y);
+      const hit = nearestStringPoint({ x: pointer.x, y: pointer.y }, stringPaths(pointer.width, pointer.height), STRING_TOUCH_DISTANCE);
+      if (hit && traveled >= 6) {
+        const lastAt = pluckRef.current.lastPluckAt.get(hit.bodyId) ?? -Infinity;
+        if (performance.now() - lastAt > STRING_PLUCK_COOLDOWN) {
+          performPluck(hit, 0.4 + Math.min(0.6, traveled / 230));
+          pluckRef.current.lastPluckAt.set(hit.bodyId, performance.now());
+          pluckRef.current.lastPoint = { x: pointer.x, y: pointer.y };
+        }
+      }
+      return;
+    }
+    if (!dragRef.current) {
+      if (event.buttons === 0) {
+        const now = performance.now();
+        if (now - lastHoverCheckRef.current > 40) {
+          lastHoverCheckRef.current = now;
+          const pointer = pointerPosition(event);
+          const bodyNear = engineRef.current.state.bodies.some((body) => {
+            if (body.kind !== "planet") return false;
+            const position = toScreen(body, pointer.width, pointer.height);
+            return Math.hypot(pointer.x - position.x, pointer.y - position.y) <= 58;
+          });
+          const hover = bodyNear
+            ? null
+            : nearestStringPoint({ x: pointer.x, y: pointer.y }, stringPaths(pointer.width, pointer.height), STRING_TOUCH_DISTANCE);
+          hoverStringRef.current = hover;
+          event.currentTarget.classList.toggle("is-string-hover", Boolean(hover));
+        }
+      }
+      return;
+    }
+    if (isListener) return;
     const pointer = pointerPosition(event);
     const engine = engineRef.current;
     const star = engine.getBody("star");
@@ -899,6 +1075,13 @@ export function OrbitalStage({
       } catch (error) {
         onBirthRefused(error instanceof Error ? error.message.toUpperCase() : "THE WORLD COULD NOT BE BORN");
       }
+      return;
+    }
+
+    if (pluckRef.current) {
+      pluckRef.current = null;
+      event.currentTarget.classList.remove("is-plucking");
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
       return;
     }
 

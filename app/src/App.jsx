@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { InscriptionDialog } from "./components/InscriptionDialog.jsx";
 import { CosmicSoundAtlas } from "./components/CosmicSoundAtlas.jsx";
+import { HarpShelf } from "./components/HarpShelf.jsx";
 import { OrbitalStage } from "./components/OrbitalStage.jsx";
 import { RelativityLens } from "./components/RelativityLens.jsx";
 import { ThemeChooser } from "./components/ThemeChooser.jsx";
@@ -16,6 +17,7 @@ import {
   readCompositionFromHash,
 } from "./lib/composition.js";
 import { THEMES } from "./lib/themes.js";
+import { createHarpComposition, harpForComposition } from "./lib/starHarps.js";
 import { captureResonance, measureTargetResonance, RESONANCE_TARGETS } from "./lib/gameProgress.js";
 import { COSMIC_VOICES, hapticPattern, isResonanceChallengeComplete } from "./lib/sonification.js";
 
@@ -242,6 +244,43 @@ export function App() {
     setRuntimeError(message);
   }, []);
 
+  const handlePluckBloom = useCallback(async (body, pluck) => {
+    setHasInteracted(true);
+    try {
+      await audioRef.current.resume(isPlaying);
+      setRuntimeError(null);
+      audioRef.current.playPluck(body, pluck);
+      performHaptic({ kind: "pluck", strength: pluck.strength });
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : "The string could not sound");
+    }
+  }, [isPlaying, performHaptic]);
+
+  const loadHarp = useCallback(async (harpId) => {
+    setIsPlaying(false);
+    await audioRef.current.suspend();
+    const next = createHarpComposition(harpId);
+    next.preferredTheme = themeId;
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    setComposition(next);
+    eventCountRef.current = 0;
+    setInscribed(null);
+    setLocalTheme(null);
+    setElapsed(0);
+    setSelectedBodyId("io");
+    setChallengeTarget(null);
+    setChallengeStatus("CHOOSE A RATIO");
+    setChallengeGuide(null);
+    setHasInteracted(true);
+    challengeTargetRef.current = null;
+    resonanceSealsRef.current = [];
+    challengeNeedsGestureRef.current = true;
+    challengeLockStartedRef.current = null;
+    challengeCompletedRef.current = false;
+    setResetToken((current) => current + 1);
+    setDialogOpen(false);
+  }, [themeId]);
+
   const handleChallengeSelect = useCallback(async (target) => {
     if (isListener) {
       setChallengeStatus("ANSWER WITH ORBIT TO PLAY");
@@ -269,7 +308,7 @@ export function App() {
   const handleBodyGesture = useCallback((event) => {
     if (isListener) return;
     setHasInteracted(true);
-    if (challengeTargetRef.current) {
+    if (event.kind !== "pluck" && challengeTargetRef.current) {
       challengeNeedsGestureRef.current = false;
       challengeCompletedRef.current = false;
       challengeLockStartedRef.current = null;
@@ -424,6 +463,7 @@ export function App() {
         onHaptic={performHaptic}
         onNote={handleNote}
         onPhysicsFrame={handlePhysicsFrame}
+        onPluckBloom={handlePluckBloom}
         selectedBodyId={selectedBodyId}
       />
 
@@ -444,8 +484,8 @@ export function App() {
 
       {!hasInteracted && !dialogOpen && !atlasOpen && !lensOpen && (
         <p className="play-whisper">
-          <span>{isListener ? "PLAY THE DANCE" : "TOUCH THE VOID — BIRTH A STAR"}</span>
-          <strong>{isListener ? "TOUCH ANY WORLD TO SOLO IT" : "HOLD TO GROW · THROW TO AIM · EVERY WORLD SINGS ITS ORBIT"}</strong>
+          <span>{isListener ? "PLAY THE DANCE — PLUCK ITS ORBITS" : "PLUCK AN ORBIT — TOUCH THE VOID TO BIRTH A STAR"}</span>
+          <strong>{isListener ? "STRUM ACROSS THE STRINGS · TOUCH ANY WORLD TO SOLO IT" : "STRUM THE SYSTEM · HOLD TO GROW · EVERY WORLD SINGS ITS ORBIT"}</strong>
         </p>
       )}
 
@@ -472,6 +512,7 @@ export function App() {
               open={atlasOpen}
               selectedBodyId={selectedBodyId}
             />
+            {!isListener && <HarpShelf value={harpForComposition(composition)} onChange={loadHarp} />}
             <ThemeChooser value={themeId} onChange={handleThemeChange} />
             <RelativityLens
               frame={physicsFrame}
