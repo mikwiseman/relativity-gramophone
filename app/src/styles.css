@@ -1,0 +1,699 @@
+:root {
+  font-family: "Avenir Next", Avenir, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-shell {
+  position: relative;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--paper);
+  isolation: isolate;
+  transition: color 540ms ease, background-color 540ms ease;
+}
+
+button,
+input {
+  color: inherit;
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.theme-backdrop {
+  position: absolute;
+  z-index: -2;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+  user-select: none;
+  animation: reveal-material 620ms ease both;
+}
+
+.orbital-canvas {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+
+.orbital-canvas.is-dragging {
+  cursor: grabbing;
+}
+
+.topline {
+  position: absolute;
+  z-index: 3;
+  top: clamp(24px, 4.3vh, 46px);
+  right: clamp(24px, 4vw, 60px);
+  left: clamp(24px, 4vw, 60px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  pointer-events: none;
+}
+
+.topline h1 {
+  margin: 0;
+  font-size: clamp(10px, 0.92vw, 14px);
+  font-weight: 500;
+  letter-spacing: 0.34em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.time-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-size: clamp(14px, 1.3vw, 19px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+.record-light {
+  width: 5px;
+  height: 5px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  opacity: 0.52;
+}
+
+.record-light.is-live {
+  border-color: var(--coral);
+  background-color: var(--coral);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--coral) 70%, transparent);
+}
+
+.bottom-left-controls {
+  position: absolute;
+  z-index: 5;
+  bottom: clamp(24px, 4.4vh, 48px);
+  left: clamp(24px, 4vw, 60px);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icon-button {
+  display: inline-grid;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent);
+  border-radius: 50%;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 12%, transparent);
+  cursor: pointer;
+  transition: border-color 180ms ease, background-color 180ms ease, transform 180ms ease;
+}
+
+.icon-button:hover,
+.icon-button:focus-visible {
+  border-color: color-mix(in srgb, var(--ink) 72%, transparent);
+  background: color-mix(in srgb, var(--paper) 44%, transparent);
+}
+
+.icon-button:active {
+  transform: scale(0.94);
+}
+
+.icon-button:focus-visible,
+.inscribe-action:focus-visible,
+.theme-option:focus-visible,
+.text-action:focus-visible,
+input:focus-visible {
+  outline: 1px solid var(--cyan);
+  outline-offset: 4px;
+}
+
+.icon-button svg {
+  width: 17px;
+  height: 17px;
+}
+
+.transport-button:first-child svg {
+  transform: translateX(1px);
+}
+
+.theme-chooser {
+  position: relative;
+}
+
+.relativity-control {
+  position: relative;
+}
+
+.relativity-trigger[aria-expanded="true"] {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.relativity-lens {
+  position: absolute;
+  bottom: calc(100% + 13px);
+  left: 0;
+  width: min(410px, calc(100vw - 48px));
+  padding: 20px 21px 18px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 42%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 91%, transparent);
+  box-shadow: 0 22px 58px color-mix(in srgb, #000 16%, transparent);
+  backdrop-filter: blur(18px);
+  animation: rise-menu 220ms ease both;
+}
+
+.lens-heading,
+.lens-column-labels,
+.lens-reading,
+.lens-resonance {
+  display: grid;
+  align-items: baseline;
+}
+
+.lens-heading {
+  grid-template-columns: 1fr auto;
+  margin-bottom: 20px;
+}
+
+.lens-heading > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 26px;
+}
+
+.lens-heading span,
+.lens-column-labels,
+.lens-resonance span,
+.relativity-lens > p {
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+}
+
+.lens-heading strong {
+  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-size: 14px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+.lens-close {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  margin: -5px -5px 0 18px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.lens-close svg {
+  width: 13px;
+  height: 13px;
+}
+
+.lens-column-labels,
+.lens-reading {
+  grid-template-columns: 1fr 0.7fr 1.05fr 0.72fr;
+  gap: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.lens-column-labels {
+  padding-bottom: 7px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  opacity: 0.5;
+}
+
+.lens-reading {
+  padding: 9px 0 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+}
+
+.lens-reading strong {
+  font-family: "Avenir Next", Avenir, sans-serif;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.lens-reading .is-blue {
+  color: var(--cyan);
+}
+
+.lens-reading .is-red {
+  color: var(--coral);
+}
+
+.lens-resonance {
+  grid-template-columns: 1fr auto auto;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.lens-resonance strong {
+  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-size: 19px;
+  font-weight: 400;
+}
+
+.lens-resonance span:last-child {
+  color: var(--cyan);
+  text-align: right;
+}
+
+.relativity-lens > p {
+  margin: 17px 0 0;
+  opacity: 0.54;
+  line-height: 1.7;
+}
+
+.theme-trigger::after {
+  position: absolute;
+  right: -2px;
+  bottom: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--cyan);
+  content: "";
+}
+
+.theme-menu {
+  position: absolute;
+  bottom: calc(100% + 13px);
+  left: 0;
+  display: grid;
+  width: 214px;
+  padding: 9px 0;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 30%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 90%, transparent);
+  box-shadow: 0 18px 38px color-mix(in srgb, #000 12%, transparent);
+  backdrop-filter: blur(14px);
+  animation: rise-menu 220ms ease both;
+}
+
+.theme-option {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  padding: 5px 13px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+}
+
+.theme-option:hover,
+.theme-option[aria-checked="true"] {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.theme-option[aria-checked="true"]::after {
+  justify-self: end;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.theme-option[aria-checked="true"] {
+  grid-template-columns: 30px 1fr 4px;
+}
+
+.theme-sample {
+  display: block;
+  width: 30px;
+  height: 22px;
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  background-position: center;
+  background-size: cover;
+}
+
+.inscribe-action {
+  position: absolute;
+  z-index: 5;
+  right: clamp(24px, 4vw, 60px);
+  bottom: clamp(29px, 5vh, 54px);
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 7px 0;
+  border: 0;
+  color: var(--ink);
+  background: transparent;
+  cursor: pointer;
+  font-size: clamp(10px, 0.82vw, 12px);
+  font-weight: 500;
+  letter-spacing: 0.34em;
+}
+
+.inscribe-action::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: currentColor;
+  content: "";
+  transform: scaleX(0.28);
+  transform-origin: right;
+  transition: transform 240ms ease;
+}
+
+.inscribe-action:hover::after,
+.inscribe-action:focus-visible::after {
+  transform: scaleX(1);
+}
+
+.inscribe-action > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--coral);
+}
+
+.runtime-message {
+  position: absolute;
+  z-index: 9;
+  top: clamp(68px, 9vh, 92px);
+  right: clamp(24px, 4vw, 60px);
+  max-width: min(390px, calc(100vw - 48px));
+  padding: 13px 0;
+  border-top: 1px solid var(--coral);
+  border-bottom: 1px solid var(--coral);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  line-height: 1.55;
+}
+
+.runtime-message button {
+  margin-left: 18px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+}
+
+.inscription-dialog {
+  position: absolute;
+  z-index: 8;
+  right: clamp(24px, 4vw, 60px);
+  bottom: clamp(82px, 12vh, 126px);
+  width: min(430px, calc(100vw - 48px));
+  padding: 28px 30px 25px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 48%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 93%, transparent);
+  box-shadow: 0 28px 70px color-mix(in srgb, #000 18%, transparent);
+  backdrop-filter: blur(22px);
+  animation: inscribe-in 300ms ease both;
+}
+
+.inscription-dialog h2 {
+  margin: 0 46px 31px 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  line-height: 1.4;
+}
+
+.close-button {
+  position: absolute;
+  top: 17px;
+  right: 19px;
+  width: 34px;
+  height: 34px;
+  border-color: transparent;
+}
+
+.message-field,
+.link-field {
+  display: grid;
+  gap: 9px;
+  margin-top: 20px;
+}
+
+.message-field > span,
+.link-field > span {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.26em;
+  opacity: 0.58;
+}
+
+.message-field input,
+.link-field input {
+  width: 100%;
+  padding: 7px 0 9px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
+  border-radius: 0;
+  color: var(--ink);
+  background: transparent;
+  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.link-field input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  letter-spacing: -0.02em;
+  opacity: 0.72;
+}
+
+.received-message {
+  margin: 4px 0 29px;
+  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-size: 20px;
+  font-style: italic;
+  line-height: 1.45;
+}
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px 22px;
+  margin-top: 25px;
+}
+
+.text-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+}
+
+.text-action:hover {
+  border-bottom-color: currentColor;
+}
+
+.text-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.enter-action {
+  margin-left: auto;
+  color: var(--coral);
+}
+
+.dialog-status {
+  margin: 17px 0 0;
+  color: var(--cyan);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  line-height: 1.5;
+}
+
+.app-shell[data-theme="lacquer"] .icon-button,
+.app-shell[data-theme="lacquer"] .theme-menu,
+.app-shell[data-theme="lacquer"] .relativity-lens,
+.app-shell[data-theme="lacquer"] .inscription-dialog {
+  box-shadow: 0 24px 72px rgb(0 0 0 / 34%);
+}
+
+.app-shell[data-theme="sumi"] .orbital-canvas {
+  filter: saturate(0.92) contrast(1.03);
+}
+
+@keyframes reveal-material {
+  from {
+    opacity: 0;
+    transform: scale(1.012);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes rise-menu {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes inscribe-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 620px) {
+  .topline {
+    top: 24px;
+    right: 20px;
+    left: 20px;
+    align-items: flex-start;
+  }
+
+  .topline h1 {
+    max-width: 185px;
+    font-size: 9px;
+    letter-spacing: 0.28em;
+    line-height: 1.5;
+    white-space: normal;
+  }
+
+  .time-state {
+    gap: 7px;
+    font-size: 14px;
+  }
+
+  .bottom-left-controls {
+    bottom: 21px;
+    left: 20px;
+  }
+
+  .icon-button {
+    width: 38px;
+    height: 38px;
+  }
+
+  .theme-menu {
+    width: 198px;
+  }
+
+  .relativity-lens {
+    left: -88px;
+    width: min(380px, calc(100vw - 40px));
+  }
+
+  .inscribe-action {
+    right: 20px;
+    bottom: 25px;
+    font-size: 9px;
+    letter-spacing: 0.26em;
+  }
+
+  .inscription-dialog {
+    right: 16px;
+    bottom: 76px;
+    width: calc(100vw - 32px);
+    padding: 26px 24px 22px;
+  }
+
+  .inscription-dialog h2 {
+    margin-bottom: 25px;
+  }
+
+  .runtime-message {
+    top: 70px;
+    right: 20px;
+    left: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
