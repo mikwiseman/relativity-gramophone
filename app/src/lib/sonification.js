@@ -2,7 +2,14 @@ function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-export const SONIFICATION_MODEL = "cosmic-voices/1";
+export const SONIFICATION_MODEL = "cosmic-voices/2";
+
+export const KEPLER_OCTAVE_LIFT = 2 ** 12;
+
+export function keplerPitch(period) {
+  if (!Number.isFinite(period) || period <= 0) return null;
+  return clamp(KEPLER_OCTAVE_LIFT / period, 55, 1760);
+}
 
 export function visibleWavelengthToAudibleFrequency(wavelengthNm) {
   const wavelength = clamp(wavelengthNm, 380, 700);
@@ -116,12 +123,13 @@ export function voiceParameters(body, resonanceStrength = 0) {
   const doppler = clamp(body.doppler ?? 1, 0.9, 1.1);
   const profile = COSMIC_VOICES[body.voice] ?? COSMIC_VOICES.earth;
   const partialGain = clamp(0.035 + mass * 0.075 + resonanceStrength * 0.025, 0.03, 0.16);
-  const authoredFrequency = profile.id === "light"
+  const fallbackFrequency = profile.id === "light"
     ? visibleWavelengthToAudibleFrequency(body.wavelengthNm ?? profile.wavelengthNm)
     : body.frequency;
+  const sungFrequency = keplerPitch(body.period) ?? fallbackFrequency;
 
   return {
-    frequency: clamp(authoredFrequency * properRate * doppler, 40, 1800),
+    frequency: clamp(sungFrequency * properRate * doppler, 40, 1800),
     gain: clamp(0.018 + mass * 0.052 + resonanceStrength * 0.008, 0.015, 0.11),
     waveform: profile.waveform,
     partialWaveform: profile.partialWaveform,
@@ -146,6 +154,11 @@ export function isResonanceChallengeComplete(resonance, target, threshold = 0.82
 export function hapticPattern({ kind, strength = 0.5 }) {
   if (kind === "audition") return [Math.round(4 + clamp(strength, 0, 1) * 3)];
   if (kind === "crossing") return [8];
+  if (kind === "birth") {
+    const normalized = clamp(strength, 0, 1);
+    return [Math.round(6 + normalized * 6), 30, Math.round(4 + normalized * 3)];
+  }
+  if (kind === "consumption") return [12, 26, 6];
   if (kind === "resonance") {
     const normalized = clamp(strength, 0, 1);
     return [Math.round(5 + normalized * 2), 22, Math.round(7 + normalized * 4.5)];

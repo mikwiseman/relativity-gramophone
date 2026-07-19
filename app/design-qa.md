@@ -165,3 +165,27 @@ final result: passed
 - Fixed [P1]: the resonance challenge lacked a legible approach signal and durable progression.
 - Fixed [P1]: the primary share affordance and the contents of the received dance were too implicit.
 - Passed: the shared `tau-record/3` remains backward-compatible with older links that have no resonance seals.
+
+## Star-birth release verification — 2026-07-19
+
+Verified live in the Claude in-app Browser pane against the Vite dev server, then re-run through the node test suite (49 passing) and a production build.
+
+### Interaction sequence checked
+
+1. Pressed empty lacquer sky: the gestation seed appeared with the growing mass ring, the circular ghost orbit, and playback engaged for the gestation tone; the canvas cursor switched to conceiving.
+2. Held ~1.5 s and dragged: mass ring completed, the ghost switched to the thrown ellipse, the dashed aim arrow tracked the pointer.
+3. Released: `nova-1` was born at the pressed radius with the birth halo, joined the N-body ensemble, drew its predicted trajectory, and recorded an `add-body` event at score time.
+4. Dragged the newborn into the star core: the world was consumed with the coral collapse flash, its voice left the ensemble, and a `remove-body` event was recorded.
+5. Opened `SHARE DANCE`, decoded the link: `tau-record/4`, `cosmic-voices/2`, events `add-body, add-body, set-body-state, remove-body` — the full performed history, 2 055 URL characters.
+6. Opened the link as a listener: the record dialog showed voices and duration; playback replayed the births with halos at their recorded moments.
+7. `ANSWER WITH ORBIT` from the heard state produced a valid reply roster (from-heard-state semantics: unplayed births do not join the reply).
+8. Switched all three themes mid-session with a live nova: physics uninterrupted; light themes conceive in ink (no grey glow smudge), lacquer conceives in cyan light.
+9. Viewports `375 × 812`, `844 × 390`, `320 × 568`, desktop: no overflow, controls clear of the safe edges.
+10. Console: no warnings or errors across the whole session.
+
+### Fixed while verifying
+
+- Fixed [P1]: restart (↺) now begins a fresh take — previously events recorded after a restart went non-monotonic and broke the share encoder mid-render.
+- Fixed [P2]: the gestation glow read as a grey smudge on White Time and Sumi; birth accents are now surface-aware (dark → cyan, light → ink).
+- Fixed [P2]: raw velocity aiming made small drags plunge and medium drags near-escape; throws now scale around the local circular speed, so every drag lands a musical orbit.
+- Fixed [P3]: the sound atlas showed `undefined` labels for born worlds; novas now display as `N1…` and state that a born world keeps its birth voice.

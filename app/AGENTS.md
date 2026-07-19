@@ -18,3 +18,9 @@ When implementing from a selected generated mock, treat that image as the source
 - Touching a visible world must immediately reveal its assigned voice from the current live physical state; dragging the same world changes the orbit, time flow, color, and music.
 - Treat sharing as the end of the play loop, not a utility action. The dance record must carry orbit gestures, voice imprints, and earned resonance seals, and the recipient must be able to replay or answer with a new orbit.
 - Mobile is a primary performance surface. Keep core touch targets at least 44 px and verify portrait, compact portrait, and landscape without document overflow.
+- Touching empty sky is the birth gesture: hold grows mass, dragging while holding throws, release births a singing world. The gestation tone previews the exact Kepler pitch of the orbit being aimed. Never repurpose the empty-sky press for anything else.
+- Pitch is honest Kepler sonification: a world's fundamental is its live orbital frequency raised exactly twelve octaves, so resonance ratios are heard as just intervals. The authored `frequency` field is only a fallback for bodies without a bound period.
+- Births and consumptions are score events (`add-body`/`remove-body`) so a shared dance replays the universe being made. Born worlds keep their birth voice everywhere, including replies; only the core trio accepts voice imprints.
+- Feeding a born world to the star is the only removal gesture; the core trio is permanent. The sky holds at most 12 worlds.
+- Birth visuals follow the surface: dark themes conceive in cyan light, light themes conceive in ink. Consumption always flashes warm coral.
+- The composer's dance never loops or resets on its own; only the listener replay loops at the recorded duration. Restart (↺) begins a fresh take: it clears recorded events so timestamps stay monotonic.

@@ -4,6 +4,7 @@ export const PHYSICS_MODEL = "nbody-weak-relativity/2";
 export const FIXED_STEP = 1 / 120;
 export const GRAVITATIONAL_CONSTANT = 0.00665;
 export const GRAVITY_SOFTENING = 0.006;
+export const MAX_WORLDS = 12;
 
 const PLANET_MASS_SCALE = 0.0028;
 const FELT_RELATIVITY_GAIN = 1.18;
@@ -333,7 +334,60 @@ export class PhysicsEngine {
     });
   }
 
+  addBody(spec) {
+    if (this.getBody(spec.id)) throw new Error(`Duplicate physical body: ${spec.id}`);
+    if (this.state.bodies.filter((body) => body.kind === "planet").length >= MAX_WORLDS) {
+      throw new Error("The sky is full — feed a world to the star");
+    }
+    for (const key of ["x", "y", "vx", "vy", "mass", "frequency", "pan"]) {
+      if (!Number.isFinite(spec[key])) throw new Error(`Invalid ${key} for ${spec.id}`);
+    }
+
+    this.state.bodies.push({
+      id: spec.id,
+      kind: "planet",
+      created: true,
+      sprite: spec.sprite,
+      mass: PLANET_MASS_SCALE * spec.mass,
+      displayMass: spec.mass,
+      frequency: spec.frequency,
+      pan: spec.pan,
+      voice: spec.voice,
+      x: spec.x,
+      y: spec.y,
+      vx: spec.vx,
+      vy: spec.vy,
+      properTime: 0,
+      properRate: 1,
+      rawClockLoss: 0,
+      potential: 0,
+      period: null,
+      semiMajor: 0,
+      eccentricity: 0,
+      doppler: 1,
+    });
+    this.updateDerived(0);
+    return { kind: "add-body", at: Number(this.state.time.toFixed(6)), body: clone(spec) };
+  }
+
+  removeBody(bodyId) {
+    const index = this.state.bodies.findIndex((body) => body.id === bodyId);
+    if (index === -1) throw new Error(`Unknown physical body: ${bodyId}`);
+    if (this.state.bodies[index].kind !== "planet") throw new Error("The star cannot be removed");
+    this.state.bodies.splice(index, 1);
+    this.updateDerived(0);
+    return { kind: "remove-body", at: Number(this.state.time.toFixed(6)), bodyId };
+  }
+
   applyEvent(event) {
+    if (event.kind === "add-body") {
+      this.addBody(event.body);
+      return;
+    }
+    if (event.kind === "remove-body") {
+      this.removeBody(event.bodyId);
+      return;
+    }
     if (event.kind !== "set-body-state") throw new Error(`Unsupported physics event: ${event.kind}`);
     this.setBodyState(event.bodyId, event.state);
   }

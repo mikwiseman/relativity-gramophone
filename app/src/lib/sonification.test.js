@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 
 import {
   COSMIC_VOICES,
+  SONIFICATION_MODEL,
   hapticPattern,
   isResonanceChallengeComplete,
+  keplerPitch,
   spectralMix,
   visibleWavelengthToAudibleFrequency,
   voiceParameters,
@@ -20,6 +22,40 @@ const BODY = {
   vx: 0.04,
   vy: 0.08,
 };
+
+test("the sonification model is the Kepler-pitch revision", () => {
+  assert.equal(SONIFICATION_MODEL, "cosmic-voices/2");
+});
+
+test("Kepler pitch raises the true orbital frequency by twelve octaves", () => {
+  assert.ok(Math.abs(keplerPitch(10.8) - 4096 / 10.8) < 1e-9);
+  assert.ok(Math.abs(keplerPitch(16.2) - 4096 / 16.2) < 1e-9);
+  assert.ok(Math.abs(keplerPitch(10.8) / keplerPitch(16.2) - 3 / 2) < 1e-12);
+});
+
+test("Kepler pitch clamps to the audible band and rejects unbound orbits", () => {
+  assert.equal(keplerPitch(0.5), 1760);
+  assert.equal(keplerPitch(400), 55);
+  assert.equal(keplerPitch(Infinity), null);
+  assert.equal(keplerPitch(0), null);
+  assert.equal(keplerPitch(-4), null);
+  assert.equal(keplerPitch(Number.NaN), null);
+});
+
+test("a live orbital period sings its Kepler pitch while the authored frequency stays a fallback", () => {
+  const orbiting = voiceParameters({ ...BODY, period: 16.2, properRate: 1, doppler: 1 });
+  const unbound = voiceParameters({ ...BODY, period: Infinity, properRate: 1, doppler: 1 });
+
+  assert.ok(Math.abs(orbiting.frequency - 4096 / 16.2) < 1e-9);
+  assert.equal(unbound.frequency, 220);
+});
+
+test("a real 3:2 orbital resonance is heard as an exact perfect fifth", () => {
+  const inner = voiceParameters({ ...BODY, period: 10.8, properRate: 1, doppler: 1 });
+  const outer = voiceParameters({ ...BODY, period: 16.2, properRate: 1, doppler: 1 });
+
+  assert.ok(Math.abs(inner.frequency / outer.frequency - 3 / 2) < 1e-12);
+});
 
 test("approach/recession drive pitch and cold/warm color in the same direction", () => {
   const approaching = voiceParameters({ ...BODY, doppler: 1.04 });
@@ -71,6 +107,8 @@ test("visible light is logarithmically compressed from red to violet across two 
 test("haptic patterns remain short and scale with physical intensity", () => {
   assert.deepEqual(hapticPattern({ kind: "audition", strength: 0.7 }), [6]);
   assert.deepEqual(hapticPattern({ kind: "crossing", strength: 0.7 }), [8]);
+  assert.deepEqual(hapticPattern({ kind: "birth", strength: 0.5 }), [9, 30, 6]);
+  assert.deepEqual(hapticPattern({ kind: "consumption", strength: 1 }), [12, 26, 6]);
   assert.deepEqual(hapticPattern({ kind: "pericenter", strength: 0.3 }), [5, 22, 4]);
   assert.deepEqual(hapticPattern({ kind: "pericenter", strength: 1.1 }), [9, 18, 7]);
   assert.deepEqual(hapticPattern({ kind: "resonance", strength: 0.9 }), [7, 22, 11]);

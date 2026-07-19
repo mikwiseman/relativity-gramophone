@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   FIXED_STEP,
+  MAX_WORLDS,
   PHYSICS_MODEL,
   PhysicsEngine,
   computeAccelerations,
@@ -13,6 +14,20 @@ import {
   totalEnergy,
 } from "./physicsEngine.js";
 import { createDefaultComposition } from "./composition.js";
+import { birthBodyFromGesture } from "./starBirth.js";
+
+function birthSpec(engine, overrides = {}) {
+  const star = engine.getBody("star");
+  return birthBodyFromGesture({
+    press: { x: star.x + 0.34, y: star.y - 0.12 },
+    aim: null,
+    holdSeconds: 0.6,
+    star,
+    existingIds: engine.state.bodies.filter((body) => body.kind === "planet").map((body) => body.id),
+    birthIndex: 0,
+    ...overrides,
+  });
+}
 
 test("pairwise gravity accelerates both bodies toward each other", () => {
   const bodies = [
@@ -158,6 +173,65 @@ test("the same fixed-step gesture event produces the same replay state", () => {
   }
 
   assert.deepEqual(second.snapshot(), first.snapshot());
+});
+
+test("a born world joins the ensemble with live orbital elements and a replayable event", () => {
+  const engine = new PhysicsEngine(createInitialPhysicsState(createDefaultComposition().bodies));
+  const spec = birthSpec(engine);
+
+  const event = engine.addBody(spec);
+  const born = engine.getBody(spec.id);
+
+  assert.equal(event.kind, "add-body");
+  assert.equal(event.body.id, spec.id);
+  assert.equal(engine.state.bodies.filter((body) => body.kind === "planet").length, 4);
+  assert.equal(born.kind, "planet");
+  assert.equal(born.displayMass, spec.mass);
+  assert.ok(born.mass < spec.mass, "physical mass must use the planet mass scale");
+  assert.ok(Number.isFinite(born.period) && born.period > 0);
+  assert.ok(Number.isFinite(born.properRate) && born.properRate <= 1);
+});
+
+test("birth and consumption events replay to the exact same physical state", () => {
+  const initial = createInitialPhysicsState(createDefaultComposition().bodies);
+  const live = new PhysicsEngine(initial);
+  const replay = new PhysicsEngine(initial);
+  let birthEvent;
+  let removeEvent;
+
+  for (let index = 0; index < 720; index += 1) {
+    if (index === 180) {
+      birthEvent = live.addBody(birthSpec(live));
+      replay.applyEvent(birthEvent);
+    }
+    if (index === 540) {
+      removeEvent = live.removeBody(birthEvent.body.id);
+      replay.applyEvent(removeEvent);
+    }
+    live.step();
+    replay.step();
+  }
+
+  assert.equal(birthEvent.kind, "add-body");
+  assert.equal(removeEvent.kind, "remove-body");
+  assert.equal(live.getBody(birthEvent.body.id), null);
+  assert.deepEqual(replay.snapshot(), live.snapshot());
+});
+
+test("the engine refuses duplicate births, star removal, and an overfull sky", () => {
+  const engine = new PhysicsEngine(createInitialPhysicsState(createDefaultComposition().bodies));
+  const spec = birthSpec(engine);
+  engine.addBody(spec);
+
+  assert.throws(() => engine.addBody(spec), /duplicate/i);
+  assert.throws(() => engine.removeBody("star"), /star/i);
+  assert.throws(() => engine.removeBody("ghost-world"), /ghost-world/);
+
+  const overflowSpec = { ...birthSpec(engine, { birthIndex: 9 }), id: "nova-99" };
+  for (let index = 0; engine.state.bodies.filter((body) => body.kind === "planet").length < MAX_WORLDS; index += 1) {
+    engine.addBody(birthSpec(engine, { birthIndex: index + 1 }));
+  }
+  assert.throws(() => engine.addBody(overflowSpec), /sky is full/i);
 });
 
 test("a radial gesture changes orbital scale while preserving a bound tangential orbit", () => {

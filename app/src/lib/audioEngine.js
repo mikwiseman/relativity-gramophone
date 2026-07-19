@@ -17,6 +17,7 @@ export class AudioEngine {
   delayFeedback = null;
   delayReturn = null;
   drone = null;
+  gestation = null;
   voices = new Map();
   latestFrame = null;
 
@@ -126,6 +127,22 @@ export class AudioEngine {
     return voice;
   }
 
+  releaseVoice(bodyId) {
+    const voice = this.voices.get(bodyId);
+    if (!voice) return;
+    this.voices.delete(bodyId);
+    const now = this.context.currentTime;
+    voice.gain.gain.cancelScheduledValues(now);
+    voice.gain.gain.setTargetAtTime(0.0001, now, 0.09);
+    const stopAt = now + 0.6;
+    for (const oscillator of [voice.fundamental, voice.partial, voice.sub, voice.tremolo]) oscillator.stop(stopAt);
+    setTimeout(() => {
+      for (const node of [voice.gain, voice.panner, voice.filter, voice.partialGain, voice.subGain, voice.tremoloDepth]) {
+        node.disconnect();
+      }
+    }, 700);
+  }
+
   setFieldActive(active) {
     if (!this.context || !this.fieldBus) return;
     ramp(this.fieldBus.gain, active ? 0.72 : 0.0001, this.context.currentTime, active ? 0.34 : 0.12);
@@ -139,6 +156,11 @@ export class AudioEngine {
       frame.resonance?.strength ?? 0,
       (frame.challengeProximity ?? 0) * 0.62,
     );
+
+    const aliveIds = new Set(frame.bodies.map((body) => body.id));
+    for (const bodyId of [...this.voices.keys()]) {
+      if (!aliveIds.has(bodyId)) this.releaseVoice(bodyId);
+    }
 
     for (const body of frame.bodies) {
       const voice = this.voices.get(body.id) ?? this.createVoice(body.id);
@@ -219,6 +241,135 @@ export class AudioEngine {
     sub.stop(now + duration + 0.05);
   }
 
+  updateGestation({ frequency, pan }) {
+    if (!this.context || this.context.state !== "running") return;
+    const now = this.context.currentTime;
+    if (!this.gestation) {
+      const oscillator = this.context.createOscillator();
+      const vibrato = this.context.createOscillator();
+      const vibratoDepth = this.context.createGain();
+      const gain = this.context.createGain();
+      const panner = this.context.createStereoPanner();
+      oscillator.type = "sine";
+      oscillator.frequency.value = frequency;
+      vibrato.frequency.value = 4.4;
+      vibratoDepth.gain.value = 1.7;
+      gain.gain.value = 0.0001;
+      vibrato.connect(vibratoDepth).connect(oscillator.frequency);
+      oscillator.connect(gain).connect(panner).connect(this.master);
+      panner.connect(this.delay);
+      oscillator.start(now);
+      vibrato.start(now);
+      gain.gain.exponentialRampToValueAtTime(0.02, now + 0.3);
+      this.gestation = { oscillator, vibrato, vibratoDepth, gain, panner };
+    }
+    this.gestation.oscillator.frequency.setTargetAtTime(frequency, now, 0.075);
+    this.gestation.panner.pan.setTargetAtTime(pan, now, 0.08);
+  }
+
+  endGestation() {
+    if (!this.gestation || !this.context) return;
+    const { oscillator, vibrato, vibratoDepth, gain, panner } = this.gestation;
+    this.gestation = null;
+    const now = this.context.currentTime;
+    gain.gain.cancelScheduledValues(now);
+    gain.gain.setTargetAtTime(0.0001, now, 0.07);
+    oscillator.stop(now + 0.55);
+    vibrato.stop(now + 0.55);
+    setTimeout(() => {
+      for (const node of [gain, panner, vibratoDepth]) node.disconnect();
+    }, 650);
+  }
+
+  playBirthBloom(body) {
+    if (!this.context || this.context.state !== "running") return;
+
+    const now = this.context.currentTime;
+    const parameters = voiceParameters(body);
+    const mass = Math.min(1.3, body.displayMass ?? body.mass ?? 0.5);
+    const duration = 2.1 + mass * 1.2;
+    const fundamental = this.context.createOscillator();
+    const shimmer = this.context.createOscillator();
+    const sub = this.context.createOscillator();
+    const shimmerGain = this.context.createGain();
+    const subGain = this.context.createGain();
+    const filter = this.context.createBiquadFilter();
+    const gain = this.context.createGain();
+    const panner = this.context.createStereoPanner();
+
+    fundamental.type = parameters.waveform;
+    shimmer.type = "sine";
+    sub.type = "sine";
+    fundamental.frequency.setValueAtTime(parameters.frequency / 4, now);
+    fundamental.frequency.exponentialRampToValueAtTime(parameters.frequency, now + 0.42);
+    shimmer.frequency.setValueAtTime(parameters.frequency * 3.007, now);
+    sub.frequency.setValueAtTime(Math.max(30, parameters.frequency / 8), now);
+    shimmerGain.gain.setValueAtTime(0.028, now);
+    shimmerGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
+    subGain.gain.setValueAtTime(0.052 * mass, now);
+    subGain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(420, now);
+    filter.frequency.exponentialRampToValueAtTime(parameters.cutoff, now + 0.5);
+    filter.Q.value = parameters.q;
+    panner.pan.setValueAtTime(parameters.pan, now);
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.055 + mass * 0.05, now + 0.34);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    fundamental.connect(filter);
+    shimmer.connect(shimmerGain).connect(filter);
+    sub.connect(subGain).connect(filter);
+    filter.connect(gain).connect(panner).connect(this.master);
+    panner.connect(this.delay);
+
+    for (const oscillator of [fundamental, shimmer, sub]) {
+      oscillator.start(now);
+      oscillator.stop(now + duration + 0.1);
+    }
+  }
+
+  playConsumption(body) {
+    if (!this.context || this.context.state !== "running") return;
+
+    const now = this.context.currentTime;
+    const parameters = voiceParameters(body);
+    const mass = Math.min(1.3, body.displayMass ?? body.mass ?? 0.5);
+    const duration = 1.7 + mass * 0.8;
+    const fall = this.context.createOscillator();
+    const thump = this.context.createOscillator();
+    const thumpGain = this.context.createGain();
+    const filter = this.context.createBiquadFilter();
+    const gain = this.context.createGain();
+
+    fall.type = parameters.waveform;
+    thump.type = "sine";
+    fall.frequency.setValueAtTime(parameters.frequency, now);
+    fall.frequency.exponentialRampToValueAtTime(55, now + 0.85);
+    thump.frequency.setValueAtTime(46, now);
+    thumpGain.gain.setValueAtTime(0.075 * mass, now);
+    thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(2300, now);
+    filter.frequency.exponentialRampToValueAtTime(150, now + duration);
+    filter.Q.value = 0.9;
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.06 + mass * 0.03, now + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    fall.connect(filter);
+    thump.connect(thumpGain).connect(filter);
+    filter.connect(gain).connect(this.master);
+    gain.connect(this.delay);
+
+    for (const oscillator of [fall, thump]) {
+      oscillator.start(now);
+      oscillator.stop(now + duration + 0.1);
+    }
+  }
+
   playVoicePreview(voiceId) {
     const profile = COSMIC_VOICES[voiceId];
     if (!profile) throw new Error(`Unknown cosmic voice: ${voiceId}`);
@@ -253,6 +404,7 @@ export class AudioEngine {
 
   async suspend() {
     if (this.context?.state === "running") {
+      this.endGestation();
       this.setFieldActive(false);
       await this.context.suspend();
     }

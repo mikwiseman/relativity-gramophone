@@ -3,9 +3,19 @@ import { useEffect, useMemo, useRef } from "react";
 import {
   FIXED_STEP,
   GRAVITATIONAL_CONSTANT,
+  MAX_WORLDS,
   PhysicsEngine,
   createInitialPhysicsState,
 } from "../lib/physicsEngine.js";
+import {
+  AIM_DEADZONE,
+  BIRTH_MAX_MASS,
+  BIRTH_MIN_MASS,
+  STAR_CORE_RADIUS,
+  birthBodyFromGesture,
+  birthMassFromHold,
+  previewOrbit,
+} from "../lib/starBirth.js";
 
 const TAU = Math.PI * 2;
 const MAX_FRAME_DELTA = 0.1;
@@ -330,8 +340,156 @@ function drawResonance(context, theme, resonance, planets, width, height) {
   context.restore();
 }
 
+function withAlpha(hexColor, alpha) {
+  const value = Number.parseInt(hexColor.slice(1), 16);
+  return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+}
+
+function birthAccent(theme) {
+  return theme.surface === "dark" ? theme.cyan : theme.ink;
+}
+
+function drawGestation(context, theme, birth, width, height, timestamp) {
+  const holdSeconds = (timestamp - birth.startedAt) / 1000;
+  const massFraction = (birthMassFromHold(holdSeconds) - BIRTH_MIN_MASS) / (BIRTH_MAX_MASS - BIRTH_MIN_MASS);
+  const seed = toScreen(birth.press, width, height);
+  const breath = Math.sin(timestamp * 0.006) * 0.8;
+  const coreRadius = 3 + massFraction * 4.6 + breath * 0.4;
+  const ringRadius = 14 + massFraction * 10;
+  const accent = birthAccent(theme);
+  const glowAlpha = theme.surface === "dark" ? 0.13 + massFraction * 0.14 : 0.045 + massFraction * 0.05;
+
+  context.save();
+  const glow = context.createRadialGradient(seed.x, seed.y, 0, seed.x, seed.y, ringRadius * 3.4);
+  glow.addColorStop(0, withAlpha(accent, glowAlpha));
+  glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+  context.fillStyle = glow;
+  context.beginPath();
+  context.arc(seed.x, seed.y, ringRadius * 3.4, 0, TAU);
+  context.fill();
+
+  context.strokeStyle = theme.muted;
+  context.lineWidth = 0.8;
+  context.beginPath();
+  context.arc(seed.x, seed.y, ringRadius, 0, TAU);
+  context.stroke();
+
+  context.strokeStyle = theme.ink;
+  context.lineWidth = 1.25;
+  context.beginPath();
+  context.arc(seed.x, seed.y, ringRadius, -Math.PI / 2, -Math.PI / 2 + massFraction * TAU);
+  context.stroke();
+
+  if (massFraction >= 1) {
+    context.globalAlpha = 0.5 + breath * 0.2;
+    context.strokeStyle = accent;
+    context.lineWidth = 1;
+    context.beginPath();
+    context.arc(seed.x, seed.y, ringRadius + 5, 0, TAU);
+    context.stroke();
+    context.globalAlpha = 1;
+  }
+
+  context.fillStyle = accent;
+  context.globalAlpha = 0.9;
+  context.beginPath();
+  context.arc(seed.x, seed.y, coreRadius, 0, TAU);
+  context.fill();
+  context.restore();
+}
+
+function drawAimGhost(context, theme, birth, candidate, star, width, height) {
+  const points = previewOrbit(candidate, star);
+  if (points.length > 2) {
+    context.save();
+    context.strokeStyle = theme.ink;
+    context.globalAlpha = 0.38;
+    context.lineWidth = 0.9;
+    context.setLineDash([3, 6]);
+    pathFromTrajectory(context, points, width, height);
+    context.closePath();
+    context.stroke();
+    context.restore();
+  }
+
+  const aimMagnitude = birth.aim ? Math.hypot(birth.aim.x, birth.aim.y) : 0;
+  if (aimMagnitude <= AIM_DEADZONE) return;
+  const seed = toScreen(birth.press, width, height);
+  const tip = toScreen({ x: birth.press.x + birth.aim.x, y: birth.press.y + birth.aim.y }, width, height);
+  const angle = Math.atan2(tip.y - seed.y, tip.x - seed.x);
+
+  context.save();
+  context.strokeStyle = birthAccent(theme);
+  context.globalAlpha = 0.72;
+  context.lineWidth = 1.05;
+  context.setLineDash([1, 4]);
+  context.beginPath();
+  context.moveTo(seed.x, seed.y);
+  context.lineTo(tip.x, tip.y);
+  context.stroke();
+  context.setLineDash([]);
+  context.beginPath();
+  context.moveTo(tip.x, tip.y);
+  context.lineTo(tip.x - Math.cos(angle - 0.42) * 7.5, tip.y - Math.sin(angle - 0.42) * 7.5);
+  context.moveTo(tip.x, tip.y);
+  context.lineTo(tip.x - Math.cos(angle + 0.42) * 7.5, tip.y - Math.sin(angle + 0.42) * 7.5);
+  context.stroke();
+  context.restore();
+}
+
+function drawBirthHalos(context, theme, halos, engine, width, height) {
+  for (const halo of halos) {
+    const body = engine.getBody(halo.id);
+    if (!body) continue;
+    const position = toScreen(body, width, height);
+    const radius = 15 + halo.life * 52;
+    context.save();
+    context.globalAlpha = Math.max(0, (1 - halo.life) * 0.62);
+    context.strokeStyle = birthAccent(theme);
+    context.lineWidth = 1.15;
+    context.beginPath();
+    context.arc(position.x, position.y, radius, 0, TAU);
+    context.stroke();
+    context.globalAlpha = Math.max(0, (1 - halo.life) * 0.4);
+    context.beginPath();
+    context.arc(position.x, position.y, radius * 0.58, 0, TAU);
+    context.stroke();
+    context.restore();
+  }
+}
+
+function drawConsumeFlashes(context, theme, flashes, star, width, height) {
+  const center = toScreen(star, width, height);
+  for (const flash of flashes) {
+    const radius = 8 + (1 - flash.life) * 46;
+    context.save();
+    const glow = context.createRadialGradient(center.x, center.y, 0, center.x, center.y, 64);
+    glow.addColorStop(0, withAlpha(theme.coral, (1 - flash.life) * 0.34));
+    glow.addColorStop(1, "rgba(0, 0, 0, 0)");
+    context.fillStyle = glow;
+    context.beginPath();
+    context.arc(center.x, center.y, 64, 0, TAU);
+    context.fill();
+    context.globalAlpha = Math.max(0, (1 - flash.life) * 0.55);
+    context.strokeStyle = theme.coral;
+    context.lineWidth = 1.2;
+    context.beginPath();
+    context.arc(center.x, center.y, radius, 0, TAU);
+    context.stroke();
+    context.restore();
+  }
+}
+
+function capturePointer(target, pointerId) {
+  try {
+    target.setPointerCapture(pointerId);
+  } catch {
+    // pointer capture is an enhancement; some browsers refuse ids they did not mint
+  }
+}
+
 function applyPlaybackEvent(engine, event) {
-  if (event.kind === "set-body-state") {
+  if (event.kind === "set-body-state" || event.kind === "add-body" || event.kind === "remove-body") {
     engine.applyEvent(event);
     return;
   }
@@ -360,10 +518,14 @@ export function OrbitalStage({
   playbackEvents,
   resetToken,
   theme,
+  onBirthBloom,
+  onBirthRefused,
   onBodyAudition,
   onBodyGesture,
   onBodySelect,
+  onConsumptionBloom,
   onElapsed,
+  onGestationTone,
   onHaptic,
   onNote,
   onPhysicsFrame,
@@ -382,6 +544,10 @@ export function OrbitalStage({
   const pulsesRef = useRef([]);
   const appliedEventIndexRef = useRef(0);
   const dragRef = useRef(null);
+  const birthRef = useRef(null);
+  const birthCountRef = useRef(0);
+  const birthHalosRef = useRef([]);
+  const consumeFlashesRef = useRef([]);
   const latestGestureRef = useRef(null);
   const lastGestureEmitRef = useRef(0);
   const physicalBodiesSignature = useMemo(() => JSON.stringify(
@@ -392,6 +558,7 @@ export function OrbitalStage({
     initialStateRef.current = initialState ? structuredClone(initialState) : createInitialPhysicsState(bodies);
     engineRef.current = new PhysicsEngine(initialStateRef.current);
     trajectoriesRef.current = predictTrajectories(initialStateRef.current);
+    birthCountRef.current = initialStateRef.current.bodies.filter((body) => body.created).length;
   }
 
   useEffect(() => {
@@ -423,6 +590,10 @@ export function OrbitalStage({
     );
     previousRadialVelocityRef.current.clear();
     pulsesRef.current = [];
+    birthRef.current = null;
+    birthHalosRef.current = [];
+    consumeFlashesRef.current = [];
+    birthCountRef.current = initialStateRef.current.bodies.filter((body) => body.created).length;
     onElapsed(0);
   }, [initialState, onElapsed, physicalBodiesSignature, resetToken]);
 
@@ -465,13 +636,31 @@ export function OrbitalStage({
     const stepPhysics = () => {
       const engine = engineRef.current;
       if (isListener) {
+        let rosterChanged = false;
         while (
           appliedEventIndexRef.current < playbackEvents.length &&
           playbackEvents[appliedEventIndexRef.current].at <= engine.state.time + FIXED_STEP / 2
         ) {
-          applyPlaybackEvent(engine, playbackEvents[appliedEventIndexRef.current]);
+          const playbackEvent = playbackEvents[appliedEventIndexRef.current];
+          if (playbackEvent.kind === "remove-body") {
+            const victim = engine.getBody(playbackEvent.bodyId);
+            if (victim) {
+              consumeFlashesRef.current.push({ life: 0 });
+              onConsumptionBloom({ ...victim });
+            }
+          }
+          applyPlaybackEvent(engine, playbackEvent);
+          if (playbackEvent.kind === "add-body") {
+            const born = engine.getBody(playbackEvent.body.id);
+            if (born) {
+              birthHalosRef.current.push({ id: born.id, life: 0 });
+              onBirthBloom({ ...born });
+            }
+          }
+          if (playbackEvent.kind === "add-body" || playbackEvent.kind === "remove-body") rosterChanged = true;
           appliedEventIndexRef.current += 1;
         }
+        if (rosterChanged) trajectoriesRef.current = predictTrajectories(engine.snapshot());
       }
 
       engine.step();
@@ -515,7 +704,7 @@ export function OrbitalStage({
         while (accumulatorRef.current >= FIXED_STEP) {
           stepPhysics();
           accumulatorRef.current -= FIXED_STEP;
-          if (engineRef.current.state.time >= duration) resetLoop();
+          if (isListener && engineRef.current.state.time >= duration) resetLoop();
         }
         onElapsed(engineRef.current.state.time);
       }
@@ -550,6 +739,35 @@ export function OrbitalStage({
         drawSprite(context, spriteRef.current, body.sprite, position.x, position.y, bodySize, 0.98);
       }
 
+      birthHalosRef.current = birthHalosRef.current
+        .map((halo) => ({ ...halo, life: halo.life + delta * 0.85 }))
+        .filter((halo) => halo.life < 1);
+      drawBirthHalos(context, theme, birthHalosRef.current, engineRef.current, width, height);
+
+      consumeFlashesRef.current = consumeFlashesRef.current
+        .map((flash) => ({ ...flash, life: flash.life + delta * 1.15 }))
+        .filter((flash) => flash.life < 1);
+      drawConsumeFlashes(context, theme, consumeFlashesRef.current, star, width, height);
+
+      if (birthRef.current) {
+        const birth = birthRef.current;
+        try {
+          const candidate = birthBodyFromGesture({
+            press: birth.press,
+            aim: birth.aim,
+            holdSeconds: (now - birth.startedAt) / 1000,
+            star,
+            existingIds: planets.map((body) => body.id),
+            birthIndex: birthCountRef.current,
+          });
+          drawAimGhost(context, theme, birth, candidate, star, width, height);
+          onGestationTone(candidate);
+        } catch {
+          // a refused candidate keeps the seed visible without a ghost path
+        }
+        drawGestation(context, theme, birth, width, height, now);
+      }
+
       frameId = requestAnimationFrame(render);
     };
 
@@ -558,7 +776,7 @@ export function OrbitalStage({
       cancelAnimationFrame(frameId);
       observer.disconnect();
     };
-  }, [duration, isListener, isPlaying, onElapsed, onHaptic, onNote, onPhysicsFrame, playbackEvents, selectedBodyId, theme]);
+  }, [duration, isListener, isPlaying, onBirthBloom, onConsumptionBloom, onElapsed, onGestationTone, onHaptic, onNote, onPhysicsFrame, playbackEvents, selectedBodyId, theme]);
 
   const pointerPosition = (event) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -575,17 +793,40 @@ export function OrbitalStage({
       })
       .sort((first, second) => first.distance - second.distance)[0];
 
-    if (!target || target.distance > 58) return;
-    onBodySelect(target.body.id);
-    onBodyAudition(target.body.id);
+    if (target && target.distance <= 58) {
+      onBodySelect(target.body.id);
+      onBodyAudition(target.body.id);
+      if (isListener) return;
+      capturePointer(event.currentTarget, event.pointerId);
+      dragRef.current = { id: target.body.id, startX: pointer.x, startY: pointer.y };
+      latestGestureRef.current = null;
+      event.currentTarget.classList.add("is-dragging");
+      return;
+    }
+
     if (isListener) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = { id: target.body.id, startX: pointer.x, startY: pointer.y };
-    latestGestureRef.current = null;
-    event.currentTarget.classList.add("is-dragging");
+    const star = engineRef.current.getBody("star");
+    const world = toWorld(pointer.x, pointer.y, pointer.width, pointer.height);
+    if (Math.hypot(world.x - star.x, world.y - star.y) < STAR_CORE_RADIUS) return;
+    if (engineRef.current.state.bodies.filter((body) => body.kind === "planet").length >= MAX_WORLDS) {
+      onBirthRefused("THE SKY IS FULL — FEED A WORLD TO THE STAR TO FREE A VOICE");
+      return;
+    }
+    capturePointer(event.currentTarget, event.pointerId);
+    birthRef.current = { startedAt: performance.now(), press: world, aim: null };
+    event.currentTarget.classList.add("is-conceiving");
   };
 
   const handlePointerMove = (event) => {
+    if (birthRef.current && !isListener) {
+      const pointer = pointerPosition(event);
+      const world = toWorld(pointer.x, pointer.y, pointer.width, pointer.height);
+      birthRef.current.aim = {
+        x: world.x - birthRef.current.press.x,
+        y: world.y - birthRef.current.press.y,
+      };
+      return;
+    }
     if (!dragRef.current || isListener) return;
     const pointer = pointerPosition(event);
     const engine = engineRef.current;
@@ -593,6 +834,19 @@ export function OrbitalStage({
     const body = engine.getBody(dragRef.current.id);
     if (!star || !body) return;
     const world = toWorld(pointer.x, pointer.y, pointer.width, pointer.height);
+    if (body.created && Math.hypot(world.x - star.x, world.y - star.y) < STAR_CORE_RADIUS) {
+      const victim = { ...body };
+      latestGestureRef.current = null;
+      dragRef.current = null;
+      const removeEvent = engine.removeBody(body.id);
+      trajectoriesRef.current = predictTrajectories(engine.snapshot());
+      consumeFlashesRef.current.push({ life: 0 });
+      event.currentTarget.classList.remove("is-dragging");
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      onBodyGesture(removeEvent);
+      onConsumptionBloom(victim);
+      return;
+    }
     const bodyPosition = toScreen(body, pointer.width, pointer.height);
     const starPosition = toScreen(star, pointer.width, pointer.height);
     const radiusX = bodyPosition.x - starPosition.x;
@@ -619,6 +873,35 @@ export function OrbitalStage({
   };
 
   const handlePointerUp = (event) => {
+    if (birthRef.current && !isListener) {
+      const birth = birthRef.current;
+      birthRef.current = null;
+      onGestationTone(null);
+      event.currentTarget.classList.remove("is-conceiving");
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      const engine = engineRef.current;
+      try {
+        const spec = birthBodyFromGesture({
+          press: birth.press,
+          aim: birth.aim,
+          holdSeconds: (performance.now() - birth.startedAt) / 1000,
+          star: engine.getBody("star"),
+          existingIds: engine.state.bodies.filter((body) => body.kind === "planet").map((body) => body.id),
+          birthIndex: birthCountRef.current,
+        });
+        const birthEvent = engine.addBody(spec);
+        birthCountRef.current += 1;
+        trajectoriesRef.current = predictTrajectories(engine.snapshot());
+        birthHalosRef.current.push({ id: spec.id, life: 0 });
+        onBodySelect(spec.id);
+        onBodyGesture(birthEvent);
+        onBirthBloom({ ...engine.getBody(spec.id) });
+      } catch (error) {
+        onBirthRefused(error instanceof Error ? error.message.toUpperCase() : "THE WORLD COULD NOT BE BORN");
+      }
+      return;
+    }
+
     if (latestGestureRef.current) onBodyGesture(latestGestureRef.current);
     latestGestureRef.current = null;
     dragRef.current = null;
@@ -631,7 +914,7 @@ export function OrbitalStage({
     <canvas
       ref={canvasRef}
       className="orbital-canvas"
-      aria-label="Interactive N-body musical instrument. Touch a world to hear it; drag it to change orbit and music."
+      aria-label="Interactive N-body musical instrument. Touch a world to hear it; drag it to change orbit and music. Press and hold empty sky to grow a new world, drag while holding to throw it into orbit, and release to let it sing. Drag a born world into the star to silence it."
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

@@ -67,6 +67,10 @@ button {
   cursor: grabbing;
 }
 
+.orbital-canvas.is-conceiving {
+  cursor: crosshair;
+}
+
 .topline {
   position: absolute;
   z-index: 3;

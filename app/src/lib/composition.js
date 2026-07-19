@@ -1,13 +1,15 @@
-import { PHYSICS_MODEL } from "./physicsEngine.js";
+import { MAX_WORLDS, PHYSICS_MODEL } from "./physicsEngine.js";
 import { assertResonanceSeals } from "./gameProgress.js";
 import { defaultVoiceForBody, isCosmicVoice, SONIFICATION_MODEL } from "./sonification.js";
 
-const FORMAT = "tau-record/3";
+const FORMAT = "tau-record/4";
+const THIRD_FORMAT = "tau-record/3";
 const PREVIOUS_FORMAT = "tau-record/2";
 const LEGACY_FORMAT = "tau-record/1";
 export const MAX_SCORE_EVENTS = 1024;
 const VALID_THEMES = new Set(["lacquer", "white", "sumi"]);
 const VALID_BODY_IDS = new Set(["io", "europa", "callisto"]);
+const NOVA_ID_PATTERN = /^nova-\d{1,2}$/u;
 
 const DEFAULT_BODIES = [
   {
@@ -74,28 +76,49 @@ function isFiniteNumber(value, minimum = -Infinity, maximum = Infinity) {
   return Number.isFinite(value) && value >= minimum && value <= maximum;
 }
 
-function assertBodies(bodies) {
-  if (!Array.isArray(bodies) || bodies.length !== 3) throw new Error("Invalid score bodies");
-  const seen = new Set();
-  for (const body of bodies) {
-    if (!VALID_BODY_IDS.has(body?.id) || seen.has(body.id)) throw new Error(`Invalid score body: ${body?.id ?? "missing"}`);
-    seen.add(body.id);
-    if (!Number.isInteger(body.sprite) || body.sprite < 1 || body.sprite > 3) throw new Error(`Invalid sprite for ${body.id}`);
-    for (const key of ["semiMajor", "eccentricity", "phase", "period", "inclination", "mass", "frequency", "pan"]) {
-      if (!isFiniteNumber(body[key], -10_000, 10_000)) throw new Error(`Invalid ${key} for ${body.id}`);
-    }
-    if (!isCosmicVoice(body.voice)) throw new Error(`Invalid cosmic voice for ${body.id}`);
+function assertNovaSpec(body, { withState }) {
+  if (typeof body?.id !== "string" || !NOVA_ID_PATTERN.test(body.id)) throw new Error(`Invalid score body: ${body?.id ?? "missing"}`);
+  if (body.created !== true) throw new Error(`Invalid created flag for ${body.id}`);
+  if (!Number.isInteger(body.sprite) || body.sprite < 1 || body.sprite > 3) throw new Error(`Invalid sprite for ${body.id}`);
+  if (!isCosmicVoice(body.voice)) throw new Error(`Invalid cosmic voice for ${body.id}`);
+  if (!isFiniteNumber(body.mass, 0.01, 10)) throw new Error(`Invalid mass for ${body.id}`);
+  if (!isFiniteNumber(body.frequency, 40, 1_800)) throw new Error(`Invalid frequency for ${body.id}`);
+  if (!isFiniteNumber(body.pan, -1, 1)) throw new Error(`Invalid pan for ${body.id}`);
+  for (const key of ["x", "y", "vx", "vy"]) {
+    if (withState && !isFiniteNumber(body[key], -10, 10)) throw new Error(`Invalid ${key} for ${body.id}`);
+    if (!withState && body[key] !== undefined) throw new Error(`Unexpected ${key} for ${body.id}`);
   }
 }
 
-function assertPhysicalState(initialState) {
+function assertBodies(bodies) {
+  if (!Array.isArray(bodies) || bodies.length < 3 || bodies.length > MAX_WORLDS) throw new Error("Invalid score bodies");
+  const seen = new Set();
+  for (const body of bodies) {
+    if (seen.has(body?.id)) throw new Error(`Invalid score body: ${body?.id ?? "missing"}`);
+    if (VALID_BODY_IDS.has(body?.id)) {
+      if (!Number.isInteger(body.sprite) || body.sprite < 1 || body.sprite > 3) throw new Error(`Invalid sprite for ${body.id}`);
+      for (const key of ["semiMajor", "eccentricity", "phase", "period", "inclination", "mass", "frequency", "pan"]) {
+        if (!isFiniteNumber(body[key], -10_000, 10_000)) throw new Error(`Invalid ${key} for ${body.id}`);
+      }
+      if (!isCosmicVoice(body.voice)) throw new Error(`Invalid cosmic voice for ${body.id}`);
+    } else {
+      assertNovaSpec(body, { withState: false });
+    }
+    seen.add(body.id);
+  }
+  for (const id of VALID_BODY_IDS) {
+    if (!seen.has(id)) throw new Error(`Missing core body: ${id}`);
+  }
+}
+
+function assertPhysicalState(initialState, bodies) {
   if (initialState === null) return;
   if (initialState?.model !== PHYSICS_MODEL || initialState.time !== 0 || !Array.isArray(initialState.bodies)) {
     throw new Error("Invalid initial physical state");
   }
-  if (initialState.bodies.length !== 4) throw new Error("Invalid initial physical bodies");
+  if (initialState.bodies.length !== bodies.length + 1) throw new Error("Invalid initial physical bodies");
   const ids = new Set(initialState.bodies.map((body) => body?.id));
-  if (!ids.has("star") || [...VALID_BODY_IDS].some((id) => !ids.has(id))) throw new Error("Invalid initial physical bodies");
+  if (!ids.has("star") || bodies.some((body) => !ids.has(body.id))) throw new Error("Invalid initial physical bodies");
   for (const body of initialState.bodies) {
     for (const key of ["mass", "x", "y", "vx", "vy", "properTime", "properRate", "potential", "doppler"]) {
       if (!isFiniteNumber(body[key], -10_000, 10_000)) throw new Error(`Invalid initial ${key} for ${body.id}`);
@@ -104,24 +127,42 @@ function assertPhysicalState(initialState) {
   }
 }
 
-function assertEvent(event, previousTime) {
-  if (!event || !isFiniteNumber(event.at, 0, 3_600) || event.at < previousTime || !VALID_BODY_IDS.has(event.bodyId)) {
-    throw new Error("Invalid score event");
+function assertEvent(event, previousTime, aliveIds) {
+  if (!event || !isFiniteNumber(event.at, 0, 3_600) || event.at < previousTime) throw new Error("Invalid score event");
+
+  if (event.kind === "add-body") {
+    assertNovaSpec(event.body, { withState: true });
+    if (aliveIds.has(event.body.id)) throw new Error(`Score birth for a world already alive: ${event.body.id}`);
+    if (aliveIds.size >= MAX_WORLDS) throw new Error("Too many worlds in the score");
+    aliveIds.add(event.body.id);
+    return;
   }
+
+  if (event.kind === "remove-body") {
+    if (typeof event.bodyId !== "string" || !NOVA_ID_PATTERN.test(event.bodyId)) throw new Error("Invalid score event");
+    if (!aliveIds.has(event.bodyId)) throw new Error(`Score event touches a world that is not alive: ${event.bodyId}`);
+    aliveIds.delete(event.bodyId);
+    return;
+  }
+
   if (event.kind === "set-body-state") {
+    if (!aliveIds.has(event.bodyId)) throw new Error(`Score event touches a world that is not alive: ${event.bodyId ?? "missing"}`);
     if (!event.state) throw new Error("Invalid physical event state");
     for (const key of ["x", "y", "vx", "vy"]) {
       if (!isFiniteNumber(event.state[key], -10, 10)) throw new Error(`Invalid event ${key}`);
     }
     return;
   }
+
   if (event.kind === "legacy-orbit") {
+    if (!VALID_BODY_IDS.has(event.bodyId)) throw new Error("Invalid score event");
     for (const key of ["semiMajor", "phase"]) {
       if (!isFiniteNumber(event[key], -10, 10)) throw new Error(`Invalid legacy event ${key}`);
     }
     if (event.period !== undefined && !isFiniteNumber(event.period, 0.01, 10_000)) throw new Error("Invalid legacy event period");
     return;
   }
+
   throw new Error(`Unsupported score event: ${event.kind ?? "missing"}`);
 }
 
@@ -138,16 +179,17 @@ function assertComposition(value) {
   if (value.events.length > MAX_SCORE_EVENTS) throw new Error("Too many score events");
   assertResonanceSeals(value.resonances);
   assertBodies(value.bodies);
-  assertPhysicalState(value.initialState);
+  assertPhysicalState(value.initialState, value.bodies);
   if (!value.lineage || !Number.isInteger(value.lineage.generation) || value.lineage.generation < 0 || value.lineage.generation > 32) {
     throw new Error("Invalid score lineage");
   }
   if (value.lineage.parent !== null && (typeof value.lineage.parent !== "string" || value.lineage.parent.length > 32)) {
     throw new Error("Invalid score parent");
   }
+  const aliveIds = new Set(value.bodies.map((body) => body.id));
   let previousTime = -Infinity;
   for (const event of value.events) {
-    assertEvent(event, previousTime);
+    assertEvent(event, previousTime, aliveIds);
     previousTime = event.at;
   }
 }
@@ -166,6 +208,17 @@ function addDefaultVoices(value) {
       body.kind === "planet" ? { ...body, voice: defaultVoiceForBody(body.id) } : body
     ));
   }
+  return migrated;
+}
+
+function migrateThirdComposition(value) {
+  if (!Array.isArray(value?.bodies) || !Array.isArray(value?.events)) throw new Error("Invalid score payload");
+  const migrated = {
+    ...addDefaultResonanceSeals(clone(value)),
+    format: FORMAT,
+    sonification: SONIFICATION_MODEL,
+  };
+  assertComposition(migrated);
   return migrated;
 }
 
@@ -226,9 +279,21 @@ export function fingerprintComposition(composition) {
 }
 
 export function createReplyComposition(parent, frame, preferredTheme) {
-  if (!frame?.star || !Array.isArray(frame.bodies) || frame.bodies.length !== 3) {
+  if (!frame?.star || !Array.isArray(frame.bodies) || frame.bodies.length < 3 || frame.bodies.length > MAX_WORLDS) {
     throw new Error("The received orbit has no physical state to reply from");
   }
+  const coreBodies = parent.bodies.filter((body) => VALID_BODY_IDS.has(body.id));
+  const novaBodies = frame.bodies
+    .filter((body) => !VALID_BODY_IDS.has(body.id))
+    .map((body) => ({
+      id: body.id,
+      created: true,
+      sprite: body.sprite,
+      voice: body.voice,
+      mass: body.displayMass ?? body.mass,
+      frequency: body.frequency,
+      pan: body.pan,
+    }));
   const next = {
     ...clone(parent),
     format: FORMAT,
@@ -238,6 +303,7 @@ export function createReplyComposition(parent, frame, preferredTheme) {
     preferredTheme,
     message: "",
     resonances: [],
+    bodies: [...clone(coreBodies), ...novaBodies],
     initialState: {
       model: PHYSICS_MODEL,
       time: 0,
@@ -267,6 +333,7 @@ export function decodeComposition(encoded) {
   }
   if (value?.format === LEGACY_FORMAT) return migrateLegacyComposition(value);
   if (value?.format === PREVIOUS_FORMAT) return migratePreviousComposition(value);
+  if (value?.format === THIRD_FORMAT) return migrateThirdComposition(value);
   const normalized = addDefaultResonanceSeals(value);
   assertComposition(normalized);
   return normalized;

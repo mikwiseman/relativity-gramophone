@@ -53,6 +53,7 @@ export function App() {
   const [physicsFrame, setPhysicsFrame] = useState(null);
   const [hasInteracted, setHasInteracted] = useState(false);
   const audioRef = useRef(new AudioEngine());
+  const gestationEngagedRef = useRef(false);
   const physicsFrameRef = useRef(null);
   const lastPhysicsPaintRef = useRef(0);
   const eventCountRef = useRef(composition.events.length);
@@ -66,6 +67,13 @@ export function App() {
   const theme = THEMES[themeId];
   const shareScore = inscribed ?? composition;
   const shareLink = useMemo(() => createShareUrl(shareScore), [shareScore]);
+  const atlasBodies = useMemo(() => {
+    const rosterIds = new Set(composition.bodies.map((body) => body.id));
+    const liveNovas = (physicsFrame?.bodies ?? [])
+      .filter((body) => body.created && !rosterIds.has(body.id))
+      .map((body) => ({ id: body.id, voice: body.voice }));
+    return [...composition.bodies, ...liveNovas];
+  }, [composition.bodies, physicsFrame]);
 
   useEffect(() => {
     document.documentElement.style.colorScheme = themeId === "lacquer" ? "dark" : "light";
@@ -152,7 +160,7 @@ export function App() {
       await audioRef.current.resume(isPlaying);
       audioRef.current.playVoicePreview(voiceId);
       setRuntimeError(null);
-      if (isListener) return;
+      if (isListener || selectedBodyId.startsWith("nova-")) return;
       setInscribed(null);
       setComposition((current) => ({
         ...current,
@@ -166,30 +174,73 @@ export function App() {
   const handleBodyAudition = useCallback(async (bodyId) => {
     setSelectedBodyId(bodyId);
     setHasInteracted(true);
-    const authoredBody = composition.bodies.find((body) => body.id === bodyId);
-    const liveBody = physicsFrameRef.current?.bodies.find((body) => body.id === bodyId);
-    if (!authoredBody) return;
+    const authoredBody = composition.bodies.find((body) => body.id === bodyId) ?? null;
+    const liveBody = physicsFrameRef.current?.bodies.find((body) => body.id === bodyId) ?? null;
+    if (!authoredBody && !liveBody) return;
     setIsPlaying(true);
     setDialogOpen(false);
     try {
       await audioRef.current.resume(true);
       setRuntimeError(null);
       audioRef.current.playOrbitNote({
-        x: authoredBody.semiMajor,
+        x: authoredBody?.semiMajor ?? liveBody.x,
         y: 0,
         properRate: 1,
         doppler: 1,
-        displayMass: authoredBody.mass,
-        ...authoredBody,
-        ...liveBody,
-        voice: authoredBody.voice,
+        displayMass: authoredBody?.mass ?? liveBody.displayMass,
+        ...(authoredBody ?? {}),
+        ...(liveBody ?? {}),
+        voice: liveBody?.voice ?? authoredBody?.voice,
       });
-      performHaptic({ kind: "audition", strength: authoredBody.mass });
+      performHaptic({ kind: "audition", strength: authoredBody?.mass ?? liveBody?.displayMass ?? 0.5 });
     } catch (error) {
       setIsPlaying(false);
       setRuntimeError(error instanceof Error ? error.message : "Planetary voice could not start");
     }
   }, [composition.bodies, performHaptic]);
+
+  const handleBirthBloom = useCallback(async (body) => {
+    setHasInteracted(true);
+    setIsPlaying(true);
+    setDialogOpen(false);
+    try {
+      await audioRef.current.resume(true);
+      setRuntimeError(null);
+      audioRef.current.playBirthBloom(body);
+      performHaptic({ kind: "birth", strength: body.displayMass ?? body.mass ?? 0.5 });
+    } catch (error) {
+      setIsPlaying(false);
+      setRuntimeError(error instanceof Error ? error.message : "The newborn voice could not start");
+    }
+  }, [performHaptic]);
+
+  const handleConsumptionBloom = useCallback((body) => {
+    audioRef.current.playConsumption(body);
+    performHaptic({ kind: "consumption", strength: body.displayMass ?? body.mass ?? 0.5 });
+  }, [performHaptic]);
+
+  const handleGestationTone = useCallback(async (candidate) => {
+    if (!candidate) {
+      gestationEngagedRef.current = false;
+      audioRef.current.endGestation();
+      return;
+    }
+    try {
+      if (!gestationEngagedRef.current) {
+        gestationEngagedRef.current = true;
+        setHasInteracted(true);
+        await audioRef.current.resume(true);
+        setIsPlaying(true);
+      }
+      audioRef.current.updateGestation({ frequency: candidate.frequency, pan: candidate.pan });
+    } catch {
+      // the gestation tone is a preview; the birth bloom surfaces real audio errors
+    }
+  }, []);
+
+  const handleBirthRefused = useCallback((message) => {
+    setRuntimeError(message);
+  }, []);
 
   const handleChallengeSelect = useCallback(async (target) => {
     if (isListener) {
@@ -226,6 +277,10 @@ export function App() {
     }
     if (eventCountRef.current >= MAX_SCORE_EVENTS) {
       setRuntimeError("TAU RECORD LIMIT REACHED — INSCRIBE THIS ORBIT BEFORE CONTINUING");
+      return;
+    }
+    if (event.at > 3600) {
+      setRuntimeError("THE TAU RECORD ENDS AT ONE HOUR — INSCRIBE THIS DANCE OR RESTART");
       return;
     }
     eventCountRef.current += 1;
@@ -289,9 +344,14 @@ export function App() {
     setIsPlaying(false);
     await audioRef.current.suspend();
     setElapsed(0);
+    if (!isListener) {
+      eventCountRef.current = 0;
+      setInscribed(null);
+      setComposition((current) => (current.events.length ? { ...current, events: [] } : current));
+    }
     setResetToken((current) => current + 1);
     setDialogOpen(false);
-  }, []);
+  }, [isListener]);
 
   const openListenerRecord = useCallback(async () => {
     setIsPlaying(false);
@@ -353,10 +413,14 @@ export function App() {
         playbackEvents={composition.events}
         resetToken={resetToken}
         theme={theme}
+        onBirthBloom={handleBirthBloom}
+        onBirthRefused={handleBirthRefused}
         onBodyGesture={handleBodyGesture}
         onBodyAudition={handleBodyAudition}
         onBodySelect={setSelectedBodyId}
+        onConsumptionBloom={handleConsumptionBloom}
         onElapsed={handleElapsed}
+        onGestationTone={handleGestationTone}
         onHaptic={performHaptic}
         onNote={handleNote}
         onPhysicsFrame={handlePhysicsFrame}
@@ -380,8 +444,8 @@ export function App() {
 
       {!hasInteracted && !dialogOpen && !atlasOpen && !lensOpen && (
         <p className="play-whisper">
-          <span>{isListener ? "PLAY THE DANCE" : "TOUCH A WORLD — HEAR ITS VOICE"}</span>
-          <strong>{isListener ? "TOUCH ANY WORLD TO SOLO IT" : "DRAG — BEND TIME + ORBIT"}</strong>
+          <span>{isListener ? "PLAY THE DANCE" : "TOUCH THE VOID — BIRTH A STAR"}</span>
+          <strong>{isListener ? "TOUCH ANY WORLD TO SOLO IT" : "HOLD TO GROW · THROW TO AIM · EVERY WORLD SINGS ITS ORBIT"}</strong>
         </p>
       )}
 
@@ -390,7 +454,7 @@ export function App() {
           <div className="bottom-left-controls">
             <Transport isPlaying={isPlaying} isListener={isListener} onToggle={handleTogglePlayback} onRestart={restart} />
             <CosmicSoundAtlas
-              bodies={composition.bodies}
+              bodies={atlasBodies}
               capturedResonances={composition.resonances}
               challengeGuide={challengeGuide}
               challengeStatus={challengeStatus}

@@ -16,6 +16,7 @@ export const THEMES = {
     cyan: "#7eb6cc",
     spriteMode: "pearl",
     orbitMode: "gold",
+    surface: "dark",
   },
   white: {
     id: "white",
@@ -32,6 +33,7 @@ export const THEMES = {
     cyan: "#76b9c1",
     spriteMode: "pearl",
     orbitMode: "emboss",
+    surface: "light",
   },
   sumi: {
     id: "sumi",
@@ -48,6 +50,7 @@ export const THEMES = {
     cyan: "#5da9c4",
     spriteMode: "sumi",
     orbitMode: "ink",
+    surface: "light",
   },
 };
 

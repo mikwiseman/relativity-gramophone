@@ -6,6 +6,14 @@ import { RESONANCE_TARGETS } from "../lib/gameProgress.js";
 
 const BODY_LABELS = Object.freeze({ io: "I", europa: "II", callisto: "III" });
 
+function bodyLabel(bodyId) {
+  return BODY_LABELS[bodyId] ?? `N${bodyId.split("-")[1] ?? "?"}`;
+}
+
+function isBornWorld(bodyId) {
+  return !Object.hasOwn(BODY_LABELS, bodyId);
+}
+
 export function CosmicSoundAtlas({
   bodies,
   capturedResonances,
@@ -52,7 +60,7 @@ export function CosmicSoundAtlas({
           <div className="atlas-heading">
             <div>
               <span>COSMIC SONIFICATION</span>
-              <strong>ORBIT {BODY_LABELS[selectedBody.id]} · {COSMIC_VOICES[selectedBody.voice].label}</strong>
+              <strong>ORBIT {bodyLabel(selectedBody.id)} · {COSMIC_VOICES[selectedBody.voice].label}</strong>
             </div>
             <button type="button" className="atlas-close" aria-label="Close cosmic sound atlas" onClick={onClose}>
               <X aria-hidden="true" weight="thin" />
@@ -65,12 +73,12 @@ export function CosmicSoundAtlas({
                 type="button"
                 role="tab"
                 aria-selected={selectedBody.id === body.id}
-                aria-label={`Orbit ${BODY_LABELS[body.id]}, voice ${COSMIC_VOICES[body.voice].label}`}
+                aria-label={`Orbit ${bodyLabel(body.id)}, voice ${COSMIC_VOICES[body.voice].label}`}
                 className="body-selector-option"
                 key={body.id}
                 onClick={() => onBodySelect(body.id)}
               >
-                {BODY_LABELS[body.id]} · {COSMIC_VOICES[body.voice].label}
+                {bodyLabel(body.id)} · {COSMIC_VOICES[body.voice].label}
               </button>
             ))}
           </div>
@@ -99,7 +107,11 @@ export function CosmicSoundAtlas({
           </div>
 
           <p className="atlas-truth">
-            {isListener ? "AUDITION ONLY · THE RECEIVED RECORD STAYS INTACT" : "TAP TO AUDITION + IMPRINT"}
+            {isListener
+              ? "AUDITION ONLY · THE RECEIVED RECORD STAYS INTACT"
+              : isBornWorld(selectedBody.id)
+                ? "AUDITION ONLY · A BORN WORLD KEEPS ITS BIRTH VOICE"
+                : "TAP TO AUDITION + IMPRINT"}
             <span>SONIFICATION — NOT AIRBORNE SOUND IN VACUUM.</span>
           </p>
 
