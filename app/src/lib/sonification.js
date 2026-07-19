@@ -144,6 +144,7 @@ export function isResonanceChallengeComplete(resonance, target, threshold = 0.82
 }
 
 export function hapticPattern({ kind, strength = 0.5 }) {
+  if (kind === "audition") return [Math.round(4 + clamp(strength, 0, 1) * 3)];
   if (kind === "crossing") return [8];
   if (kind === "resonance") {
     const normalized = clamp(strength, 0, 1);

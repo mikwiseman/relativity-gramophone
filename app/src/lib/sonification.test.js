@@ -69,6 +69,7 @@ test("visible light is logarithmically compressed from red to violet across two 
 });
 
 test("haptic patterns remain short and scale with physical intensity", () => {
+  assert.deepEqual(hapticPattern({ kind: "audition", strength: 0.7 }), [6]);
   assert.deepEqual(hapticPattern({ kind: "crossing", strength: 0.7 }), [8]);
   assert.deepEqual(hapticPattern({ kind: "pericenter", strength: 0.3 }), [5, 22, 4]);
   assert.deepEqual(hapticPattern({ kind: "pericenter", strength: 1.1 }), [9, 18, 7]);

@@ -135,7 +135,10 @@ export class AudioEngine {
     this.latestFrame = frame;
     if (!this.context || this.context.state !== "running") return;
     const now = this.context.currentTime;
-    const resonanceStrength = frame.resonance?.strength ?? 0;
+    const resonanceStrength = Math.max(
+      frame.resonance?.strength ?? 0,
+      (frame.challengeProximity ?? 0) * 0.62,
+    );
 
     for (const body of frame.bodies) {
       const voice = this.voices.get(body.id) ?? this.createVoice(body.id);

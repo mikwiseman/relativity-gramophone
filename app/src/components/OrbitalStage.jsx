@@ -360,6 +360,7 @@ export function OrbitalStage({
   playbackEvents,
   resetToken,
   theme,
+  onBodyAudition,
   onBodyGesture,
   onBodySelect,
   onElapsed,
@@ -576,6 +577,7 @@ export function OrbitalStage({
 
     if (!target || target.distance > 58) return;
     onBodySelect(target.body.id);
+    onBodyAudition(target.body.id);
     if (isListener) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = { id: target.body.id, startX: pointer.x, startY: pointer.y };
@@ -629,7 +631,7 @@ export function OrbitalStage({
     <canvas
       ref={canvasRef}
       className="orbital-canvas"
-      aria-label="Interactive N-body musical instrument. Drag a celestial body to change its orbit."
+      aria-label="Interactive N-body musical instrument. Touch a world to hear it; drag it to change orbit and music."
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

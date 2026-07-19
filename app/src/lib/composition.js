@@ -1,4 +1,5 @@
 import { PHYSICS_MODEL } from "./physicsEngine.js";
+import { assertResonanceSeals } from "./gameProgress.js";
 import { defaultVoiceForBody, isCosmicVoice, SONIFICATION_MODEL } from "./sonification.js";
 
 const FORMAT = "tau-record/3";
@@ -135,6 +136,7 @@ function assertComposition(value) {
   if (value.createdAt !== null && (typeof value.createdAt !== "string" || value.createdAt.length > 64)) throw new Error("Invalid score date");
   if (!Array.isArray(value.events)) throw new Error("Invalid score events");
   if (value.events.length > MAX_SCORE_EVENTS) throw new Error("Too many score events");
+  assertResonanceSeals(value.resonances);
   assertBodies(value.bodies);
   assertPhysicalState(value.initialState);
   if (!value.lineage || !Number.isInteger(value.lineage.generation) || value.lineage.generation < 0 || value.lineage.generation > 32) {
@@ -148,6 +150,12 @@ function assertComposition(value) {
     assertEvent(event, previousTime);
     previousTime = event.at;
   }
+}
+
+function addDefaultResonanceSeals(value) {
+  const normalized = clone(value);
+  if (normalized.resonances === undefined) normalized.resonances = [];
+  return normalized;
 }
 
 function addDefaultVoices(value) {
@@ -164,7 +172,7 @@ function addDefaultVoices(value) {
 function migratePreviousComposition(value) {
   if (!Array.isArray(value?.bodies) || !Array.isArray(value?.events)) throw new Error("Invalid score payload");
   const migrated = {
-    ...addDefaultVoices(value),
+    ...addDefaultResonanceSeals(addDefaultVoices(value)),
     format: FORMAT,
     sonification: SONIFICATION_MODEL,
   };
@@ -175,7 +183,7 @@ function migratePreviousComposition(value) {
 function migrateLegacyComposition(value) {
   if (!Array.isArray(value?.bodies) || !Array.isArray(value?.events)) throw new Error("Invalid score payload");
   const migrated = {
-    ...addDefaultVoices(value),
+    ...addDefaultResonanceSeals(addDefaultVoices(value)),
     format: FORMAT,
     physics: PHYSICS_MODEL,
     sonification: SONIFICATION_MODEL,
@@ -202,6 +210,7 @@ export function createDefaultComposition() {
     bodies: clone(DEFAULT_BODIES),
     initialState: null,
     lineage: { parent: null, generation: 0 },
+    resonances: [],
     events: [],
   };
 }
@@ -228,6 +237,7 @@ export function createReplyComposition(parent, frame, preferredTheme) {
     createdAt: null,
     preferredTheme,
     message: "",
+    resonances: [],
     initialState: {
       model: PHYSICS_MODEL,
       time: 0,
@@ -257,8 +267,9 @@ export function decodeComposition(encoded) {
   }
   if (value?.format === LEGACY_FORMAT) return migrateLegacyComposition(value);
   if (value?.format === PREVIOUS_FORMAT) return migratePreviousComposition(value);
-  assertComposition(value);
-  return value;
+  const normalized = addDefaultResonanceSeals(value);
+  assertComposition(normalized);
+  return normalized;
 }
 
 export function getPresentationTheme(composition, localOverride) {

@@ -16,7 +16,8 @@ import {
   readCompositionFromHash,
 } from "./lib/composition.js";
 import { THEMES } from "./lib/themes.js";
-import { hapticPattern, isResonanceChallengeComplete } from "./lib/sonification.js";
+import { captureResonance, measureTargetResonance, RESONANCE_TARGETS } from "./lib/gameProgress.js";
+import { COSMIC_VOICES, hapticPattern, isResonanceChallengeComplete } from "./lib/sonification.js";
 
 function formatTime(value) {
   const seconds = Math.max(0, Math.floor(value));
@@ -48,14 +49,18 @@ export function App() {
   const [selectedBodyId, setSelectedBodyId] = useState("io");
   const [challengeTarget, setChallengeTarget] = useState(null);
   const [challengeStatus, setChallengeStatus] = useState("CHOOSE A RATIO");
+  const [challengeGuide, setChallengeGuide] = useState(null);
   const [physicsFrame, setPhysicsFrame] = useState(null);
+  const [hasInteracted, setHasInteracted] = useState(false);
   const audioRef = useRef(new AudioEngine());
+  const physicsFrameRef = useRef(null);
   const lastPhysicsPaintRef = useRef(0);
   const eventCountRef = useRef(composition.events.length);
   const challengeTargetRef = useRef(null);
   const challengeNeedsGestureRef = useRef(true);
   const challengeLockStartedRef = useRef(null);
   const challengeCompletedRef = useRef(false);
+  const resonanceSealsRef = useRef(composition.resonances);
 
   const themeId = getPresentationTheme(composition, localTheme);
   const theme = THEMES[themeId];
@@ -82,27 +87,40 @@ export function App() {
   }, [performHaptic]);
 
   const handlePhysicsFrame = useCallback((frame) => {
-    audioRef.current.updateField(frame);
+    physicsFrameRef.current = frame;
     const target = challengeTargetRef.current;
+    const guide = target ? measureTargetResonance(frame.bodies, target) : null;
+    audioRef.current.updateField({ ...frame, challengeProximity: guide?.proximity ?? 0 });
     if (target && !challengeNeedsGestureRef.current && !challengeCompletedRef.current) {
-      const lockIsStrong = isResonanceChallengeComplete(frame.resonance, target);
+      const lockIsStrong = isResonanceChallengeComplete({ label: target, strength: guide.lockStrength }, target);
       if (lockIsStrong && challengeLockStartedRef.current === null) challengeLockStartedRef.current = performance.now();
       if (!lockIsStrong) challengeLockStartedRef.current = null;
 
       if (lockIsStrong && performance.now() - challengeLockStartedRef.current >= 720) {
         challengeCompletedRef.current = true;
-        setChallengeStatus(`LOCKED ${target} · THE ORBIT SINGS`);
+        const nextSeals = captureResonance(resonanceSealsRef.current, target);
+        resonanceSealsRef.current = nextSeals;
+        setComposition((current) => ({ ...current, resonances: nextSeals }));
+        setInscribed(null);
+        setChallengeStatus(nextSeals.length === RESONANCE_TARGETS.length
+          ? "CONSTELLATION COMPLETE · 3/3"
+          : `SEALED ${target} · ${nextSeals.length}/3`);
         audioRef.current.playChallengeSuccess();
-        performHaptic({ kind: "resonance", strength: frame.resonance?.strength ?? 0.82 });
+        performHaptic({ kind: "resonance", strength: guide.lockStrength });
       }
     }
     const now = performance.now();
     if (now - lastPhysicsPaintRef.current < 90) return;
     lastPhysicsPaintRef.current = now;
     setPhysicsFrame(frame);
+    setChallengeGuide(guide);
+    if (target && !challengeNeedsGestureRef.current && !challengeCompletedRef.current) {
+      setChallengeStatus(`${Math.round(guide.proximity * 100)}% · ${guide.direction}`);
+    }
   }, [performHaptic]);
 
   const handleTogglePlayback = useCallback(async () => {
+    setHasInteracted(true);
     if (isPlaying) {
       setIsPlaying(false);
       await audioRef.current.suspend();
@@ -129,6 +147,7 @@ export function App() {
   }, [isListener]);
 
   const handleVoiceSelect = useCallback(async (voiceId) => {
+    setHasInteracted(true);
     try {
       await audioRef.current.resume(isPlaying);
       audioRef.current.playVoicePreview(voiceId);
@@ -144,6 +163,34 @@ export function App() {
     }
   }, [isListener, isPlaying, selectedBodyId]);
 
+  const handleBodyAudition = useCallback(async (bodyId) => {
+    setSelectedBodyId(bodyId);
+    setHasInteracted(true);
+    const authoredBody = composition.bodies.find((body) => body.id === bodyId);
+    const liveBody = physicsFrameRef.current?.bodies.find((body) => body.id === bodyId);
+    if (!authoredBody) return;
+    setIsPlaying(true);
+    setDialogOpen(false);
+    try {
+      await audioRef.current.resume(true);
+      setRuntimeError(null);
+      audioRef.current.playOrbitNote({
+        x: authoredBody.semiMajor,
+        y: 0,
+        properRate: 1,
+        doppler: 1,
+        displayMass: authoredBody.mass,
+        ...authoredBody,
+        ...liveBody,
+        voice: authoredBody.voice,
+      });
+      performHaptic({ kind: "audition", strength: authoredBody.mass });
+    } catch (error) {
+      setIsPlaying(false);
+      setRuntimeError(error instanceof Error ? error.message : "Planetary voice could not start");
+    }
+  }, [composition.bodies, performHaptic]);
+
   const handleChallengeSelect = useCallback(async (target) => {
     if (isListener) {
       setChallengeStatus("ANSWER WITH ORBIT TO PLAY");
@@ -153,8 +200,10 @@ export function App() {
     challengeNeedsGestureRef.current = true;
     challengeLockStartedRef.current = null;
     challengeCompletedRef.current = false;
+    setHasInteracted(true);
     setChallengeTarget(target);
-    setChallengeStatus(`DRAG TO SEEK ${target}`);
+    setChallengeGuide(null);
+    setChallengeStatus(`${composition.resonances.includes(target) ? "REPLAY" : "DRAG TO SEEK"} ${target}`);
     setAtlasOpen(false);
     try {
       await audioRef.current.resume();
@@ -164,10 +213,11 @@ export function App() {
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : "Orbit game audio could not start");
     }
-  }, [isListener]);
+  }, [composition.resonances, isListener]);
 
   const handleBodyGesture = useCallback((event) => {
     if (isListener) return;
+    setHasInteracted(true);
     if (challengeTargetRef.current) {
       challengeNeedsGestureRef.current = false;
       challengeCompletedRef.current = false;
@@ -221,9 +271,11 @@ export function App() {
       return;
     }
     try {
+      const voices = shareScore.bodies.map((body) => COSMIC_VOICES[body.voice].label).join(" · ");
+      const resonance = shareScore.resonances.length ? `Resonance seals: ${shareScore.resonances.join(" · ")}.` : "A free orbit.";
       await navigator.share({
         title: "Relativity Gramophone",
-        text: inscribed?.message || "A recorded orbit",
+        text: [shareScore.message, `Planetary dance: ${voices}. ${resonance}`].filter(Boolean).join("\n"),
         url: shareLink,
       });
       setDialogStatus("ORBIT SHARED");
@@ -231,7 +283,7 @@ export function App() {
       if (error instanceof Error && error.name === "AbortError") return;
       setDialogStatus(`SHARE FAILED — ${error instanceof Error ? error.message.toUpperCase() : "UNKNOWN ERROR"}`);
     }
-  }, [inscribed?.message, shareLink]);
+  }, [shareLink, shareScore]);
 
   const restart = useCallback(async () => {
     setIsPlaying(false);
@@ -264,7 +316,10 @@ export function App() {
       setSelectedBodyId("io");
       setChallengeTarget(null);
       setChallengeStatus("CHOOSE A RATIO");
+      setChallengeGuide(null);
+      setHasInteracted(false);
       challengeTargetRef.current = null;
+      resonanceSealsRef.current = [];
       challengeNeedsGestureRef.current = true;
       challengeLockStartedRef.current = null;
       challengeCompletedRef.current = false;
@@ -299,6 +354,7 @@ export function App() {
         resetToken={resetToken}
         theme={theme}
         onBodyGesture={handleBodyGesture}
+        onBodyAudition={handleBodyAudition}
         onBodySelect={setSelectedBodyId}
         onElapsed={handleElapsed}
         onHaptic={performHaptic}
@@ -315,48 +371,61 @@ export function App() {
         </div>
       </header>
 
-      {challengeTarget && !atlasOpen && !isListener && (
+      {challengeTarget && !atlasOpen && !isListener && !dialogOpen && (
         <button type="button" className="challenge-strip" onClick={() => setAtlasOpen(true)}>
-          <span>RESONANCE {challengeTarget}</span>
+          <span>RESONANCE {challengeTarget} · SEALS {composition.resonances.length}/3</span>
           <strong>{challengeStatus}</strong>
         </button>
       )}
 
-      <div className="bottom-left-controls">
-        <Transport isPlaying={isPlaying} isListener={isListener} onToggle={handleTogglePlayback} onRestart={restart} />
-        <CosmicSoundAtlas
-          bodies={composition.bodies}
-          challengeStatus={challengeStatus}
-          challengeTarget={challengeTarget}
-          frame={physicsFrame}
-          isListener={isListener}
-          onBodySelect={setSelectedBodyId}
-          onChallengeSelect={handleChallengeSelect}
-          onClose={() => setAtlasOpen(false)}
-          onToggle={() => {
-            setLensOpen(false);
-            setAtlasOpen((current) => !current);
-          }}
-          onVoiceSelect={handleVoiceSelect}
-          open={atlasOpen}
-          selectedBodyId={selectedBodyId}
-        />
-        <ThemeChooser value={themeId} onChange={handleThemeChange} />
-        <RelativityLens
-          frame={physicsFrame}
-          open={lensOpen}
-          onClose={() => setLensOpen(false)}
-          onToggle={() => {
-            setAtlasOpen(false);
-            setLensOpen((current) => !current);
-          }}
-        />
-      </div>
+      {!hasInteracted && !dialogOpen && !atlasOpen && !lensOpen && (
+        <p className="play-whisper">
+          <span>{isListener ? "PLAY THE DANCE" : "TOUCH A WORLD — HEAR ITS VOICE"}</span>
+          <strong>{isListener ? "TOUCH ANY WORLD TO SOLO IT" : "DRAG — BEND TIME + ORBIT"}</strong>
+        </p>
+      )}
 
-      <button type="button" className="inscribe-action" onClick={isListener ? openListenerRecord : handleInscribe}>
-        INSCRIBE
-        <span aria-hidden="true" />
-      </button>
+      {!dialogOpen && (
+        <>
+          <div className="bottom-left-controls">
+            <Transport isPlaying={isPlaying} isListener={isListener} onToggle={handleTogglePlayback} onRestart={restart} />
+            <CosmicSoundAtlas
+              bodies={composition.bodies}
+              capturedResonances={composition.resonances}
+              challengeGuide={challengeGuide}
+              challengeStatus={challengeStatus}
+              challengeTarget={challengeTarget}
+              isListener={isListener}
+              onBodySelect={setSelectedBodyId}
+              onChallengeSelect={handleChallengeSelect}
+              onClose={() => setAtlasOpen(false)}
+              onToggle={() => {
+                setHasInteracted(true);
+                setLensOpen(false);
+                setAtlasOpen((current) => !current);
+              }}
+              onVoiceSelect={handleVoiceSelect}
+              open={atlasOpen}
+              selectedBodyId={selectedBodyId}
+            />
+            <ThemeChooser value={themeId} onChange={handleThemeChange} />
+            <RelativityLens
+              frame={physicsFrame}
+              open={lensOpen}
+              onClose={() => setLensOpen(false)}
+              onToggle={() => {
+                setAtlasOpen(false);
+                setLensOpen((current) => !current);
+              }}
+            />
+          </div>
+
+          <button type="button" className="inscribe-action" onClick={isListener ? openListenerRecord : handleInscribe}>
+            {isListener ? "OPEN DANCE" : "SHARE DANCE"}
+            <span aria-hidden="true" />
+          </button>
+        </>
+      )}
 
       {runtimeError && (
         <div className="runtime-message" role="alert">
@@ -366,10 +435,13 @@ export function App() {
       )}
 
       <InscriptionDialog
+        bodies={shareScore.bodies}
+        duration={shareScore.duration}
         link={shareLink}
         message={inscribed?.message ?? composition.message}
         mode={isListener ? "listener" : "composer"}
         open={dialogOpen}
+        resonances={shareScore.resonances}
         onClose={() => setDialogOpen(false)}
         onCopy={copyLink}
         onEnterOrbit={enterOrbit}

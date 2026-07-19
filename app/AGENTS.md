@@ -15,4 +15,6 @@ When implementing from a selected generated mock, treat that image as the source
 - Balance felt play with inspectable physics: optional panels may explain or challenge, while the default scene stays an art object.
 - Cosmic voices must be labelled as sonifications, never literal airborne recordings from vacuum. A voice imprint is part of the shared score and must reproduce for the recipient.
 - Resonance challenges must use the real unsnapped N-body state; never auto-correct an orbit to manufacture success.
+- Touching a visible world must immediately reveal its assigned voice from the current live physical state; dragging the same world changes the orbit, time flow, color, and music.
+- Treat sharing as the end of the play loop, not a utility action. The dance record must carry orbit gestures, voice imprints, and earned resonance seals, and the recipient must be able to replay or answer with a new orbit.
 - Mobile is a primary performance surface. Keep core touch targets at least 44 px and verify portrait, compact portrait, and landscape without document overflow.

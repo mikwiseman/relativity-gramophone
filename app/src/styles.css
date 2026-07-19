@@ -145,6 +145,38 @@ button {
   color: var(--cyan);
 }
 
+.play-whisper {
+  position: absolute;
+  z-index: 3;
+  bottom: clamp(88px, 13vh, 126px);
+  left: 50%;
+  display: grid;
+  gap: 7px;
+  width: min(380px, calc(100vw - 48px));
+  margin: 0;
+  padding: 11px 16px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  background: color-mix(in srgb, var(--paper) 54%, transparent);
+  pointer-events: none;
+  text-align: center;
+  transform: translateX(-50%);
+  backdrop-filter: blur(8px);
+  animation: whisper-in 700ms 360ms ease both;
+}
+
+.play-whisper span,
+.play-whisper strong {
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  line-height: 1.45;
+}
+
+.play-whisper strong {
+  color: var(--cyan);
+}
+
 .bottom-left-controls {
   position: absolute;
   z-index: 5;
@@ -306,9 +338,9 @@ input:focus-visible {
   color: inherit;
   background: transparent;
   cursor: pointer;
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 600;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.12em;
 }
 
 .body-selector-option:last-child {
@@ -443,13 +475,34 @@ input:focus-visible {
 }
 
 .resonance-targets button {
+  position: relative;
+  display: grid;
+  gap: 3px;
   min-height: 40px;
+  place-content: center;
   border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
   color: inherit;
   background: transparent;
   cursor: pointer;
   font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
   font-size: 16px;
+}
+
+.resonance-targets button small {
+  font-family: "Avenir Next", Avenir, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 6px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  opacity: 0.46;
+}
+
+.resonance-targets button.is-captured {
+  border-color: color-mix(in srgb, var(--coral) 68%, var(--ink));
+}
+
+.resonance-targets button.is-captured small {
+  color: var(--coral);
+  opacity: 1;
 }
 
 .resonance-targets button[aria-pressed="true"] {
@@ -784,6 +837,40 @@ input:focus-visible {
   line-height: 1.4;
 }
 
+.dance-signature {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 14px;
+  margin: -9px 0 25px;
+  padding: 12px 0 13px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 11%, transparent);
+}
+
+.dance-signature p {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+
+.dance-signature span {
+  font-size: 6px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  opacity: 0.5;
+}
+
+.dance-signature strong {
+  overflow: hidden;
+  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
 .close-button {
   position: absolute;
   top: 17px;
@@ -847,6 +934,7 @@ input:focus-visible {
 
 .text-action {
   display: inline-flex;
+  min-height: 44px;
   align-items: center;
   gap: 7px;
   padding: 6px 0;
@@ -928,6 +1016,17 @@ input:focus-visible {
   }
 }
 
+@keyframes whisper-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 7px);
+  }
+  to {
+    opacity: 0.82;
+    transform: translate(-50%, 0);
+  }
+}
+
 @media (max-width: 620px) {
   .topline {
     top: 24px;
@@ -953,6 +1052,11 @@ input:focus-visible {
     top: 72px;
     min-height: 44px;
     max-width: calc(100vw - 40px);
+  }
+
+  .play-whisper {
+    bottom: 88px;
+    width: calc(100vw - 40px);
   }
 
   .bottom-left-controls {
@@ -1016,10 +1120,19 @@ input:focus-visible {
     bottom: 76px;
     width: calc(100vw - 32px);
     padding: 26px 24px 22px;
+    background: var(--paper);
   }
 
   .inscription-dialog h2 {
     margin-bottom: 25px;
+  }
+
+  .dance-signature {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .dance-signature p:last-child {
+    grid-column: 1 / -1;
   }
 
   .runtime-message {
@@ -1047,6 +1160,7 @@ input:focus-visible {
 
   .inscribe-action {
     right: 16px;
+    bottom: 76px;
   }
 
   .sound-atlas-panel {
@@ -1089,6 +1203,14 @@ input:focus-visible {
   .challenge-strip {
     top: 17px;
     min-height: 44px;
+  }
+
+  .inscription-dialog {
+    top: 12px;
+    bottom: 12px;
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 }
 

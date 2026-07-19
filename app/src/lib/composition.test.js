@@ -14,6 +14,7 @@ import { createInitialPhysicsState, PHYSICS_MODEL } from "./physicsEngine.js";
 test("a composition survives a URL-safe round trip including unicode", () => {
   const composition = createDefaultComposition();
   composition.message = "До встречи среди звёзд";
+  composition.resonances = ["3:2", "2:1"];
   composition.events.push({
     kind: "set-body-state",
     at: 1.25,
@@ -24,6 +25,16 @@ test("a composition survives a URL-safe round trip including unicode", () => {
   const decoded = decodeComposition(encodeComposition(composition));
 
   assert.deepEqual(decoded, composition);
+});
+
+test("an existing tau-record/3 link without resonance seals stays playable", () => {
+  const existing = createDefaultComposition();
+  delete existing.resonances;
+  const encoded = Buffer.from(JSON.stringify(existing), "utf8").toString("base64url");
+
+  const decoded = decodeComposition(encoded);
+
+  assert.deepEqual(decoded.resonances, []);
 });
 
 test("a recipient theme override never mutates the recorded preferred theme", () => {
@@ -53,6 +64,7 @@ test("a tau-record/2 link gains deterministic cosmic voice imprints", () => {
   assert.equal(migrated.format, "tau-record/3");
   assert.equal(migrated.sonification, "cosmic-voices/1");
   assert.deepEqual(migrated.bodies.map((body) => body.voice), ["earth", "moon", "light"]);
+  assert.deepEqual(migrated.resonances, []);
 });
 
 test("a tau-record/1 link migrates into the deterministic N-body format", () => {
@@ -70,6 +82,7 @@ test("a tau-record/1 link migrates into the deterministic N-body format", () => 
   assert.equal(migrated.physics, PHYSICS_MODEL);
   assert.equal(migrated.sonification, "cosmic-voices/1");
   assert.deepEqual(migrated.bodies.map((body) => body.voice), ["earth", "moon", "light"]);
+  assert.deepEqual(migrated.resonances, []);
   assert.equal(migrated.events[0].kind, "legacy-orbit");
   assert.equal(migrated.events[0].semiMajor, 0.4);
 });
@@ -87,10 +100,20 @@ test("reply orbit starts from the received physical state and preserves compact 
   assert.equal(reply.preferredTheme, "sumi");
   assert.equal(reply.events.length, 0);
   assert.equal(reply.message, "");
+  assert.deepEqual(reply.resonances, []);
   assert.equal(reply.initialState.bodies.find((body) => body.id === "io").x, bodies[0].x);
   assert.equal(reply.initialState.bodies.find((body) => body.id === "io").properTime, 0);
   assert.deepEqual(reply.lineage, { parent: fingerprintComposition(parent), generation: 1 });
   assert.ok(encodeComposition(reply).length < 12_000);
+});
+
+test("unknown or duplicate resonance seals are rejected", () => {
+  const composition = createDefaultComposition();
+  composition.resonances = ["3:2", "3:2"];
+  assert.throws(() => encodeComposition(composition), /resonance seals/i);
+
+  composition.resonances = ["4:1"];
+  assert.throws(() => encodeComposition(composition), /resonance seals/i);
 });
 
 test("malformed or oversized physical event payloads are rejected", () => {

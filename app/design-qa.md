@@ -45,10 +45,10 @@ No actionable P0, P1, or P2 findings remain.
 ## Required fidelity surfaces
 
 - Fonts and typography: uppercase UI uses `Avenir Next`/Avenir/Helvetica fallbacks with the source's wide tracking and quiet optical weight; timer and `3:2` use an old-style serif. No broken wraps or truncation at desktop or mobile.
-- Spacing and layout rhythm: title, timer, observer line, orbital field, edge controls, and `INSCRIBE` retain the sparse full-bleed hierarchy. The implementation deliberately keeps one control layout across all themes instead of moving `INSCRIBE` between corners.
+- Spacing and layout rhythm: title, timer, observer line, orbital field, edge controls, and `SHARE DANCE` retain the sparse full-bleed hierarchy. The implementation deliberately keeps one control layout across all themes.
 - Colors and visual tokens: lacquer is warm near-black and aged gold; white is gallery-white graphite with pearl/cyan/coral; Sumi is warm washi and diluted carbon. No CSS gradients or decorative color overlays replace the generated materials.
 - Image quality and asset fidelity: backgrounds, celestial bodies, and Sumi brush textures are GPT-Image raster assets sized for their slots. Desktop captures show no missing images, hard transparency boxes, stretching, or visible chroma fringe.
-- Copy and content: above the fold is restricted to `RELATIVITY GRAMOPHONE`, time, `3:2`, `INSCRIBE`, and interaction labels. The White Time concept's Japanese descriptive line was intentionally omitted so the three selectable appearances do not change product meaning or copy density.
+- Copy and content: above the fold is restricted to `RELATIVITY GRAMOPHONE`, time, `3:2`, `SHARE DANCE`, and the transient first-use interaction whisper. The White Time concept's Japanese descriptive line was intentionally omitted so the three selectable appearances do not change product meaning or copy density.
 - Icons: transport, theme, copy, share, close, and replay use one Phosphor icon family with consistent thin/filled weights and practical hit targets.
 - Responsiveness and accessibility: verified `390 × 844` with no horizontal or vertical overflow; the theme menu and inscription dialog remain inside the viewport. Controls are semantic buttons/radios, have accessible names, keyboard focus styles, and reduced-motion handling.
 
@@ -137,3 +137,31 @@ final result: passed
 - Passed: no horizontal document overflow in any tested mobile viewport.
 - Passed: the atlas is explicit that its voices are sonifications rather than sound propagating through vacuum.
 - Passed: resonance success is driven by the same unsnapped N-body model used by the lens and music.
+
+## Planet dance loop — 2026-07-19
+
+### Verified flow
+
+1. Touched a visible world at `390 × 844`; the first-use whisper disappeared, Web Audio started from the gesture, the transport changed to Pause, and the simulation clock advanced.
+2. Opened the atlas and confirmed explicit Earth, Moon, Light, and Alpha Centauri sonification cards plus per-orbit voice assignments.
+3. Selected `3:2`, dragged a live body, observed continuous ratio guidance, and earned `SEALED 3:2 · 1/3` only after the measured period ratio remained above the real 82% lock threshold.
+4. Opened `SHARE DANCE`; the record summarized `EARTH · MOON · LIGHT`, the `3:2` seal, duration, deterministic score link, and dedicated copy/native-share actions.
+5. Opened that generated link in a second tab, verified the received voices, resonance seal and duration, then started recipient playback and observed the clock advance to `00:01` with no runtime alert.
+6. Rechecked `390 × 844`, `320 × 568`, and `844 × 390`: zero horizontal overflow, every core/dialog action is at least `44 px`, compact controls do not collide, and the landscape dialog remains fully inside the viewport.
+7. Checked composer and recipient browser warning/error logs: none.
+
+### Evidence
+
+- Direct first-use loop: `qa/after-mobile-390x844.png`
+- Sound atlas and resonance collection: `qa/atlas-mobile-390x844.png`
+- Composer's shareable record: `qa/share-dialog-final-390x844.png`
+- Recipient at standard mobile: `qa/recipient-final-390x844.png`
+- Recipient at compact mobile: `qa/recipient-compact-final-320x568.png`
+- Recipient in landscape: `qa/recipient-landscape-final-844x390.png`
+
+### Result
+
+- Fixed [P1]: touching a world selected it but did not directly reveal its physical voice.
+- Fixed [P1]: the resonance challenge lacked a legible approach signal and durable progression.
+- Fixed [P1]: the primary share affordance and the contents of the received dance were too implicit.
+- Passed: the shared `tau-record/3` remains backward-compatible with older links that have no resonance seals.

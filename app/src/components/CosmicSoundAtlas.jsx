@@ -2,15 +2,16 @@ import { useEffect, useRef } from "react";
 import { WaveSine, X } from "@phosphor-icons/react";
 
 import { COSMIC_VOICES, COSMIC_VOICE_ORDER } from "../lib/sonification.js";
+import { RESONANCE_TARGETS } from "../lib/gameProgress.js";
 
-const BODY_LABELS = Object.freeze({ io: "IO", europa: "EUROPA", callisto: "CALLISTO" });
-const RESONANCE_TARGETS = ["2:1", "3:2", "5:3"];
+const BODY_LABELS = Object.freeze({ io: "I", europa: "II", callisto: "III" });
 
 export function CosmicSoundAtlas({
   bodies,
+  capturedResonances,
+  challengeGuide,
   challengeStatus,
   challengeTarget,
-  frame,
   isListener,
   onBodySelect,
   onChallengeSelect,
@@ -22,7 +23,7 @@ export function CosmicSoundAtlas({
 }) {
   const rootRef = useRef(null);
   const selectedBody = bodies.find((body) => body.id === selectedBodyId) ?? bodies[0];
-  const currentLock = frame?.resonance?.label === challengeTarget ? frame.resonance.strength : 0;
+  const currentLock = challengeGuide?.proximity ?? 0;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -51,7 +52,7 @@ export function CosmicSoundAtlas({
           <div className="atlas-heading">
             <div>
               <span>COSMIC SONIFICATION</span>
-              <strong>VOICE OF {BODY_LABELS[selectedBody.id]}</strong>
+              <strong>ORBIT {BODY_LABELS[selectedBody.id]} · {COSMIC_VOICES[selectedBody.voice].label}</strong>
             </div>
             <button type="button" className="atlas-close" aria-label="Close cosmic sound atlas" onClick={onClose}>
               <X aria-hidden="true" weight="thin" />
@@ -64,11 +65,12 @@ export function CosmicSoundAtlas({
                 type="button"
                 role="tab"
                 aria-selected={selectedBody.id === body.id}
+                aria-label={`Orbit ${BODY_LABELS[body.id]}, voice ${COSMIC_VOICES[body.voice].label}`}
                 className="body-selector-option"
                 key={body.id}
                 onClick={() => onBodySelect(body.id)}
               >
-                {BODY_LABELS[body.id]}
+                {BODY_LABELS[body.id]} · {COSMIC_VOICES[body.voice].label}
               </button>
             ))}
           </div>
@@ -114,18 +116,21 @@ export function CosmicSoundAtlas({
                 <button
                   type="button"
                   aria-pressed={challengeTarget === target}
+                  aria-label={`${target} resonance${capturedResonances.includes(target) ? ", sealed" : ""}`}
+                  className={capturedResonances.includes(target) ? "is-captured" : undefined}
                   disabled={isListener}
                   key={target}
                   onClick={() => onChallengeSelect(target)}
                 >
-                  {target}
+                  <span>{target}</span>
+                  <small>{capturedResonances.includes(target) ? "SEALED" : "OPEN"}</small>
                 </button>
               ))}
             </div>
             <div className="resonance-meter" aria-label={`${Math.round(currentLock * 100)} percent resonance lock`}>
               <span style={{ "--lock": currentLock }} />
             </div>
-            <p>{isListener ? "ANSWER WITH ORBIT TO MOVE BODIES AND PLAY" : "DRAG ANY BODY · HOLD THE REAL N-BODY ORBIT ABOVE 82% LOCK"}</p>
+            <p>{isListener ? "ANSWER WITH ORBIT TO MOVE WORLDS AND PLAY" : "DRAG ANY WORLD · MUSIC BRIGHTENS NEAR THE LIVE PERIOD RATIO · HOLD ABOVE 82% LOCK"}</p>
           </section>
         </aside>
       )}
