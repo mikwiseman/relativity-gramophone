@@ -137,6 +137,7 @@ function initialPlanetState(body) {
     displayMass: body.mass,
     frequency: body.frequency,
     pan: body.pan,
+    voice: body.voice,
     x: semiMajor * (Math.cos(eccentricAnomaly) - eccentricity),
     y: semiMajor * root * Math.sin(eccentricAnomaly),
     vx: -semiMajor * Math.sin(eccentricAnomaly) * anomalyRate,

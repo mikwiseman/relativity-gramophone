@@ -1,6 +1,8 @@
 import { PHYSICS_MODEL } from "./physicsEngine.js";
+import { defaultVoiceForBody, isCosmicVoice, SONIFICATION_MODEL } from "./sonification.js";
 
-const FORMAT = "tau-record/2";
+const FORMAT = "tau-record/3";
+const PREVIOUS_FORMAT = "tau-record/2";
 const LEGACY_FORMAT = "tau-record/1";
 export const MAX_SCORE_EVENTS = 1024;
 const VALID_THEMES = new Set(["lacquer", "white", "sumi"]);
@@ -18,6 +20,7 @@ const DEFAULT_BODIES = [
     mass: 0.72,
     frequency: 293.66,
     pan: -0.55,
+    voice: "earth",
   },
   {
     id: "europa",
@@ -30,6 +33,7 @@ const DEFAULT_BODIES = [
     mass: 0.56,
     frequency: 440,
     pan: 0.5,
+    voice: "moon",
   },
   {
     id: "callisto",
@@ -42,6 +46,7 @@ const DEFAULT_BODIES = [
     mass: 0.92,
     frequency: 196,
     pan: 0.12,
+    voice: "light",
   },
 ];
 
@@ -78,6 +83,7 @@ function assertBodies(bodies) {
     for (const key of ["semiMajor", "eccentricity", "phase", "period", "inclination", "mass", "frequency", "pan"]) {
       if (!isFiniteNumber(body[key], -10_000, 10_000)) throw new Error(`Invalid ${key} for ${body.id}`);
     }
+    if (!isCosmicVoice(body.voice)) throw new Error(`Invalid cosmic voice for ${body.id}`);
   }
 }
 
@@ -93,6 +99,7 @@ function assertPhysicalState(initialState) {
     for (const key of ["mass", "x", "y", "vx", "vy", "properTime", "properRate", "potential", "doppler"]) {
       if (!isFiniteNumber(body[key], -10_000, 10_000)) throw new Error(`Invalid initial ${key} for ${body.id}`);
     }
+    if (body.kind === "planet" && !isCosmicVoice(body.voice)) throw new Error(`Invalid initial cosmic voice for ${body.id}`);
   }
 }
 
@@ -120,6 +127,7 @@ function assertEvent(event, previousTime) {
 function assertComposition(value) {
   if (!value || value.format !== FORMAT) throw new Error(`Unsupported score format: ${value?.format ?? "missing"}`);
   if (value.physics !== PHYSICS_MODEL) throw new Error(`Unsupported physics model: ${value.physics ?? "missing"}`);
+  if (value.sonification !== SONIFICATION_MODEL) throw new Error(`Unsupported sonification model: ${value.sonification ?? "missing"}`);
   if (!VALID_THEMES.has(value.preferredTheme)) throw new Error(`Unsupported theme: ${value.preferredTheme}`);
   if (!isFiniteNumber(value.duration, 1, 3_600)) throw new Error("Invalid score duration");
   if (typeof value.message !== "string" || value.message.length > 120) throw new Error("Invalid score message");
@@ -142,12 +150,35 @@ function assertComposition(value) {
   }
 }
 
+function addDefaultVoices(value) {
+  const migrated = clone(value);
+  migrated.bodies = migrated.bodies.map((body) => ({ ...body, voice: defaultVoiceForBody(body.id) }));
+  if (migrated.initialState?.bodies) {
+    migrated.initialState.bodies = migrated.initialState.bodies.map((body) => (
+      body.kind === "planet" ? { ...body, voice: defaultVoiceForBody(body.id) } : body
+    ));
+  }
+  return migrated;
+}
+
+function migratePreviousComposition(value) {
+  if (!Array.isArray(value?.bodies) || !Array.isArray(value?.events)) throw new Error("Invalid score payload");
+  const migrated = {
+    ...addDefaultVoices(value),
+    format: FORMAT,
+    sonification: SONIFICATION_MODEL,
+  };
+  assertComposition(migrated);
+  return migrated;
+}
+
 function migrateLegacyComposition(value) {
   if (!Array.isArray(value?.bodies) || !Array.isArray(value?.events)) throw new Error("Invalid score payload");
   const migrated = {
-    ...clone(value),
+    ...addDefaultVoices(value),
     format: FORMAT,
     physics: PHYSICS_MODEL,
+    sonification: SONIFICATION_MODEL,
     initialState: null,
     lineage: { parent: null, generation: 0 },
     events: value.events
@@ -162,6 +193,7 @@ export function createDefaultComposition() {
   return {
     format: FORMAT,
     physics: PHYSICS_MODEL,
+    sonification: SONIFICATION_MODEL,
     seed: "tau-1905",
     createdAt: null,
     duration: 64,
@@ -192,6 +224,7 @@ export function createReplyComposition(parent, frame, preferredTheme) {
     ...clone(parent),
     format: FORMAT,
     physics: PHYSICS_MODEL,
+    sonification: SONIFICATION_MODEL,
     createdAt: null,
     preferredTheme,
     message: "",
@@ -223,6 +256,7 @@ export function decodeComposition(encoded) {
     throw new Error("Invalid score payload", { cause: error });
   }
   if (value?.format === LEGACY_FORMAT) return migrateLegacyComposition(value);
+  if (value?.format === PREVIOUS_FORMAT) return migratePreviousComposition(value);
   assertComposition(value);
   return value;
 }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   FIXED_STEP,
+  PHYSICS_MODEL,
   PhysicsEngine,
   computeAccelerations,
   computeWeakFieldClockRate,
@@ -77,6 +78,63 @@ test("fixed-step velocity Verlet keeps the default system bounded and nearly ene
   assert.ok(relativeDrift < 0.004, `energy drift was ${relativeDrift}`);
   assert.ok(end.bodies.every((body) => Number.isFinite(body.x) && Number.isFinite(body.properTime)));
   assert.ok(end.bodies.every((body) => Math.hypot(body.x, body.y) < 1.5));
+});
+
+test("velocity Verlet advances symmetric x and y acceleration without directional bias", () => {
+  const state = {
+    model: PHYSICS_MODEL,
+    time: 0,
+    bodies: [
+      {
+        id: "star",
+        kind: "star",
+        sprite: 0,
+        mass: 1,
+        displayMass: 1,
+        frequency: 55,
+        pan: 0,
+        x: 0,
+        y: 0,
+        vx: 0,
+        vy: 0,
+        properTime: 0,
+        properRate: 1,
+        rawClockLoss: 0,
+        potential: 0,
+        period: null,
+        semiMajor: 0,
+        eccentricity: 0,
+        doppler: 1,
+      },
+      {
+        id: "io",
+        kind: "planet",
+        sprite: 1,
+        mass: 0.002,
+        displayMass: 0.7,
+        frequency: 220,
+        pan: 0,
+        x: 0.3,
+        y: 0.3,
+        vx: 0,
+        vy: 0,
+        properTime: 0,
+        properRate: 1,
+        rawClockLoss: 0,
+        potential: 0,
+        period: 10,
+        semiMajor: 0.42,
+        eccentricity: 0,
+        doppler: 1,
+      },
+    ],
+  };
+  const engine = new PhysicsEngine(state);
+
+  engine.step();
+
+  const planet = engine.getBody("io");
+  assert.ok(Math.abs(planet.vx - planet.vy) < 1e-12, `velocity was (${planet.vx}, ${planet.vy})`);
 });
 
 test("the same fixed-step gesture event produces the same replay state", () => {

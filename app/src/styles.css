@@ -113,6 +113,38 @@ button {
   box-shadow: 0 0 12px color-mix(in srgb, var(--coral) 70%, transparent);
 }
 
+.challenge-strip {
+  position: absolute;
+  z-index: 4;
+  top: clamp(72px, 9vh, 94px);
+  left: 50%;
+  display: flex;
+  min-height: 40px;
+  padding: 8px 14px;
+  align-items: center;
+  gap: 15px;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 13%, transparent);
+  color: inherit;
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  transform: translateX(-50%);
+}
+
+.challenge-strip span,
+.challenge-strip strong {
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  white-space: nowrap;
+}
+
+.challenge-strip strong {
+  color: var(--cyan);
+}
+
 .bottom-left-controls {
   position: absolute;
   z-index: 5;
@@ -154,8 +186,12 @@ button {
 }
 
 .icon-button:focus-visible,
+.challenge-strip:focus-visible,
 .inscribe-action:focus-visible,
 .theme-option:focus-visible,
+.body-selector-option:focus-visible,
+.voice-card:focus-visible,
+.resonance-targets button:focus-visible,
 .text-action:focus-visible,
 input:focus-visible {
   outline: 1px solid var(--cyan);
@@ -177,6 +213,275 @@ input:focus-visible {
 
 .relativity-control {
   position: relative;
+}
+
+.sound-atlas-control {
+  position: relative;
+}
+
+.sound-atlas-trigger[aria-expanded="true"] {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.sound-atlas-panel {
+  position: absolute;
+  bottom: calc(100% + 13px);
+  left: 0;
+  width: min(452px, calc(100vw - 48px));
+  max-height: min(650px, calc(100dvh - 122px));
+  padding: 20px 21px 19px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 42%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 93%, transparent);
+  box-shadow: 0 22px 58px color-mix(in srgb, #000 17%, transparent);
+  backdrop-filter: blur(20px);
+  animation: rise-menu 220ms ease both;
+}
+
+.atlas-heading {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 18px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+.atlas-heading > div {
+  display: grid;
+  gap: 7px;
+}
+
+.atlas-heading span,
+.orbit-game-heading span,
+.atlas-truth,
+.orbit-game > p {
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.21em;
+}
+
+.atlas-heading strong,
+.orbit-game-heading strong {
+  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+}
+
+.atlas-close {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  margin: -7px -8px 0 0;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.atlas-close svg {
+  width: 13px;
+  height: 13px;
+}
+
+.body-selector {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.body-selector-option {
+  min-height: 42px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+}
+
+.body-selector-option:last-child {
+  border-right: 0;
+}
+
+.body-selector-option[aria-selected="true"] {
+  color: var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 7%, transparent);
+}
+
+.voice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 15px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.voice-card {
+  display: grid;
+  gap: 7px;
+  min-height: 112px;
+  padding: 14px 13px 12px;
+  border: 0;
+  border-right: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+.voice-card:hover,
+.voice-card:focus-visible,
+.voice-card[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.voice-card[aria-pressed="true"] {
+  color: var(--cyan);
+}
+
+.voice-card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.voice-card-topline strong {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.19em;
+}
+
+.voice-card-topline i {
+  width: 5px;
+  height: 5px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  opacity: 0.4;
+}
+
+.voice-card[aria-pressed="true"] .voice-card-topline i {
+  background: currentColor;
+  opacity: 1;
+}
+
+.voice-card > span:not(.voice-card-topline) {
+  min-height: 20px;
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1.45;
+}
+
+.voice-card small {
+  align-self: end;
+  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-size: 11px;
+  line-height: 1.36;
+  opacity: 0.62;
+}
+
+.atlas-truth {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 0;
+  opacity: 0.58;
+  line-height: 1.55;
+}
+
+.atlas-truth span {
+  color: var(--coral);
+}
+
+.orbit-game {
+  margin-top: 15px;
+  padding-top: 16px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+}
+
+.orbit-game-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.orbit-game-heading > div {
+  display: grid;
+  gap: 6px;
+}
+
+.orbit-game-heading output {
+  max-width: 178px;
+  color: var(--cyan);
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.resonance-targets {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  margin-top: 13px;
+}
+
+.resonance-targets button {
+  min-height: 40px;
+  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-size: 16px;
+}
+
+.resonance-targets button[aria-pressed="true"] {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 6%, transparent);
+}
+
+.resonance-targets button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.resonance-meter {
+  height: 2px;
+  margin-top: 12px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--ink) 11%, transparent);
+}
+
+.resonance-meter span {
+  display: block;
+  width: calc(var(--lock) * 100%);
+  height: 100%;
+  background: linear-gradient(90deg, var(--coral), var(--cyan));
+  transition: width 120ms linear;
+}
+
+.orbit-game > p {
+  margin: 9px 0 0;
+  opacity: 0.52;
+  line-height: 1.55;
 }
 
 .relativity-trigger[aria-expanded="true"] {
@@ -580,6 +885,7 @@ input:focus-visible {
 
 .app-shell[data-theme="lacquer"] .icon-button,
 .app-shell[data-theme="lacquer"] .theme-menu,
+.app-shell[data-theme="lacquer"] .sound-atlas-panel,
 .app-shell[data-theme="lacquer"] .relativity-lens,
 .app-shell[data-theme="lacquer"] .inscription-dialog {
   box-shadow: 0 24px 72px rgb(0 0 0 / 34%);
@@ -643,18 +949,53 @@ input:focus-visible {
     font-size: 14px;
   }
 
+  .challenge-strip {
+    top: 72px;
+    min-height: 44px;
+    max-width: calc(100vw - 40px);
+  }
+
   .bottom-left-controls {
     bottom: 21px;
     left: 20px;
   }
 
   .icon-button {
-    width: 38px;
-    height: 38px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .bottom-left-controls {
+    gap: 7px;
+  }
+
+  .sound-atlas-panel {
+    position: fixed;
+    right: 20px;
+    bottom: 79px;
+    left: 20px;
+    width: auto;
+    max-height: calc(100dvh - 111px);
+    padding: 18px 17px 17px;
+  }
+
+  .atlas-close {
+    width: 44px;
+    height: 44px;
+    margin: -11px -11px 0 0;
+  }
+
+  .body-selector-option,
+  .resonance-targets button {
+    min-height: 44px;
   }
 
   .theme-menu {
     width: 198px;
+  }
+
+  .theme-option {
+    min-height: 44px;
   }
 
   .relativity-lens {
@@ -664,7 +1005,8 @@ input:focus-visible {
 
   .inscribe-action {
     right: 20px;
-    bottom: 25px;
+    bottom: 22px;
+    min-height: 44px;
     font-size: 9px;
     letter-spacing: 0.26em;
   }
@@ -684,6 +1026,69 @@ input:focus-visible {
     top: 70px;
     right: 20px;
     left: 20px;
+  }
+
+  .close-button,
+  .lens-close {
+    width: 44px;
+    height: 44px;
+  }
+
+  .lens-close {
+    margin: -15px -12px 0 8px;
+  }
+}
+
+@media (max-width: 380px) {
+  .bottom-left-controls {
+    left: 16px;
+    gap: 5px;
+  }
+
+  .inscribe-action {
+    right: 16px;
+  }
+
+  .sound-atlas-panel {
+    right: 16px;
+    left: 16px;
+  }
+
+  .voice-card {
+    min-height: 108px;
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .sound-atlas-panel,
+  .relativity-lens {
+    max-height: calc(100dvh - 94px);
+    overflow-y: auto;
+  }
+
+  .sound-atlas-panel {
+    bottom: 70px;
+  }
+
+  .bottom-left-controls {
+    bottom: 8px;
+  }
+
+  .icon-button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .inscribe-action {
+    bottom: 7px;
+    min-height: 44px;
+  }
+
+  .challenge-strip {
+    top: 17px;
+    min-height: 44px;
   }
 }
 

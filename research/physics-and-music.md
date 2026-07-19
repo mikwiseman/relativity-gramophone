@@ -64,6 +64,19 @@
 
 ## Музыкальная система
 
+### Как «звучат» Земля, Луна, свет и Альфа Центавра
+
+Вакуум не переносит обычный звук, поэтому игра не выдаёт синтез за микрофонную запись космоса. Каждый голос открыто называет измеряемый канал и правило перевода:
+
+| Голос | Физический источник | Музыкальное правило |
+| --- | --- | --- |
+| Земля | колебания электрического и магнитного поля в околоземной плазме | мягкий фундамент, воздушный обертоновый «whistler chorus», модуляция как вибрация магнитной оболочки |
+| Луна | сейсмические колебания, зарегистрированные приборами Apollo | негармоничный гонговый обертон, узкий резонанс и длинный спад: сухая лунная порода сохраняет колебания дольше |
+| Свет | электромагнитные частоты видимого диапазона 380–700 нм | логарифмическое сжатие огромного диапазона в слышимые октавы; короткие волны дают более высокий и яркий голос |
+| Альфа Центавра | структура тройной системы A, B и Proxima | два близких солнечных голоса образуют дуэт, а красный карлик Proxima добавляет низкий подтон |
+
+Это четыре разных тембровых отображения, но физика сцены продолжает управлять ими одинаково: собственное время меняет локальную частоту, Доплер — высоту и цвет, положение — панораму, а орбитальный резонанс — устойчивость гармонии.
+
 ### Источник ритма
 
 Через сцену проходит «игла» — неподвижный меридиан наблюдателя. Каждый раз, когда тело пересекает его, звучит атака. Орбита становится канавкой пластинки, а движение планеты — вращением записи.
@@ -104,5 +117,9 @@
 - Stanford Gravity Probe B: [Special & General Relativity Questions and Answers](https://einstein.stanford.edu/content/relativity/q993.html)
 - NASA: [Dance of the sub-Neptunes: a planetary system in resonance](https://science.nasa.gov/universe/exoplanets/dance-of-the-sub-neptunes-a-planetary-system-in-resonance/)
 - NASA SVS: [Sonification of Exoplanet Discoveries by Month](https://svs.gsfc.nasa.gov/5653/)
+- NASA: [Eavesdropping in Space: How NASA records eerie sounds around Earth](https://science.nasa.gov/blogs/the-sun-spot/2018/12/11/eavesdropping-in-space-how-nasa-records-eerie-sounds-around-earth/)
+- NASA: [Moonquakes](https://science.nasa.gov/moon/moonquakes/)
+- NASA: [Visible Light](https://science.nasa.gov/ems/09_visiblelight/)
+- NASA: [Alpha Centauri: A Triple Star System about 4 Light Years from Earth](https://www.nasa.gov/image-article/alpha-centauri-triple-star-system-about-4-light-years-from-earth/)
 - LIGO Scientific Collaboration: [Gravitational-Wave Science](https://ligo.org/gravitational-wave-science/)
 - Journal of New Music Research: [Concordia: A musical XR instrument for playing the solar system](https://doi.org/10.1080/09298215.2020.1714666)

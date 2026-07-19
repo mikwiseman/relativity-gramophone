@@ -41,6 +41,20 @@ test("invalid score formats surface an error", () => {
   assert.throws(() => encodeComposition(composition), /Unsupported score format/);
 });
 
+test("a tau-record/2 link gains deterministic cosmic voice imprints", () => {
+  const previous = createDefaultComposition();
+  previous.format = "tau-record/2";
+  delete previous.sonification;
+  for (const body of previous.bodies) delete body.voice;
+  const encoded = Buffer.from(JSON.stringify(previous), "utf8").toString("base64url");
+
+  const migrated = decodeComposition(encoded);
+
+  assert.equal(migrated.format, "tau-record/3");
+  assert.equal(migrated.sonification, "cosmic-voices/1");
+  assert.deepEqual(migrated.bodies.map((body) => body.voice), ["earth", "moon", "light"]);
+});
+
 test("a tau-record/1 link migrates into the deterministic N-body format", () => {
   const legacy = createDefaultComposition();
   legacy.format = "tau-record/1";
@@ -52,8 +66,10 @@ test("a tau-record/1 link migrates into the deterministic N-body format", () => 
 
   const migrated = decodeComposition(encoded);
 
-  assert.equal(migrated.format, "tau-record/2");
+  assert.equal(migrated.format, "tau-record/3");
   assert.equal(migrated.physics, PHYSICS_MODEL);
+  assert.equal(migrated.sonification, "cosmic-voices/1");
+  assert.deepEqual(migrated.bodies.map((body) => body.voice), ["earth", "moon", "light"]);
   assert.equal(migrated.events[0].kind, "legacy-orbit");
   assert.equal(migrated.events[0].semiMajor, 0.4);
 });

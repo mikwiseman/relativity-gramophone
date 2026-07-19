@@ -28,6 +28,8 @@ Above the fold may show only:
 - Theme names while the theme chooser is open: `LACQUER`, `WHITE TIME`, `SUMI`
 - Action state when needed: `LINK COPIED`, `PLAY AGAIN`, `ANSWER WITH ORBIT`
 - Scientific values only while the optional `RELATIVITY LENS` is open.
+- Cosmic voice descriptions and resonance targets only while the optional sound atlas is open.
+- A compact `RESONANCE 3:2 · SEEKING/LOCKED` strip only while the player has explicitly started an orbit challenge.
 
 No explanatory hero copy, badges, feature descriptions, fake metrics, or scientific jargon is visible by default.
 
@@ -78,11 +80,12 @@ No explanatory hero copy, badges, feature descriptions, fake metrics, or scienti
 - `App`: composition and state coordination only.
 - `OrbitalStage`: canvas renderer, N-body loop, hit testing and recorded drag gestures.
 - `AudioEngine`: Web Audio voices and observer-crossing scheduling.
+- `CosmicSoundAtlas`: body selection, scientific timbre imprinting, audition and real-resonance challenges.
 - `RelativityLens`: optional live physical readings, visually subordinate to the field.
 - `ThemeChooser`: accessible three-theme selector.
 - `Transport`: play/pause and record state.
 - `InscriptionDialog`: immutable payload, share/copy, passive listen and enter-orbit states.
-- `composition`: validated `tau-record/2`, legacy migration, lineage and hash-safe URL payload.
+- `composition`: validated `tau-record/3`, v1/v2 migration, lineage and hash-safe URL payload.
 
 ## Intentional functional extension
 

@@ -1,4 +1,4 @@
-import { voiceParameters } from "./sonification.js";
+import { COSMIC_VOICES, voiceParameters } from "./sonification.js";
 
 const AudioContextClass = globalThis.AudioContext ?? globalThis.webkitAudioContext;
 
@@ -20,12 +20,12 @@ export class AudioEngine {
   voices = new Map();
   latestFrame = null;
 
-  async resume() {
+  async resume(activateField = true) {
     if (!AudioContextClass) throw new Error("Web Audio API is not available in this browser");
 
     if (!this.context) this.createGraph();
     if (this.context.state === "suspended") await this.context.resume();
-    this.setFieldActive(true);
+    this.setFieldActive(activateField);
     if (this.latestFrame) this.updateField(this.latestFrame);
   }
 
@@ -87,7 +87,9 @@ export class AudioEngine {
     const now = this.context.currentTime;
     const fundamental = this.context.createOscillator();
     const partial = this.context.createOscillator();
+    const sub = this.context.createOscillator();
     const partialGain = this.context.createGain();
+    const subGain = this.context.createGain();
     const filter = this.context.createBiquadFilter();
     const gain = this.context.createGain();
     const panner = this.context.createStereoPanner();
@@ -97,7 +99,9 @@ export class AudioEngine {
 
     fundamental.type = "sine";
     partial.type = "triangle";
+    sub.type = "sine";
     partialGain.gain.value = 0.08;
+    subGain.gain.value = 0.0001;
     filter.type = "lowpass";
     filter.Q.value = 1.15;
     gain.gain.value = 0.0001;
@@ -108,14 +112,16 @@ export class AudioEngine {
 
     fundamental.connect(filter);
     partial.connect(partialGain).connect(filter);
+    sub.connect(subGain).connect(filter);
     filter.connect(gain).connect(panner).connect(this.fieldBus);
     panner.connect(delaySend).connect(this.delay);
     tremolo.connect(tremoloDepth).connect(gain.gain);
     fundamental.start(now);
     partial.start(now);
+    sub.start(now);
     tremolo.start(now);
 
-    const voice = { fundamental, partial, partialGain, filter, gain, panner, tremolo, tremoloDepth };
+    const voice = { fundamental, partial, sub, partialGain, subGain, filter, gain, panner, tremolo, tremoloDepth };
     this.voices.set(bodyId, voice);
     return voice;
   }
@@ -134,10 +140,16 @@ export class AudioEngine {
     for (const body of frame.bodies) {
       const voice = this.voices.get(body.id) ?? this.createVoice(body.id);
       const parameters = voiceParameters(body, resonanceStrength);
-      voice.fundamental.frequency.setTargetAtTime(parameters.frequency / 2, now, 0.055);
-      voice.partial.frequency.setTargetAtTime(parameters.frequency * (1.501 + resonanceStrength * 0.001), now, 0.07);
+      const fundamentalFrequency = parameters.frequency / 2;
+      voice.fundamental.type = parameters.waveform;
+      voice.partial.type = parameters.partialWaveform;
+      voice.fundamental.frequency.setTargetAtTime(fundamentalFrequency, now, 0.055);
+      voice.partial.frequency.setTargetAtTime(fundamentalFrequency * parameters.partialRatio, now, 0.07);
+      voice.sub.frequency.setTargetAtTime(fundamentalFrequency * parameters.subRatio, now, 0.09);
       voice.partialGain.gain.setTargetAtTime(parameters.partialGain, now, 0.1);
+      voice.subGain.gain.setTargetAtTime(parameters.subGain, now, 0.12);
       voice.filter.frequency.setTargetAtTime(parameters.cutoff, now, 0.12);
+      voice.filter.Q.setTargetAtTime(parameters.q, now, 0.12);
       voice.gain.gain.setTargetAtTime(parameters.gain * 0.23, now, 0.1);
       voice.panner.pan.setTargetAtTime(parameters.pan, now, 0.08);
       voice.tremolo.frequency.setTargetAtTime(parameters.tremoloRate, now, 0.12);
@@ -161,39 +173,79 @@ export class AudioEngine {
       displayMass: body.displayMass ?? body.mass,
       doppler: body.doppler ?? 1 + body.velocityX * 0.075,
     });
-    const duration = 1.35 + (body.displayMass ?? body.mass) * 0.58;
+    const duration = parameters.release + (body.displayMass ?? body.mass) * 0.32;
     const gain = this.context.createGain();
     const filter = this.context.createBiquadFilter();
     const panner = this.context.createStereoPanner();
     const fundamental = this.context.createOscillator();
     const partial = this.context.createOscillator();
+    const sub = this.context.createOscillator();
     const partialGain = this.context.createGain();
+    const subGain = this.context.createGain();
 
-    fundamental.type = "sine";
-    partial.type = "triangle";
+    fundamental.type = parameters.waveform;
+    partial.type = parameters.partialWaveform;
+    sub.type = "sine";
     fundamental.frequency.setValueAtTime(parameters.frequency, now);
-    partial.frequency.setValueAtTime(parameters.frequency * 2.002, now);
+    partial.frequency.setValueAtTime(parameters.frequency * parameters.partialRatio, now);
+    sub.frequency.setValueAtTime(parameters.frequency * parameters.subRatio, now);
     partial.detune.setValueAtTime(-7 + (body.displayMass ?? body.mass) * 8, now);
     partialGain.gain.value = parameters.partialGain;
+    subGain.gain.value = parameters.subGain;
     filter.type = "lowpass";
     filter.frequency.setValueAtTime(parameters.cutoff, now);
-    filter.Q.value = 1.1;
+    filter.Q.value = parameters.q;
     panner.pan.setValueAtTime(parameters.pan, now);
 
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(parameters.gain, now + 0.018);
+    gain.gain.exponentialRampToValueAtTime(parameters.gain, now + parameters.attack);
     gain.gain.exponentialRampToValueAtTime(parameters.gain * 0.28, now + 0.32);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
     fundamental.connect(filter);
     partial.connect(partialGain).connect(filter);
+    sub.connect(subGain).connect(filter);
     filter.connect(gain).connect(panner).connect(this.master);
     panner.connect(this.delay);
 
     fundamental.start(now);
     partial.start(now);
+    sub.start(now);
     fundamental.stop(now + duration + 0.05);
     partial.stop(now + duration + 0.05);
+    sub.stop(now + duration + 0.05);
+  }
+
+  playVoicePreview(voiceId) {
+    const profile = COSMIC_VOICES[voiceId];
+    if (!profile) throw new Error(`Unknown cosmic voice: ${voiceId}`);
+    this.playOrbitNote({
+      voice: voiceId,
+      frequency: profile.previewFrequency,
+      displayMass: voiceId === "moon" ? 0.96 : 0.68,
+      mass: voiceId === "moon" ? 0.96 : 0.68,
+      properRate: 0.986,
+      doppler: voiceId === "light" ? 1.018 : 1,
+      x: 0,
+      y: 0.24,
+    });
+  }
+
+  playChallengeSuccess() {
+    if (!this.context || this.context.state !== "running") return;
+    const now = this.context.currentTime;
+    for (const [index, ratio] of [1, 1.5, 2].entries()) {
+      const oscillator = this.context.createOscillator();
+      const gain = this.context.createGain();
+      oscillator.type = index === 1 ? "triangle" : "sine";
+      oscillator.frequency.value = 220 * ratio;
+      gain.gain.setValueAtTime(0.0001, now + index * 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.045, now + index * 0.08 + 0.018);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.88 + index * 0.08);
+      oscillator.connect(gain).connect(this.master);
+      oscillator.start(now + index * 0.08);
+      oscillator.stop(now + 1 + index * 0.08);
+    }
   }
 
   async suspend() {

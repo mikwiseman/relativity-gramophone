@@ -106,3 +106,34 @@ Native reference viewport was successfully checked. Desktop and mobile had no do
 - [x] Browser console is clean.
 
 final result: passed
+
+## Mobile sound-atlas upgrade — 2026-07-19
+
+### Numbered flow
+
+1. Opened the current production scene at `390 × 844` and captured the initial field, appearance menu and relativity lens.
+2. Measured the existing controls: no document overflow, but the main mobile controls were only `38 px` and theme choices `40 px` tall.
+3. Opened the new local build at `390 × 844`; all five core actions measured at least `44 px`, with `scrollWidth = innerWidth = 390`.
+4. Opened the cosmic sound atlas, selected the Moon voice for Io and verified the pressed voice state with no runtime alert.
+5. Started a `3:2` challenge, verified that it explicitly started Web Audio and the moving simulation, dragged Io, then observed `LOCKED 3:2 · THE ORBIT SINGS` only after a sustained real lock.
+6. Recorded the result as `tau-record/3`, opened the generated URL in a second tab and verified that the recipient retained Io's Moon voice while challenge controls remained read-only.
+7. Repeated layout checks at `320 × 568` and `844 × 390`; the atlas becomes internally scrollable and the document retains zero horizontal overflow.
+8. Started Web Audio from the explicit mobile Play gesture and observed the timer advance to `00:01`; composer and listener warning/error logs remained empty.
+
+### Evidence
+
+- Current-production baseline: `qa/audit-mobile-01-start.png`, `qa/audit-mobile-02-themes.png`, `qa/audit-mobile-03-lens.png`
+- New default mobile scene: `qa/mobile-upgrade-01-start.png`
+- Sound atlas: `qa/mobile-upgrade-02-atlas.png`
+- Successful physical challenge: `qa/mobile-upgrade-04-resonance-success.png`, `qa/mobile-upgrade-09-challenge-strip.png`, `qa/mobile-upgrade-10-live-game.png`, `qa/mobile-upgrade-11-live-lock.png`
+- Compact and landscape: `qa/mobile-upgrade-05-compact-320.png`, `qa/mobile-upgrade-06-landscape.png`
+- Recording and recipient: `qa/mobile-upgrade-07-inscribe-v3.png`, `qa/mobile-upgrade-08-listener-voices.png`
+
+### Findings
+
+- Fixed [P1]: touch targets below the 44 px mobile minimum.
+- Fixed [P1]: physics was observable but lacked an explicit, learnable game objective.
+- Fixed [P1]: timbre was not yet an authored part of the shareable object.
+- Passed: no horizontal document overflow in any tested mobile viewport.
+- Passed: the atlas is explicit that its voices are sonifications rather than sound propagating through vacuum.
+- Passed: resonance success is driven by the same unsnapped N-body model used by the lens and music.

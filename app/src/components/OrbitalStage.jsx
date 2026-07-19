@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import {
   FIXED_STEP,
@@ -238,7 +238,7 @@ function drawObserver(context, theme, width, height, pulses) {
   context.restore();
 }
 
-function drawClockRing(context, theme, position, body) {
+function drawClockRing(context, theme, position, body, selected) {
   const size = 24 + body.displayMass * 12;
   const shift = clamp((body.doppler - 1) / 0.06, -1, 1);
   const spectralColor = shift >= 0 ? theme.cyan : theme.coral;
@@ -258,6 +258,17 @@ function drawClockRing(context, theme, position, body) {
   context.beginPath();
   context.arc(0, 0, size + 2, -Math.PI * 0.18, Math.PI * (0.08 + Math.abs(shift) * 0.42));
   context.stroke();
+  if (selected) {
+    context.globalAlpha = 0.9;
+    context.strokeStyle = theme.cyan;
+    context.lineWidth = 1.2;
+    context.beginPath();
+    context.arc(0, 0, size + 7, -Math.PI * 0.12, Math.PI * 0.15);
+    context.stroke();
+    context.beginPath();
+    context.arc(0, 0, size + 7, Math.PI * 0.88, Math.PI * 1.15);
+    context.stroke();
+  }
   context.restore();
 }
 
@@ -350,10 +361,12 @@ export function OrbitalStage({
   resetToken,
   theme,
   onBodyGesture,
+  onBodySelect,
   onElapsed,
   onHaptic,
   onNote,
   onPhysicsFrame,
+  selectedBodyId,
 }) {
   const canvasRef = useRef(null);
   const spriteRef = useRef(null);
@@ -370,6 +383,9 @@ export function OrbitalStage({
   const dragRef = useRef(null);
   const latestGestureRef = useRef(null);
   const lastGestureEmitRef = useRef(0);
+  const physicalBodiesSignature = useMemo(() => JSON.stringify(
+    bodies.map(({ voice: _voice, ...body }) => body),
+  ), [bodies]);
 
   if (!engineRef.current) {
     initialStateRef.current = initialState ? structuredClone(initialState) : createInitialPhysicsState(bodies);
@@ -407,7 +423,14 @@ export function OrbitalStage({
     previousRadialVelocityRef.current.clear();
     pulsesRef.current = [];
     onElapsed(0);
-  }, [bodies, initialState, onElapsed, resetToken]);
+  }, [initialState, onElapsed, physicalBodiesSignature, resetToken]);
+
+  useEffect(() => {
+    for (const compositionBody of bodies) {
+      const physicalBody = engineRef.current.getBody(compositionBody.id);
+      if (physicalBody) physicalBody.voice = compositionBody.voice;
+    }
+  }, [bodies]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -521,7 +544,7 @@ export function OrbitalStage({
 
       for (const body of planets) {
         const position = toScreen(body, width, height);
-        drawClockRing(context, theme, position, body);
+        drawClockRing(context, theme, position, body, body.id === selectedBodyId);
         const bodySize = clamp(Math.min(width, height) * (0.039 + body.displayMass * 0.01), 34, 58);
         drawSprite(context, spriteRef.current, body.sprite, position.x, position.y, bodySize, 0.98);
       }
@@ -534,7 +557,7 @@ export function OrbitalStage({
       cancelAnimationFrame(frameId);
       observer.disconnect();
     };
-  }, [duration, isListener, isPlaying, onElapsed, onHaptic, onNote, onPhysicsFrame, playbackEvents, theme]);
+  }, [duration, isListener, isPlaying, onElapsed, onHaptic, onNote, onPhysicsFrame, playbackEvents, selectedBodyId, theme]);
 
   const pointerPosition = (event) => {
     const rect = canvasRef.current.getBoundingClientRect();
@@ -542,7 +565,6 @@ export function OrbitalStage({
   };
 
   const handlePointerDown = (event) => {
-    if (isListener) return;
     const pointer = pointerPosition(event);
     const target = engineRef.current.state.bodies
       .filter((body) => body.kind === "planet")
@@ -553,6 +575,8 @@ export function OrbitalStage({
       .sort((first, second) => first.distance - second.distance)[0];
 
     if (!target || target.distance > 58) return;
+    onBodySelect(target.body.id);
+    if (isListener) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = { id: target.body.id, startX: pointer.x, startY: pointer.y };
     latestGestureRef.current = null;
