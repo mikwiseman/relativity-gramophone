@@ -95,6 +95,13 @@ export const COSMIC_VOICES = Object.freeze({
   }),
 });
 
+export const VOICE_HARMONICS = Object.freeze({
+  earth: Object.freeze([0, 1, 0.36, 0.2, 0.11, 0.052, 0.026, 0.013]),
+  moon: Object.freeze([0, 1, 0.14, 0.31, 0.08, 0.15, 0.04, 0.02]),
+  light: Object.freeze([0, 1, 0.5, 0.34, 0.25, 0.19, 0.14, 0.1, 0.075, 0.055]),
+  "alpha-centauri": Object.freeze([0, 1, 0.56, 0.18, 0.27, 0.07, 0.11, 0.03]),
+});
+
 const DEFAULT_BODY_VOICES = Object.freeze({ io: "earth", europa: "moon", callisto: "light" });
 
 export function isCosmicVoice(value) {

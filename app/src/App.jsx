@@ -76,6 +76,7 @@ export function App() {
   const [physicsFrame, setPhysicsFrame] = useState(null);
   const [sonicCue, setSonicCue] = useState("");
   const audioRef = useRef(new AudioEngine());
+  if (import.meta.env.DEV && typeof window !== "undefined") window.__rgAudio = audioRef.current;
   const gestationEngagedRef = useRef(false);
   const gestationReadyRef = useRef(false);
   const gestationResumeRef = useRef(null);
