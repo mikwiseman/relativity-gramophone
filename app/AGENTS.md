@@ -8,6 +8,12 @@ When implementing from a selected generated mock, treat that image as the source
 
 ## Durable product decisions
 
+- The current Soundflight direction supersedes the earlier multi-theme landing composition for the default experience. Its visual truth is `../assets/concepts/soundflight-luminous.png`: black lacquer, one luminous followed world, event-driven braided light, and only the minimum floating controls.
+- Render the primary scene directly with Three.js. Camera orbit/pan/zoom, smooth body following, launch gestures, bloom, particles, and resonance lines belong to the WebGL scene; React owns accessible controls, drawers, status, and existing score/audio workflows.
+- Brightness must communicate musical energy. Keep the resting sky dark and sparse, then intensify the selected world's opal emission, cyan/amber/magenta trail braid, particles, birth bloom, and resonance knot from real physics/audio events. Avoid permanent orbit grids and decorative noise.
+- `CREATE WORLD` deliberately arms empty-sky gestures so ordinary dragging remains camera flight. While armed, guide the visitor through `HOLD → AIM → RELEASE` as live state, dim existing worlds, and never birth from `pointercancel`. A successful release starts audio and follows the newborn body; explicit camera movement exits follow mode. Always provide visible `+` / `−` zoom controls in addition to scroll and pinch.
+- Preserve deterministic physics, Kepler sonification, recorded birth/removal/pluck events, preset systems, listener replies, and share payload compatibility beneath the new surface.
+- Adapt GPU load instead of silently changing the artwork: cap pixel ratio, trail samples, and particle counts by device metrics; honor reduced motion by disabling auto-drift and reducing particles while retaining the core composition.
 - The accepted visual targets are concepts 1, 2, and 5: `black-lacquer-orbit.png`, `white-time.png`, and `sumi-gravity.png` in `../assets/concepts/`.
 - All three are selectable presentations of one shared physical simulation and musical score. Switching theme must never change bodies, orbits, time, notes, playback position, or the shared composition payload.
 - The author may save a preferred theme, while the recipient may override it locally without mutating the recording.

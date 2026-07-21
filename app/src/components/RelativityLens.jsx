@@ -9,19 +9,21 @@ function clockLag(rate) {
   return `${((1 - rate) * 1000).toFixed(1)} ms/s`;
 }
 
-export function RelativityLens({ frame, open, onClose, onToggle }) {
+export function RelativityLens({ frame, open, onClose, onToggle, showTrigger = true }) {
   return (
     <div className="relativity-control">
-      <button
-        type="button"
-        className="icon-button relativity-trigger"
-        aria-controls="relativity-lens"
-        aria-expanded={open}
-        aria-label={open ? "Close relativity lens" : "Open relativity lens"}
-        onClick={onToggle}
-      >
-        <Atom aria-hidden="true" weight="thin" />
-      </button>
+      {showTrigger && (
+        <button
+          type="button"
+          className="icon-button relativity-trigger"
+          aria-controls="relativity-lens"
+          aria-expanded={open}
+          aria-label={open ? "Close relativity lens" : "Open relativity lens"}
+          onClick={onToggle}
+        >
+          <Atom aria-hidden="true" weight="thin" />
+        </button>
+      )}
 
       {open && (
         <aside id="relativity-lens" className="relativity-lens" aria-label="Live relativity measurements">

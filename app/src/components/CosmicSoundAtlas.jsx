@@ -28,6 +28,7 @@ export function CosmicSoundAtlas({
   onVoiceSelect,
   open,
   selectedBodyId,
+  showTrigger = true,
 }) {
   const rootRef = useRef(null);
   const selectedBody = bodies.find((body) => body.id === selectedBodyId) ?? bodies[0];
@@ -44,16 +45,18 @@ export function CosmicSoundAtlas({
 
   return (
     <div className="sound-atlas-control" ref={rootRef}>
-      <button
-        type="button"
-        className="icon-button sound-atlas-trigger"
-        aria-controls="cosmic-sound-atlas"
-        aria-expanded={open}
-        aria-label={open ? "Close cosmic sound atlas" : "Open cosmic sound atlas"}
-        onClick={onToggle}
-      >
-        <WaveSine aria-hidden="true" weight="thin" />
-      </button>
+      {showTrigger && (
+        <button
+          type="button"
+          className="icon-button sound-atlas-trigger"
+          aria-controls="cosmic-sound-atlas"
+          aria-expanded={open}
+          aria-label={open ? "Close cosmic sound atlas" : "Open cosmic sound atlas"}
+          onClick={onToggle}
+        >
+          <WaveSine aria-hidden="true" weight="thin" />
+        </button>
+      )}
 
       {open && (
         <aside id="cosmic-sound-atlas" className="sound-atlas-panel" aria-label="Cosmic sound atlas">
