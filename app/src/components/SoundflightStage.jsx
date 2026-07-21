@@ -1105,6 +1105,7 @@ export function SoundflightStage(props) {
       composer.setPixelRatio(profile.pixelRatio);
       composer.setSize(rect.width, rect.height);
       camera.aspect = rect.width / Math.max(1, rect.height);
+      camera.fov = camera.aspect < 0.8 ? 55 : 42;
       camera.updateProjectionMatrix();
       bloomPass.strength = profile.bloomStrength;
       finishingPass.uniforms.uGrain.value = profile.grain ? 0.05 : 0;
@@ -1231,7 +1232,7 @@ export function SoundflightStage(props) {
         launchPreview.group.visible = false;
         propsRef.current.onLaunchPhase("armed");
         propsRef.current.onGestationTone(null);
-        propsRef.current.onBirthRefused(error instanceof Error ? error.message.toUpperCase() : "THE WORLD COULD NOT BE PREVIEWED");
+        propsRef.current.onBirthRefused(error instanceof Error ? error.message : "The world could not be previewed");
       }
     };
 
@@ -1240,7 +1241,7 @@ export function SoundflightStage(props) {
       if (propsRef.current.interactionMode === "launch" && !canBeginRadialLaunchFromHit(bodyId)) {
         event.stopImmediatePropagation();
         propsRef.current.onLaunchPhase("armed");
-        propsRef.current.onBirthRefused("START AT THE STAR — THEN DRAG OUTWARD");
+        propsRef.current.onBirthRefused("Start at the star, then drag gently outward");
         return;
       }
       if (bodyId && propsRef.current.interactionMode !== "launch") {
@@ -1252,6 +1253,8 @@ export function SoundflightStage(props) {
           const planePoint = intersectPlane(event);
           runtime.drag = { id: bodyId, start: planePoint, pointerId: event.pointerId };
           controls.enabled = false;
+          const grabbed = engineRef.current.getBody(bodyId);
+          if (grabbed?.created) propsRef.current.onWorldGrabbed?.({ ...grabbed });
         }
         return;
       }
@@ -1279,11 +1282,11 @@ export function SoundflightStage(props) {
       const star = engineRef.current.getBody("star");
       const world = stageToWorld(point);
       if (Math.hypot(world.x - star.x, world.y - star.y) > STAR_CORE_RADIUS * 1.8) {
-        propsRef.current.onBirthRefused("START AT THE STAR — THEN DRAG OUTWARD");
+        propsRef.current.onBirthRefused("Start at the star, then drag gently outward");
         return;
       }
       if (engineRef.current.state.bodies.filter((body) => body.kind === "planet").length >= MAX_WORLDS) {
-        propsRef.current.onBirthRefused("THE SKY IS FULL — FEED A WORLD TO THE STAR");
+        propsRef.current.onBirthRefused("The sky is full — feed a world to the star first");
         return;
       }
       renderer.domElement.setPointerCapture(event.pointerId);
@@ -1396,7 +1399,7 @@ export function SoundflightStage(props) {
           propsRef.current.onBirthBloom({ ...engine.getBody(spec.id) });
           propsRef.current.onLaunchComplete(spec.id);
         } catch (error) {
-          propsRef.current.onBirthRefused(error instanceof Error ? error.message.toUpperCase() : "THE WORLD COULD NOT BE BORN");
+          propsRef.current.onBirthRefused(error instanceof Error ? error.message : "The world could not be born");
         }
       }
       if (runtime.pluck) {

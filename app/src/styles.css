@@ -18,6 +18,8 @@ body {
 }
 
 .app-shell {
+  --sf-gold: #e2ba6c;
+  --sf-accent: #7ce0ef;
   position: relative;
   width: 100vw;
   height: 100dvh;
@@ -136,7 +138,7 @@ input:focus-visible {
 .orbit-game-heading span,
 .atlas-truth,
 .orbit-game > p {
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.21em;
 }
@@ -182,7 +184,7 @@ input:focus-visible {
   color: inherit;
   background: transparent;
   cursor: pointer;
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.12em;
 }
@@ -257,7 +259,7 @@ input:focus-visible {
 
 .voice-card > span:not(.voice-card-topline) {
   min-height: 20px;
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.14em;
   line-height: 1.45;
@@ -304,7 +306,7 @@ input:focus-visible {
 .orbit-game-heading output {
   max-width: 178px;
   color: var(--cyan);
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.15em;
   line-height: 1.4;
@@ -334,7 +336,7 @@ input:focus-visible {
 
 .resonance-targets button small {
   font-family: "Avenir Next", Avenir, "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 6px;
+  font-size: 8px;
   font-weight: 600;
   letter-spacing: 0.18em;
   opacity: 0.46;
@@ -425,7 +427,7 @@ input:focus-visible {
 .lens-column-labels,
 .lens-resonance span,
 .relativity-lens > p {
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.22em;
 }
@@ -584,7 +586,7 @@ input:focus-visible {
 }
 
 .dance-signature span {
-  font-size: 6px;
+  font-size: 8px;
   font-weight: 600;
   letter-spacing: 0.18em;
   opacity: 0.5;
@@ -870,7 +872,7 @@ input:focus-visible {
 }
 
 .soundflight-stage:focus-visible {
-  outline: 1px solid color-mix(in srgb, #e5bb70 80%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--sf-gold) 80%, transparent);
   outline-offset: -4px;
 }
 
@@ -887,7 +889,7 @@ input:focus-visible {
   left: clamp(32px, 4vw, 64px);
   display: grid;
   gap: 20px;
-  color: #e4b969;
+  color: var(--sf-gold);
   pointer-events: none;
 }
 
@@ -922,7 +924,7 @@ input:focus-visible {
   gap: 16px;
   border: 1px solid rgb(225 184 108 / 28%);
   border-radius: 999px;
-  color: #ddb367;
+  color: var(--sf-gold);
   background: rgb(4 4 3 / 36%);
   cursor: pointer;
   font-size: 10px;
@@ -968,7 +970,7 @@ input:focus-visible {
   gap: 17px;
   border: 1px solid rgb(226 181 100 / 72%);
   border-radius: 50%;
-  color: #e5bb70;
+  color: var(--sf-gold);
   background: rgb(3 3 2 / 26%);
   cursor: pointer;
   text-align: center;
@@ -1033,7 +1035,7 @@ input:focus-visible {
 
 .soundflight-launch-guide > span {
   color: rgb(116 226 241 / 74%);
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.42em;
 }
@@ -1079,7 +1081,7 @@ input:focus-visible {
 }
 
 .soundflight-launch-guide li small {
-  font-size: 6px;
+  font-size: 8px;
   letter-spacing: 0.2em;
 }
 
@@ -1089,7 +1091,7 @@ input:focus-visible {
 }
 
 .soundflight-launch-guide li[data-state="active"] {
-  border-color: #77e7f4;
+  border-color: var(--sf-accent);
   color: #f2c778;
   text-shadow: 0 0 14px rgb(112 229 243 / 34%);
 }
@@ -1130,7 +1132,7 @@ input:focus-visible {
   width: 54px;
   height: 54px;
   border-color: rgb(226 181 100 / 32%);
-  color: #e5bb70;
+  color: var(--sf-gold);
   background: rgb(3 3 2 / 32%);
   backdrop-filter: blur(12px);
 }
@@ -1155,7 +1157,7 @@ input:focus-visible {
 .soundflight-voice-key > span,
 .soundflight-voice-key > p {
   margin: 0;
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.28em;
 }
@@ -1185,7 +1187,7 @@ input:focus-visible {
 
 .soundflight-voice-key li strong,
 .soundflight-voice-key li small {
-  font-size: 7px;
+  font-size: 9px;
   font-style: normal;
   font-weight: 600;
   letter-spacing: 0.2em;
@@ -1288,7 +1290,7 @@ input:focus-visible {
   position: absolute;
   left: 50%;
   bottom: -16px;
-  font-size: 6px;
+  font-size: 8px;
   font-weight: 600;
   letter-spacing: 0.24em;
   white-space: nowrap;
@@ -1361,7 +1363,7 @@ input:focus-visible {
 .soundflight-systems h2 {
   margin: 0;
   color: rgb(226 185 111 / 56%);
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.28em;
 }
@@ -1425,7 +1427,7 @@ input:focus-visible {
 }
 
 .soundflight-system-list button[aria-checked="true"] {
-  color: #76dae8;
+  color: var(--sf-accent);
 }
 
 .soundflight-system-list strong,
@@ -1501,7 +1503,7 @@ input:focus-visible {
   z-index: 12;
   bottom: clamp(32px, 5vh, 58px);
   left: clamp(32px, 4vw, 64px);
-  color: #e5bb70;
+  color: var(--sf-gold);
   background: rgb(5 4 3 / 91%);
   border-color: rgb(229 188 113 / 32%);
 }
@@ -1530,7 +1532,7 @@ input:focus-visible {
 
   .soundflight-title p {
     max-width: 210px;
-    font-size: 6px;
+    font-size: 8px;
     letter-spacing: 0.28em;
   }
 
@@ -1615,7 +1617,7 @@ input:focus-visible {
   .soundflight-voice-key > p,
   .soundflight-voice-key li strong,
   .soundflight-voice-key li small {
-    font-size: 6px;
+    font-size: 8px;
   }
 
   .soundflight-explore {
@@ -1623,7 +1625,7 @@ input:focus-visible {
     bottom: 63px;
     max-width: 154px;
     justify-content: flex-end;
-    font-size: 7px;
+    font-size: 9px;
     letter-spacing: 0.2em;
     text-align: right;
   }
@@ -1640,7 +1642,14 @@ input:focus-visible {
   }
 
   .soundflight-voice-breath span {
-    display: none;
+    left: auto;
+    right: 0;
+    max-width: 74vw;
+    overflow: hidden;
+    font-size: 8px;
+    text-align: right;
+    text-overflow: ellipsis;
+    transform: none;
   }
 
   .soundflight-systems {
@@ -1743,5 +1752,108 @@ input:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .soundflight-voice-breath {
     filter: none;
+  }
+}
+
+/* First-run overture — a quiet invitation, never a tutorial */
+
+.soundflight-overture {
+  position: absolute;
+  z-index: 3;
+  top: 24%;
+  left: 50%;
+  display: grid;
+  gap: 13px;
+  justify-items: center;
+  width: min(560px, calc(100vw - 48px));
+  pointer-events: none;
+  text-align: center;
+  transform: translateX(-50%);
+  animation: overture-in 1400ms 700ms ease both;
+}
+
+.soundflight-overture em {
+  color: color-mix(in srgb, var(--sf-gold) 88%, #fff);
+  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-size: clamp(19px, 2.3vw, 27px);
+  font-style: italic;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 24px rgb(0 0 0 / 55%);
+}
+
+.soundflight-overture span {
+  color: color-mix(in srgb, var(--sf-gold) 72%, transparent);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  line-height: 1.8;
+}
+
+@keyframes overture-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 9px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* Until the first play, the transport quietly invites */
+
+.soundflight-launch-dock[data-invite="true"] .transport-button:first-child {
+  animation: transport-invite 2600ms ease-in-out infinite;
+}
+
+@keyframes transport-invite {
+  0%, 100% {
+    border-color: color-mix(in srgb, var(--sf-gold) 42%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--sf-gold) 34%, transparent);
+  }
+  50% {
+    border-color: color-mix(in srgb, var(--sf-gold) 88%, transparent);
+    box-shadow: 0 0 22px 1px color-mix(in srgb, var(--sf-gold) 26%, transparent);
+  }
+}
+
+/* Runtime messages read as a calm line, not an alarm */
+
+.runtime-message {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  border-top-color: color-mix(in srgb, var(--coral) 62%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--coral) 34%, transparent);
+  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-size: 13.5px;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  animation: toast-in 300ms ease both, toast-out 700ms ease 5.6s both;
+}
+
+.runtime-message button {
+  font-family: "Avenir Next", Avenir, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-style: normal;
+  flex-shrink: 0;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }

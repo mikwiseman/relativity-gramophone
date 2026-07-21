@@ -29,7 +29,7 @@ test("launch guidance turns one unfamiliar gesture into three explicit moments",
   assert.deepEqual(launchGuidance("forming"), {
     eyebrow: "A NEW VOICE IS FORMING",
     title: "MOVE OUTWARD",
-    detail: "Low · mid · high",
+    detail: "Close sings high · far sings low",
     activeStep: 1,
   });
   assert.deepEqual(launchGuidance("aiming"), {

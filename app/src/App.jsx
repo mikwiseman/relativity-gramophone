@@ -75,6 +75,8 @@ export function App() {
   const [challengeGuide, setChallengeGuide] = useState(null);
   const [physicsFrame, setPhysicsFrame] = useState(null);
   const [sonicCue, setSonicCue] = useState("");
+  const [overtureDismissed, setOvertureDismissed] = useState(() => Boolean(initial.score));
+  const [hasEverPlayed, setHasEverPlayed] = useState(false);
   const audioRef = useRef(new AudioEngine());
   if (import.meta.env.DEV && typeof window !== "undefined") window.__rgAudio = audioRef.current;
   const gestationEngagedRef = useRef(false);
@@ -112,11 +114,28 @@ export function App() {
 
   useEffect(() => () => window.clearTimeout(sonicCueTimeoutRef.current), []);
 
-  const announceSonicCue = useCallback((message) => {
+  const announceSonicCue = useCallback((message, holdMs = 1500) => {
     window.clearTimeout(sonicCueTimeoutRef.current);
     setSonicCue(message);
-    sonicCueTimeoutRef.current = window.setTimeout(() => setSonicCue(""), 1500);
+    sonicCueTimeoutRef.current = window.setTimeout(() => setSonicCue(""), holdMs);
   }, []);
+
+  const dismissOverture = useCallback(() => {
+    setOvertureDismissed(true);
+  }, []);
+
+  useEffect(() => {
+    if (isPlaying) {
+      setHasEverPlayed(true);
+      setOvertureDismissed(true);
+    }
+  }, [isPlaying]);
+
+  useEffect(() => {
+    if (!runtimeError) return undefined;
+    const timer = window.setTimeout(() => setRuntimeError(null), 6500);
+    return () => window.clearTimeout(timer);
+  }, [runtimeError]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -316,6 +335,10 @@ export function App() {
     setRuntimeError(message);
   }, []);
 
+  const handleWorldGrabbed = useCallback(() => {
+    announceSonicCue("BEND THE ORBIT · OR DRAG INTO THE STAR TO SET THIS VOICE FREE", 2800);
+  }, [announceSonicCue]);
+
   const handlePluckBloom = useCallback(async (body, pluck) => {
     try {
       await audioRef.current.resume(isPlaying);
@@ -386,11 +409,11 @@ export function App() {
       setChallengeStatus(`SEEKING ${challengeTargetRef.current}`);
     }
     if (eventCountRef.current >= MAX_SCORE_EVENTS) {
-      setRuntimeError("TAU RECORD LIMIT REACHED — INSCRIBE THIS ORBIT BEFORE CONTINUING");
+      setRuntimeError("The record is full — share this dance, then begin a fresh one");
       return;
     }
     if (event.at > 3600) {
-      setRuntimeError("THE TAU RECORD ENDS AT ONE HOUR — INSCRIBE THIS DANCE OR RESTART");
+      setRuntimeError("A dance ends at one hour — share it, or restart for a fresh take");
       return;
     }
     eventCountRef.current += 1;
@@ -543,6 +566,7 @@ export function App() {
         onNote={handleNote}
         onPhysicsFrame={handlePhysicsFrame}
         onPluckBloom={handlePluckBloom}
+        onWorldGrabbed={handleWorldGrabbed}
         selectedBodyId={selectedBodyId}
       />
 
@@ -550,6 +574,13 @@ export function App() {
         <h1>RELATIVITY<br />GRAMOPHONE</h1>
         <p>A PLAYABLE N-BODY MUSICAL UNIVERSE</p>
       </header>
+
+      {!dialogOpen && !overtureDismissed && (
+        <section className="soundflight-overture" aria-label="How to begin">
+          <em>Every orbit is a string.</em>
+          <span>PRESS PLAY TO HEAR THE SKY TURN · TOUCH A THREAD TO PLUCK IT</span>
+        </section>
+      )}
 
       {!dialogOpen && (
         <>
@@ -568,7 +599,7 @@ export function App() {
             <span>SYSTEMS</span>
           </button>
 
-          <div className="soundflight-launch-dock">
+          <div className="soundflight-launch-dock" data-invite={!hasEverPlayed && !isListener}>
             <button
               type="button"
               className="soundflight-launch"
@@ -583,6 +614,7 @@ export function App() {
                 if (!cancelLaunch && soundflightState.mode === "explore") {
                   setCameraCommand((current) => ({ id: current.id + 1, type: "reset" }));
                 }
+                dismissOverture();
                 setLaunchPhase("armed");
                 dispatchSoundflight({ type: cancelLaunch ? "CANCEL" : "ARM_LAUNCH" });
               }}

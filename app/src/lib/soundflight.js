@@ -30,7 +30,7 @@ const LAUNCH_GUIDANCE = Object.freeze({
   forming: Object.freeze({
     eyebrow: "A NEW VOICE IS FORMING",
     title: "MOVE OUTWARD",
-    detail: "Low · mid · high",
+    detail: "Close sings high · far sings low",
     activeStep: 1,
   }),
   aiming: Object.freeze({
