@@ -242,6 +242,9 @@ export function App() {
     if (!authoredBody && !liveBody) return;
     setIsPlaying(true);
     setDialogOpen(false);
+    const voiceId = liveBody?.voice ?? authoredBody?.voice;
+    const visual = voiceVisual(voiceId);
+    announceSonicCue(`SOLO · ${visual.colorName} ${visual.label}`);
     try {
       await audioRef.current.resume(true);
       setRuntimeError(null);
@@ -256,9 +259,6 @@ export function App() {
         voice: liveBody?.voice ?? authoredBody?.voice,
       });
       performHaptic({ kind: "audition", strength: authoredBody?.mass ?? liveBody?.displayMass ?? 0.5 });
-      const voiceId = liveBody?.voice ?? authoredBody?.voice;
-      const visual = voiceVisual(voiceId);
-      announceSonicCue(`SOLO · ${visual.colorName} ${visual.label}`);
     } catch (error) {
       setIsPlaying(false);
       setRuntimeError(error instanceof Error ? error.message : "Planetary voice could not start");

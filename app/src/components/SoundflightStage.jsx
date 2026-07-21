@@ -312,7 +312,7 @@ function createEnvironmentTexture(renderer) {
   environmentScene.add(accent);
 
   const pmremGenerator = new THREE.PMREMGenerator(renderer);
-  const environmentTexture = pmremGenerator.fromScene(environmentScene, 0.36).texture;
+  const environmentTexture = pmremGenerator.fromScene(environmentScene, 0.04).texture;
   pmremGenerator.dispose();
   disposeObject(environmentScene);
   return environmentTexture;
@@ -1161,6 +1161,15 @@ export function SoundflightStage(props) {
           }),
         }));
     };
+    if (import.meta.env.DEV) mount.__rgTrailPaths = trailPaths;
+
+    const capturePointer = (pointerId) => {
+      try {
+        renderer.domElement.setPointerCapture(pointerId);
+      } catch {
+        // The pointer may already be released (stylus lift, synthetic ids) — the gesture continues without capture.
+      }
+    };
 
     const performPluck = (hit, strength) => {
       const engine = engineRef.current;
@@ -1246,7 +1255,7 @@ export function SoundflightStage(props) {
       }
       if (bodyId && propsRef.current.interactionMode !== "launch") {
         event.stopImmediatePropagation();
-        renderer.domElement.setPointerCapture(event.pointerId);
+        capturePointer(event.pointerId);
         propsRef.current.onBodySelect(bodyId);
         propsRef.current.onBodyAudition(bodyId);
         if (!propsRef.current.isListener) {
@@ -1264,7 +1273,7 @@ export function SoundflightStage(props) {
         const stringHit = nearestStringPoint(point, trailPaths(), STRING_TOUCH_DISTANCE);
         if (stringHit) {
           event.stopImmediatePropagation();
-          renderer.domElement.setPointerCapture(event.pointerId);
+          capturePointer(event.pointerId);
           runtime.pluck = {
             lastPluckAt: new Map([[stringHit.bodyId, performance.now()]]),
             lastPoint: { x: point.x, y: point.y },
@@ -1289,7 +1298,7 @@ export function SoundflightStage(props) {
         propsRef.current.onBirthRefused("The sky is full — feed a world to the star first");
         return;
       }
-      renderer.domElement.setPointerCapture(event.pointerId);
+      capturePointer(event.pointerId);
       runtime.birth = { release: world, phase: "forming", pointerId: event.pointerId };
       propsRef.current.onLaunchPhase("forming");
       controls.enabled = false;
@@ -1339,6 +1348,7 @@ export function SoundflightStage(props) {
         const victim = { ...body };
         const removal = engine.removeBody(body.id);
         runtime.drag = null;
+        runtime.latestGesture = null;
         controls.enabled = true;
         propsRef.current.onBodyGesture(removal);
         propsRef.current.onConsumptionBloom(victim);
@@ -1410,7 +1420,9 @@ export function SoundflightStage(props) {
         }
         return;
       }
-      if (runtime.latestGesture) propsRef.current.onBodyGesture(runtime.latestGesture);
+      if (runtime.latestGesture && engineRef.current.getBody(runtime.latestGesture.bodyId)) {
+        propsRef.current.onBodyGesture(runtime.latestGesture);
+      }
       runtime.latestGesture = null;
       runtime.drag = null;
       controls.enabled = propsRef.current.interactionMode !== "launch";
