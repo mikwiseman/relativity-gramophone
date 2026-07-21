@@ -7,6 +7,7 @@ import { LineGeometry } from "three/addons/lines/LineGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 
 import {
@@ -26,6 +27,7 @@ import {
   buildMusicalConnections,
   cameraScaleLabel,
   canBeginRadialLaunchFromHit,
+  dopplerTintedColor,
   nextCameraDistance,
   selectRenderProfile,
   shouldRefreshMusicalConnection,
@@ -38,8 +40,9 @@ const STAGE_SCALE = 10;
 const MAX_FRAME_DELTA = 0.1;
 const STRING_TOUCH_DISTANCE = 14;
 const STRING_PLUCK_COOLDOWN = 120;
-const TRAIL_COLORS = [0xffd18a, 0x72edff, 0xff8cda];
 const MAX_TRAIL_PARTICLES = 1100;
+const MAX_TRAIL_POINTS = 256;
+const RIBBON_HIGHLIGHT = 0xffeed6;
 
 const trailVertexShader = `
   attribute float aAlpha;
@@ -105,6 +108,216 @@ function createRadialTexture() {
   return texture;
 }
 
+function createStarGloryTexture() {
+  const size = 512;
+  const half = size / 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+
+  const core = context.createRadialGradient(half, half, 0, half, half, half);
+  core.addColorStop(0, "rgba(255,250,232,1)");
+  core.addColorStop(0.1, "rgba(255,214,132,0.9)");
+  core.addColorStop(0.3, "rgba(255,150,70,0.3)");
+  core.addColorStop(0.62, "rgba(255,112,58,0.07)");
+  core.addColorStop(1, "rgba(0,0,0,0)");
+  context.fillStyle = core;
+  context.fillRect(0, 0, size, size);
+
+  context.globalCompositeOperation = "lighter";
+  context.translate(half, half);
+  for (let ray = 0; ray < 26; ray += 1) {
+    const angle = (ray / 26) * Math.PI * 2;
+    const reach = half * (0.5 + 0.42 * Math.abs(Math.sin(ray * 2.39996 + 0.8)));
+    const width = 1.1 + 2.3 * Math.abs(Math.sin(ray * 1.7));
+    const beam = context.createLinearGradient(0, 0, Math.cos(angle) * reach, Math.sin(angle) * reach);
+    beam.addColorStop(0, "rgba(255,206,138,0.16)");
+    beam.addColorStop(0.4, "rgba(255,172,96,0.05)");
+    beam.addColorStop(1, "rgba(255,150,80,0)");
+    context.strokeStyle = beam;
+    context.lineWidth = width;
+    context.beginPath();
+    context.moveTo(0, 0);
+    context.lineTo(Math.cos(angle) * reach, Math.sin(angle) * reach);
+    context.stroke();
+  }
+  for (const [ringRadius, alpha] of [[0.58, 0.05], [0.78, 0.03]]) {
+    context.strokeStyle = `rgba(255,196,120,${alpha})`;
+    context.lineWidth = 1.6;
+    context.beginPath();
+    context.arc(0, 0, half * ringRadius, 0, Math.PI * 2);
+    context.stroke();
+  }
+  context.setTransform(1, 0, 0, 1, 0, 0);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+const STAR_TINTS = [
+  [1, 0.95, 0.86],
+  [1, 0.87, 0.68],
+  [0.82, 0.89, 1],
+  [0.68, 0.8, 0.98],
+  [1, 0.78, 0.66],
+];
+
+const starfieldVertexShader = `
+  attribute float aSize;
+  attribute float aPhase;
+  attribute float aTwinkleSpeed;
+  attribute vec3 aColor;
+  uniform float uTime;
+  uniform float uTwinkle;
+  uniform float uPixelRatio;
+  varying vec3 vColor;
+  varying float vGlow;
+  void main() {
+    vColor = aColor;
+    float twinkle = 1.0 - uTwinkle * (0.32 + 0.18 * sin(aPhase * 3.7)) * (0.5 + 0.5 * sin(uTime * aTwinkleSpeed + aPhase));
+    vGlow = twinkle;
+    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = min(aSize * uPixelRatio * twinkle * (110.0 / -mvPosition.z), 4.6 * uPixelRatio);
+    gl_Position = projectionMatrix * mvPosition;
+  }
+`;
+
+const starfieldFragmentShader = `
+  uniform float uOpacity;
+  varying vec3 vColor;
+  varying float vGlow;
+  void main() {
+    vec2 offset = gl_PointCoord - vec2(0.5);
+    float falloff = smoothstep(0.5, 0.04, length(offset));
+    gl_FragColor = vec4(vColor, falloff * uOpacity * vGlow);
+  }
+`;
+
+function createStarfield({ starCount, dustCount, twinkle }) {
+  const random = seededRandom(299792458);
+  const total = starCount + dustCount;
+  const positions = new Float32Array(total * 3);
+  const colors = new Float32Array(total * 3);
+  const sizes = new Float32Array(total);
+  const phases = new Float32Array(total);
+  const speeds = new Float32Array(total);
+
+  for (let index = 0; index < starCount; index += 1) {
+    const radius = 34 + random() * 34;
+    const theta = random() * Math.PI * 2;
+    const elevation = Math.asin(random() * 2 - 1) * 0.92;
+    positions[index * 3] = radius * Math.cos(elevation) * Math.cos(theta);
+    positions[index * 3 + 1] = radius * Math.sin(elevation);
+    positions[index * 3 + 2] = radius * Math.cos(elevation) * Math.sin(theta);
+    const tint = STAR_TINTS[Math.floor(random() * STAR_TINTS.length)];
+    const magnitude = random();
+    const accent = random() < 0.03;
+    const brightness = accent ? 0.85 + random() * 0.15 : 0.16 + magnitude * 0.4;
+    colors[index * 3] = tint[0] * brightness;
+    colors[index * 3 + 1] = tint[1] * brightness;
+    colors[index * 3 + 2] = tint[2] * brightness;
+    sizes[index] = accent ? 2 + random() * 1.1 : 0.3 + magnitude * magnitude * 1;
+    phases[index] = random() * Math.PI * 2;
+    speeds[index] = 0.24 + random() * 1.1;
+  }
+
+  for (let index = starCount; index < total; index += 1) {
+    const radius = 15 + random() * 22;
+    const theta = random() * Math.PI * 2;
+    positions[index * 3] = radius * Math.cos(theta);
+    positions[index * 3 + 1] = -2 + random() * 2.6;
+    positions[index * 3 + 2] = radius * Math.sin(theta);
+    const warmth = 0.34 + random() * 0.3;
+    colors[index * 3] = warmth;
+    colors[index * 3 + 1] = warmth * (0.74 + random() * 0.12);
+    colors[index * 3 + 2] = warmth * (0.5 + random() * 0.14);
+    sizes[index] = 0.26 + random() * 0.5;
+    phases[index] = random() * Math.PI * 2;
+    speeds[index] = 0.12 + random() * 0.5;
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("aColor", new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
+  geometry.setAttribute("aPhase", new THREE.BufferAttribute(phases, 1));
+  geometry.setAttribute("aTwinkleSpeed", new THREE.BufferAttribute(speeds, 1));
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+      uTwinkle: { value: twinkle ? 1 : 0 },
+      uPixelRatio: { value: 1 },
+      uOpacity: { value: 0.66 },
+    },
+    vertexShader: starfieldVertexShader,
+    fragmentShader: starfieldFragmentShader,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.frustumCulled = false;
+  points.renderOrder = -10;
+  return points;
+}
+
+function createEnvironmentTexture(renderer) {
+  const environmentScene = new THREE.Scene();
+  const gradient = new THREE.Mesh(
+    new THREE.SphereGeometry(10, 32, 16),
+    new THREE.MeshBasicMaterial({ side: THREE.BackSide, vertexColors: true }),
+  );
+  const positionAttribute = gradient.geometry.getAttribute("position");
+  const gradientColors = new Float32Array(positionAttribute.count * 3);
+  const deepBelow = new THREE.Color(0x120803);
+  const warmHorizon = new THREE.Color(0x4a2a10);
+  const coolAbove = new THREE.Color(0x0d1b2c);
+  for (let index = 0; index < positionAttribute.count; index += 1) {
+    const y = positionAttribute.getY(index) / 10;
+    const color = y < 0
+      ? warmHorizon.clone().lerp(deepBelow, Math.min(1, -y * 1.4))
+      : warmHorizon.clone().lerp(coolAbove, Math.min(1, y * 1.25));
+    gradientColors[index * 3] = color.r;
+    gradientColors[index * 3 + 1] = color.g;
+    gradientColors[index * 3 + 2] = color.b;
+  }
+  gradient.geometry.setAttribute("color", new THREE.BufferAttribute(gradientColors, 3));
+  environmentScene.add(gradient);
+
+  const warmKey = new THREE.Mesh(
+    new THREE.PlaneGeometry(7, 2.6),
+    new THREE.MeshBasicMaterial({ color: 0xffb45e, side: THREE.DoubleSide }),
+  );
+  warmKey.position.set(0, -3.4, 0);
+  warmKey.rotation.x = Math.PI / 2;
+  environmentScene.add(warmKey);
+
+  const coolFill = new THREE.Mesh(
+    new THREE.PlaneGeometry(9, 3.2),
+    new THREE.MeshBasicMaterial({ color: 0x3e5d80, side: THREE.DoubleSide }),
+  );
+  coolFill.position.set(-2, 5.2, 1);
+  coolFill.rotation.x = Math.PI / 2;
+  environmentScene.add(coolFill);
+
+  const accent = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.2, 1.4),
+    new THREE.MeshBasicMaterial({ color: 0xb26df2, side: THREE.DoubleSide }),
+  );
+  accent.position.set(5.4, 1.6, -3.4);
+  accent.lookAt(0, 0, 0);
+  environmentScene.add(accent);
+
+  const pmremGenerator = new THREE.PMREMGenerator(renderer);
+  const environmentTexture = pmremGenerator.fromScene(environmentScene, 0.36).texture;
+  pmremGenerator.dispose();
+  disposeObject(environmentScene);
+  return environmentTexture;
+}
+
 function createTrailMaterial(color) {
   return new THREE.ShaderMaterial({
     uniforms: {
@@ -122,8 +335,13 @@ function createTrailMaterial(color) {
 
 function createTrailLine(color) {
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0], 3));
-  geometry.setAttribute("aAlpha", new THREE.Float32BufferAttribute([0], 1));
+  const positionAttribute = new THREE.BufferAttribute(new Float32Array(MAX_TRAIL_POINTS * 3), 3);
+  const alphaAttribute = new THREE.BufferAttribute(new Float32Array(MAX_TRAIL_POINTS), 1);
+  positionAttribute.setUsage(THREE.DynamicDrawUsage);
+  alphaAttribute.setUsage(THREE.DynamicDrawUsage);
+  geometry.setAttribute("position", positionAttribute);
+  geometry.setAttribute("aAlpha", alphaAttribute);
+  geometry.setDrawRange(0, 0);
   const material = createTrailMaterial(color);
   const line = new THREE.Line(geometry, material);
   line.frustumCulled = false;
@@ -133,12 +351,12 @@ function createTrailLine(color) {
 function createRibbonTrail() {
   const group = new THREE.Group();
   const widths = [2.4, 2, 1.6];
-  const lines = TRAIL_COLORS.map((color, index) => {
+  const lines = widths.map((linewidth) => {
     const geometry = new LineGeometry();
     geometry.setPositions([0, 0, 0, 0, 0, 0]);
     const material = new LineMaterial({
-      color,
-      linewidth: widths[index],
+      color: 0xffffff,
+      linewidth,
       transparent: true,
       opacity: 0,
       depthWrite: false,
@@ -152,7 +370,7 @@ function createRibbonTrail() {
     return line;
   });
   group.visible = false;
-  return { group, lines };
+  return { group, lines, strandColor: new THREE.Color(), shiftedColor: new THREE.Color() };
 }
 
 function updateRibbonTrail(ribbon, history, intensity, color) {
@@ -161,6 +379,9 @@ function updateRibbonTrail(ribbon, history, intensity, color) {
     return;
   }
   ribbon.group.visible = true;
+  ribbon.strandColor.setHex(color);
+  ribbon.shiftedColor.setHex(color).offsetHSL(0.055, -0.08, 0.1);
+  const strandColors = [ribbon.strandColor, RIBBON_HIGHLIGHT, ribbon.shiftedColor];
   for (let lineIndex = 0; lineIndex < ribbon.lines.length; lineIndex += 1) {
     const phase = lineIndex * 2.1;
     const positions = [];
@@ -180,43 +401,46 @@ function updateRibbonTrail(ribbon, history, intensity, color) {
       );
     }
     const line = ribbon.lines[lineIndex];
-    line.material.color.setHex(color);
+    line.material.color.set(strandColors[lineIndex]);
     line.geometry.setPositions(positions);
-    line.material.opacity = (0.004 + intensity * 0.014) * (1 - lineIndex * 0.22);
+    line.material.opacity = (0.035 + intensity * 0.13) * (1 - lineIndex * 0.24);
   }
 }
 
 function updateTrailLine(line, history, phase, intensity) {
-  if (history.length < 2) {
+  const count = Math.min(history.length, MAX_TRAIL_POINTS);
+  if (count < 2 || intensity <= 0) {
     line.visible = false;
     return;
   }
 
-  const positions = new Float32Array(history.length * 3);
-  const alphas = new Float32Array(history.length);
-  for (let index = 0; index < history.length; index += 1) {
-    const point = history[index];
-    const previous = history[Math.max(0, index - 1)];
-    const next = history[Math.min(history.length - 1, index + 1)];
+  const positionAttribute = line.geometry.getAttribute("position");
+  const alphaAttribute = line.geometry.getAttribute("aAlpha");
+  const positions = positionAttribute.array;
+  const alphas = alphaAttribute.array;
+  const first = history.length - count;
+  for (let index = 0; index < count; index += 1) {
+    const point = history[first + index];
+    const previous = history[Math.max(first, first + index - 1)];
+    const next = history[Math.min(history.length - 1, first + index + 1)];
     const dx = next.x - previous.x;
     const dz = next.z - previous.z;
     const length = Math.max(0.0001, Math.hypot(dx, dz));
-    const progress = index / Math.max(1, history.length - 1);
+    const progress = index / Math.max(1, count - 1);
     const braid = Math.sin(progress * 18 + phase) * 0.085 * progress;
     positions[index * 3] = point.x - (dz / length) * braid;
     positions[index * 3 + 1] = 0.025 + Math.cos(progress * 13 + phase) * 0.025 * progress;
     positions[index * 3 + 2] = point.z + (dx / length) * braid;
     alphas[index] = Math.pow(progress, 1.7);
   }
-
-  line.geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  line.geometry.setAttribute("aAlpha", new THREE.BufferAttribute(alphas, 1));
-  line.geometry.computeBoundingSphere();
+  positionAttribute.needsUpdate = true;
+  alphaAttribute.needsUpdate = true;
+  line.geometry.setDrawRange(0, count);
   line.material.uniforms.uOpacity.value = intensity;
   line.visible = true;
 }
 
-function createPlanetVisual(opalTexture) {
+function createPlanetVisual(opalTexture, radialTexture) {
   const group = new THREE.Group();
   const material = new THREE.MeshPhysicalMaterial({
     color: 0xf5f0e8,
@@ -231,6 +455,7 @@ function createPlanetVisual(opalTexture) {
     iridescence: 0.76,
     iridescenceIOR: 1.48,
     transmission: 0.04,
+    envMapIntensity: 1.15,
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 48), material);
   mesh.castShadow = false;
@@ -238,7 +463,7 @@ function createPlanetVisual(opalTexture) {
   group.add(mesh);
 
   const rim = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: createRadialTexture(),
+    map: radialTexture,
     color: 0xbceef5,
     transparent: true,
     opacity: 0.18,
@@ -249,34 +474,50 @@ function createPlanetVisual(opalTexture) {
   rim.scale.setScalar(3.4);
   group.add(rim);
 
-  const trailLines = TRAIL_COLORS.map((color) => {
-    const line = createTrailLine(color);
-    group.parent?.add(line);
-    return line;
-  });
+  const trailLine = createTrailLine(0xffe9c9);
 
-  return { group, mesh, rim, trailLines, history: [], lastTrailSample: -Infinity, impulse: 0 };
+  return {
+    group,
+    mesh,
+    rim,
+    trailLine,
+    trailColor: new THREE.Color(),
+    history: [],
+    lastTrailSample: -Infinity,
+    impulse: 0,
+  };
 }
 
-function createStarVisual(solarTexture) {
+function createStarVisual(solarTexture, radialTexture) {
   const group = new THREE.Group();
   const material = new THREE.MeshStandardMaterial({
     color: 0xffc36a,
     map: solarTexture,
     emissiveMap: solarTexture,
     emissive: new THREE.Color(0xff9d36),
-    emissiveIntensity: 1.35,
+    emissiveIntensity: 1.5,
     roughness: 0.58,
   });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 64, 48), material);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.25, 64, 48), material);
   group.add(mesh);
 
-  const glowTexture = createRadialTexture();
+  const glory = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: createStarGloryTexture(),
+    color: 0xffc678,
+    transparent: true,
+    opacity: 0.5,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  }));
+  glory.scale.set(2.6, 2.6, 1);
+  group.add(glory);
+
   const corona = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: glowTexture,
+    map: radialTexture,
     color: 0xffb552,
     transparent: true,
-    opacity: 0.42,
+    opacity: 0.4,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     toneMapped: false,
@@ -290,9 +531,16 @@ function createStarVisual(solarTexture) {
   outerCorona.scale.set(3.7, 3.7, 1);
   group.add(outerCorona);
 
+  const ambientHalo = corona.clone();
+  ambientHalo.material = corona.material.clone();
+  ambientHalo.material.opacity = 0.05;
+  ambientHalo.material.color.setHex(0xff9e4a);
+  ambientHalo.scale.set(11, 11, 1);
+  group.add(ambientHalo);
+
   const light = new THREE.PointLight(0xffb25b, 4.8, 36, 1.7);
   group.add(light);
-  return { group, mesh, corona, outerCorona };
+  return { group, mesh, glory, corona, outerCorona, ambientHalo, impulse: 0 };
 }
 
 function predictTrailHistory(snapshot, bodyId, sampleCount) {
@@ -391,6 +639,41 @@ function createHarmonicKnot() {
   line.material.uniforms.uOpacity.value = 0;
   return line;
 }
+
+const FinishingShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uTime: { value: 0 },
+    uVignette: { value: 0.34 },
+    uGrain: { value: 0.05 },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uTime;
+    uniform float uVignette;
+    uniform float uGrain;
+    varying vec2 vUv;
+    float hash(vec2 point) {
+      return fract(sin(dot(point, vec2(12.9898, 78.233))) * 43758.5453123);
+    }
+    void main() {
+      vec4 color = texture2D(tDiffuse, vUv);
+      vec2 centered = vUv - 0.5;
+      float vignette = 1.0 - uVignette * smoothstep(0.32, 0.92, dot(centered, centered) * 2.4);
+      float grain = (hash(vUv * 967.0 + fract(uTime) * 71.0) - 0.5) * uGrain;
+      float luma = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+      color.rgb = color.rgb * vignette + grain * (0.18 + luma);
+      gl_FragColor = color;
+    }
+  `,
+};
 
 function createMusicalLink(color) {
   const geometry = new LineGeometry();
@@ -710,9 +993,14 @@ export function SoundflightStage(props) {
 
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 1.08, 0.68, 0.58);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 1.08, 0.68, 0.52);
     composer.addPass(bloomPass);
+    const finishingPass = new ShaderPass(FinishingShader);
+    composer.addPass(finishingPass);
     composer.addPass(new OutputPass());
+
+    scene.environment = createEnvironmentTexture(renderer);
+    scene.environmentIntensity = 0.62;
 
     const loadingManager = new THREE.LoadingManager();
     loadingManager.onError = (url) => {
@@ -746,7 +1034,8 @@ export function SoundflightStage(props) {
 
     const ambient = new THREE.HemisphereLight(0x5f6f88, 0x170b05, 0.42);
     scene.add(ambient);
-    const starVisual = createStarVisual(solarTexture);
+    const sharedRadialTexture = createRadialTexture();
+    const starVisual = createStarVisual(solarTexture, sharedRadialTexture);
     scene.add(starVisual.group);
     const launchPreview = createLaunchPreview();
     scene.add(launchPreview.group);
@@ -764,20 +1053,24 @@ export function SoundflightStage(props) {
       controls,
       composer,
       bloomPass,
+      finishingPass,
       lacquerTexture,
       opalTexture,
       solarTexture,
+      sharedRadialTexture,
       starVisual,
       launchPreview,
       particleCloud,
       ribbonTrail,
       harmonicKnot,
+      starfield: null,
       bodyVisuals: new Map(),
       musicalLinks: new Map(),
       pendingLinkPulses: new Map(),
       selectedBodyId: props.selectedBodyId,
       profile: null,
       selectedHistory: [],
+      starBreath: 0.5,
       lastParticleUpdate: -Infinity,
       lastCameraReport: -Infinity,
       lastCameraCommandId: 0,
@@ -814,6 +1107,20 @@ export function SoundflightStage(props) {
       camera.aspect = rect.width / Math.max(1, rect.height);
       camera.updateProjectionMatrix();
       bloomPass.strength = profile.bloomStrength;
+      finishingPass.uniforms.uGrain.value = profile.grain ? 0.05 : 0;
+      if (!runtime.starfield
+        || runtime.starfield.userData.starCount !== profile.starCount
+        || runtime.starfield.userData.twinkle !== profile.twinkle) {
+        if (runtime.starfield) {
+          scene.remove(runtime.starfield);
+          disposeObject(runtime.starfield);
+        }
+        runtime.starfield = createStarfield(profile);
+        runtime.starfield.userData.starCount = profile.starCount;
+        runtime.starfield.userData.twinkle = profile.twinkle;
+        scene.add(runtime.starfield);
+      }
+      runtime.starfield.material.uniforms.uPixelRatio.value = profile.pixelRatio;
     };
     const resizeObserver = new ResizeObserver(measure);
     resizeObserver.observe(mount);
@@ -1184,6 +1491,7 @@ export function SoundflightStage(props) {
           };
           const visual = runtime.bodyVisuals.get(body.id);
           if (visual) visual.impulse = 1;
+          runtime.starVisual.impulse = Math.min(1, runtime.starVisual.impulse + 0.55);
           runtime.pendingLinkPulses.set(body.id, performance.now() / 1000);
           currentProps.onNote(note);
         }
@@ -1205,10 +1513,8 @@ export function SoundflightStage(props) {
       for (const [bodyId, visual] of runtime.bodyVisuals) {
         if (liveIds.has(bodyId)) continue;
         scene.remove(visual.group);
-        for (const line of visual.trailLines) {
-          scene.remove(line);
-          disposeObject(line);
-        }
+        scene.remove(visual.trailLine);
+        disposeObject(visual.trailLine);
         disposeObject(visual.group);
         runtime.bodyVisuals.delete(bodyId);
       }
@@ -1221,30 +1527,37 @@ export function SoundflightStage(props) {
         stageBodies.set(body.id, stage);
         if (body.kind === "star") {
           starVisual.group.position.lerp(new THREE.Vector3(stage.x, 0, stage.z), 1 - Math.exp(-delta * 18));
-          const breath = 1 + Math.sin(snapshot.time * 1.4) * 0.035;
+          starVisual.impulse *= Math.exp(-delta * 2.6);
+          const breathPhase = Math.sin(snapshot.time * 1.4);
+          const breath = 1 + breathPhase * 0.035 + starVisual.impulse * 0.06;
           starVisual.corona.scale.setScalar(1.9 * breath);
+          starVisual.corona.material.opacity = 0.4 + starVisual.impulse * 0.22;
+          starVisual.glory.scale.setScalar(2.6 * (1 + breathPhase * 0.022 + starVisual.impulse * 0.05));
+          starVisual.glory.material.opacity = 0.5 + breathPhase * 0.05 + starVisual.impulse * 0.18;
+          starVisual.glory.material.rotation += delta * 0.016;
           starVisual.outerCorona.scale.setScalar(3.7 * (1 + Math.sin(snapshot.time * 0.42) * 0.05));
           starVisual.mesh.rotation.y += delta * 0.07;
+          runtime.starBreath = 0.5 + breathPhase * 0.5;
           continue;
         }
 
         let visual = runtime.bodyVisuals.get(body.id);
         if (!visual) {
-          visual = createPlanetVisual(opalTexture);
+          visual = createPlanetVisual(opalTexture, sharedRadialTexture);
           visual.mesh.userData.bodyId = body.id;
-          visual.history = predictTrailHistory(snapshot, body.id, body.id === selectedId ? 82 : 14);
-          for (const line of visual.trailLines) scene.add(line);
+          visual.history = predictTrailHistory(snapshot, body.id, body.id === selectedId ? 90 : 48);
+          scene.add(visual.trailLine);
           scene.add(visual.group);
           runtime.bodyVisuals.set(body.id, visual);
         }
         const target = new THREE.Vector3(stage.x, 0, stage.z);
         visual.group.position.lerp(target, 1 - Math.exp(-delta * 22));
         const selected = body.id === selectedId;
-        const scale = (0.24 + body.displayMass * 0.095) * (selected ? 2.15 : 0.72);
+        const scale = (0.24 + body.displayMass * 0.095) * (selected ? 1.55 : 0.8);
         visual.mesh.scale.setScalar(scale);
         visual.rim.scale.setScalar(scale * 4.2);
         visual.mesh.rotation.y += delta * (0.12 + body.properRate * 0.08);
-        visual.impulse *= Math.exp(-delta * 3.2);
+        visual.impulse *= Math.exp(-delta * 2.4);
         const intensity = sonicIntensity({
           displayMass: body.displayMass,
           doppler: body.doppler,
@@ -1253,26 +1566,24 @@ export function SoundflightStage(props) {
         });
         visual.mesh.material.emissiveIntensity = selected
           ? 0.52 + intensity * 1.7
-          : 0.08 + intensity * 0.34;
-        visual.rim.material.opacity = selected ? 0.18 + intensity * 0.62 : 0.04 + intensity * 0.08;
+          : 0.16 + intensity * 0.44;
         const voiceColor = voiceVisual(body.voice).color;
-        visual.trailLines[0].material.uniforms.uColor.value.setHex(voiceColor);
+        visual.rim.material.color.setHex(voiceColor);
+        visual.rim.material.opacity = selected ? 0.16 + intensity * 0.5 : 0.06 + intensity * 0.12;
+        const tinted = dopplerTintedColor(voiceColor, body.doppler);
+        visual.trailColor.setRGB(tinted.r, tinted.g, tinted.b);
+        visual.trailLine.material.uniforms.uColor.value.copy(visual.trailColor);
 
         if (propsRef.current.isPlaying && now - visual.lastTrailSample > 1 / 36) {
           visual.lastTrailSample = now;
           visual.history.push({ x: target.x, y: 0, z: target.z });
-          const limit = selected ? runtime.profile.trailSamples : Math.min(34, runtime.profile.trailSamples);
+          const limit = selected ? runtime.profile.trailSamples : Math.min(56, runtime.profile.trailSamples);
           if (visual.history.length > limit) visual.history.splice(0, visual.history.length - limit);
         }
-        for (let index = 0; index < visual.trailLines.length; index += 1) {
-          const showTrail = propsRef.current.isPlaying;
-          updateTrailLine(
-            visual.trailLines[index],
-            visual.history,
-            index * 2.1,
-            showTrail && index === 0 ? (selected ? 0.012 + visual.impulse * 0.08 : 0.008 + visual.impulse * 0.04) : 0,
-          );
-        }
+        const stringIntensity = propsRef.current.isPlaying
+          ? (selected ? 0.14 + visual.impulse * 0.3 : 0.07 + visual.impulse * 0.2)
+          : (selected ? 0.09 + visual.impulse * 0.24 : 0.05 + visual.impulse * 0.16);
+        updateTrailLine(visual.trailLine, visual.history, 0, stringIntensity);
       }
 
       runtime.selectedHistory = runtime.bodyVisuals.get(selectedId)?.history ?? [];
@@ -1284,7 +1595,7 @@ export function SoundflightStage(props) {
         resonanceStrength: snapshot.resonance?.bodyIds.includes(selectedBody.id) ? snapshot.resonance.strength : 0,
         impulse: selectedVisual.impulse,
       }) : 0;
-      const selectedVoiceColor = selectedBody ? voiceVisual(selectedBody.voice).color : TRAIL_COLORS[0];
+      const selectedVoiceColor = selectedBody ? voiceVisual(selectedBody.voice).color : 0xffd18a;
       updateRibbonTrail(
         ribbonTrail,
         propsRef.current.isPlaying ? runtime.selectedHistory : [],
@@ -1335,8 +1646,16 @@ export function SoundflightStage(props) {
       const planets = snapshot.bodies.filter((body) => body.kind === "planet");
       const resonance = engineRef.current.getResonance();
       const visualSnapshot = { ...snapshot, resonance };
-      currentProps.onPhysicsFrame({ time: snapshot.time, bodies: planets, star, resonance });
       syncVisuals(visualSnapshot, delta, now);
+      currentProps.onPhysicsFrame({
+        time: snapshot.time,
+        bodies: planets,
+        star,
+        resonance,
+        starBreath: runtime.starBreath,
+      });
+      if (runtime.starfield) runtime.starfield.material.uniforms.uTime.value = now;
+      finishingPass.uniforms.uTime.value = now;
 
       const cameraCommand = currentProps.cameraCommand;
       if (cameraCommand?.id > runtime.lastCameraCommandId) {
@@ -1385,6 +1704,8 @@ export function SoundflightStage(props) {
       lacquerTexture.dispose();
       opalTexture.dispose();
       solarTexture.dispose();
+      sharedRadialTexture.dispose();
+      scene.environment?.dispose();
       disposeObject(scene);
       renderer.dispose();
       renderer.domElement.remove();

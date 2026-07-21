@@ -1,3 +1,5 @@
+import { spectralMix } from "./sonification.js";
+
 const DEFAULT_STATE = Object.freeze({ mode: "compose", followingBodyId: null });
 
 const VOICE_VISUALS = Object.freeze({
@@ -6,6 +8,9 @@ const VOICE_VISUALS = Object.freeze({
   light: Object.freeze({ label: "LIGHT", colorName: "MAGENTA", color: 0xff76d6 }),
   "alpha-centauri": Object.freeze({ label: "ALPHA CEN", colorName: "MINT", color: 0x8fffc1 }),
 });
+
+const DOPPLER_APPROACH_TINT = Object.freeze({ r: 0x86 / 255, g: 0xe6 / 255, b: 0xff / 255 });
+const DOPPLER_RECEDE_TINT = Object.freeze({ r: 0xff / 255, g: 0x8a / 255, b: 0x66 / 255 });
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -91,6 +96,22 @@ export function voiceVisual(voiceId) {
   return { ...visual };
 }
 
+export function dopplerTintedColor(hexColor, doppler) {
+  if (!Number.isFinite(hexColor) || !Number.isFinite(doppler)) {
+    throw new Error("Doppler tinting requires a finite color and doppler factor");
+  }
+  const { shift } = spectralMix({ doppler });
+  const tint = shift >= 0 ? DOPPLER_APPROACH_TINT : DOPPLER_RECEDE_TINT;
+  const amount = Math.abs(shift) * 0.38;
+  const mix = (channel, target) => clamp(channel + (target - channel) * amount, 0, 1);
+  return {
+    r: mix(((hexColor >> 16) & 0xff) / 255, tint.r),
+    g: mix(((hexColor >> 8) & 0xff) / 255, tint.g),
+    b: mix((hexColor & 0xff) / 255, tint.b),
+    shift,
+  };
+}
+
 export function buildMusicalConnections(bodies, star) {
   if (![star?.x, star?.y].every(Number.isFinite)) throw new Error("Musical connections require a finite star position");
   return bodies.map((body, index) => {
@@ -152,6 +173,10 @@ export function selectRenderProfile({
       particleCount: 90,
       trailSamples: 40,
       bloomStrength: 0.72,
+      starCount: 700,
+      dustCount: 260,
+      twinkle: false,
+      grain: false,
       autoDrift: false,
     };
   }
@@ -163,6 +188,10 @@ export function selectRenderProfile({
       particleCount: 480,
       trailSamples: 96,
       bloomStrength: 0.92,
+      starCount: 1500,
+      dustCount: 620,
+      twinkle: true,
+      grain: false,
       autoDrift: false,
     };
   }
@@ -172,6 +201,10 @@ export function selectRenderProfile({
     particleCount: 1100,
     trailSamples: 160,
     bloomStrength: 1.18,
+    starCount: 2600,
+    dustCount: 1100,
+    twinkle: true,
+    grain: true,
     autoDrift: false,
   };
 }

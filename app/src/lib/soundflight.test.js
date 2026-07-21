@@ -7,6 +7,7 @@ import {
   buildMusicalConnections,
   canBeginRadialLaunchFromHit,
   createSoundflightState,
+  dopplerTintedColor,
   frequencyToNoteName,
   launchGuidance,
   nextCameraDistance,
@@ -136,6 +137,10 @@ test("render profile preserves the artwork while bounding GPU cost", () => {
   assert.equal(desktop.particleCount, 1100);
   assert.equal(desktop.trailSamples, 160);
   assert.equal(desktop.autoDrift, false);
+  assert.equal(desktop.starCount, 2600);
+  assert.equal(desktop.dustCount, 1100);
+  assert.equal(desktop.twinkle, true);
+  assert.equal(desktop.grain, true);
 
   const compact = selectRenderProfile({
     width: 390,
@@ -158,6 +163,11 @@ test("render profile preserves the artwork while bounding GPU cost", () => {
   assert.equal(reduced.particleCount, 90);
   assert.equal(reduced.trailSamples, 40);
   assert.equal(reduced.autoDrift, false);
+  assert.equal(reduced.twinkle, false);
+  assert.equal(reduced.grain, false);
+  assert.equal(compact.grain, false);
+  assert.ok(reduced.starCount < compact.starCount);
+  assert.ok(compact.starCount < desktop.starCount);
 
   assert.throws(() => selectRenderProfile({
     width: 390,
@@ -248,4 +258,31 @@ test("explicit camera zoom stays inside the same safe flight envelope as gesture
   assert.equal(nextCameraDistance(3.3, -1), 3.2);
   assert.equal(nextCameraDistance(23.4, 1), 24);
   assert.throws(() => nextCameraDistance(8, 0), /direction/i);
+});
+
+test("doppler tinting shifts a voice color toward cyan on approach and coral on recession", () => {
+  const still = dopplerTintedColor(0xffc66d, 1);
+  assert.equal(still.shift, 0);
+  assert.ok(Math.abs(still.r - 0xff / 255) < 1e-9);
+  assert.ok(Math.abs(still.g - 0xc6 / 255) < 1e-9);
+  assert.ok(Math.abs(still.b - 0x6d / 255) < 1e-9);
+
+  const approaching = dopplerTintedColor(0xffc66d, 1.05);
+  assert.ok(approaching.shift > 0);
+  assert.ok(approaching.b > still.b, "approach adds blue");
+  assert.ok(approaching.r < still.r, "approach cools red");
+
+  const receding = dopplerTintedColor(0xffc66d, 0.95);
+  assert.ok(receding.shift < 0);
+  assert.ok(receding.g < still.g, "recession warms toward coral");
+  assert.ok(receding.b < still.b, "recession removes blue");
+
+  const capped = dopplerTintedColor(0x72edff, 2);
+  assert.ok(capped.shift === 1);
+  for (const channel of ["r", "g", "b"]) {
+    assert.ok(capped[channel] >= 0 && capped[channel] <= 1);
+  }
+
+  assert.throws(() => dopplerTintedColor(Number.NaN, 1), /finite color/i);
+  assert.throws(() => dopplerTintedColor(0xffffff, Number.NaN), /finite color/i);
 });
