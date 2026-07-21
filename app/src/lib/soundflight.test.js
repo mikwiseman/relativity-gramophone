@@ -12,6 +12,8 @@ import {
   nextCameraDistance,
   reduceSoundflightState,
   selectRenderProfile,
+  shouldApplyGestationUpdate,
+  shouldRefreshMusicalConnection,
   sonicIntensity,
   voiceVisual,
 } from "./soundflight.js";
@@ -74,6 +76,52 @@ test("a radial launch accepts the star itself but rejects existing planets", () 
   assert.equal(canBeginRadialLaunchFromHit(null), true);
   assert.equal(canBeginRadialLaunchFromHit("star"), true);
   assert.equal(canBeginRadialLaunchFromHit("europa"), false);
+});
+
+test("a cancelled gestation request cannot restart its tone after audio resumes", () => {
+  assert.equal(shouldApplyGestationUpdate({ requestId: 4, currentRequestId: 4, engaged: true }), true);
+  assert.equal(shouldApplyGestationUpdate({ requestId: 4, currentRequestId: 5, engaged: true }), false);
+  assert.equal(shouldApplyGestationUpdate({ requestId: 4, currentRequestId: 4, engaged: false }), false);
+});
+
+test("musical connection geometry refreshes only after a visible move and frame budget", () => {
+  const previous = new Float32Array([0, 0, 2, 1]);
+  const first = { x: 0, z: 0 };
+  const still = { x: 2, z: 1 };
+  const moved = { x: 2.1, z: 1 };
+
+  assert.equal(shouldRefreshMusicalConnection({
+    now: 1,
+    lastUpdatedAt: 0,
+    previous: null,
+    first,
+    second: still,
+    minInterval: 1 / 30,
+  }), true);
+  assert.equal(shouldRefreshMusicalConnection({
+    now: 1,
+    lastUpdatedAt: 0,
+    previous,
+    first,
+    second: still,
+    minInterval: 1 / 30,
+  }), false);
+  assert.equal(shouldRefreshMusicalConnection({
+    now: 1.01,
+    lastUpdatedAt: 1,
+    previous,
+    first,
+    second: moved,
+    minInterval: 1 / 30,
+  }), false);
+  assert.equal(shouldRefreshMusicalConnection({
+    now: 1.04,
+    lastUpdatedAt: 1,
+    previous,
+    first,
+    second: moved,
+    minInterval: 1 / 30,
+  }), true);
 });
 
 test("render profile preserves the artwork while bounding GPU cost", () => {

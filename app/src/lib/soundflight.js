@@ -46,6 +46,45 @@ export function canBeginRadialLaunchFromHit(bodyId) {
   return bodyId == null || bodyId === "star";
 }
 
+export function shouldApplyGestationUpdate({ requestId, currentRequestId, engaged }) {
+  return engaged && requestId === currentRequestId;
+}
+
+export function shouldRefreshMusicalConnection({
+  now,
+  lastUpdatedAt,
+  previous,
+  first,
+  second,
+  minInterval,
+}) {
+  if (!Number.isFinite(now)
+    || !Number.isFinite(first?.x)
+    || !Number.isFinite(first?.z)
+    || !Number.isFinite(second?.x)
+    || !Number.isFinite(second?.z)
+    || !Number.isFinite(minInterval)) {
+    throw new Error("Musical connection refresh requires finite positions and timing");
+  }
+  if (typeof lastUpdatedAt !== "number" || Number.isNaN(lastUpdatedAt) || minInterval <= 0) {
+    throw new Error("Musical connection refresh requires valid timing");
+  }
+  if (previous == null) return true;
+  if (previous.length !== 4) {
+    throw new Error("Musical connection refresh requires four previous coordinates");
+  }
+  for (let index = 0; index < previous.length; index += 1) {
+    if (!Number.isFinite(previous[index])) {
+      throw new Error("Musical connection refresh requires four previous coordinates");
+    }
+  }
+  const moved = Math.abs(previous[0] - first.x) > 0.0001
+    || Math.abs(previous[1] - first.z) > 0.0001
+    || Math.abs(previous[2] - second.x) > 0.0001
+    || Math.abs(previous[3] - second.z) > 0.0001;
+  return moved && now - lastUpdatedAt >= minInterval;
+}
+
 export function voiceVisual(voiceId) {
   const visual = VOICE_VISUALS[voiceId];
   if (!visual) throw new Error(`Unknown cosmic voice: ${voiceId}`);

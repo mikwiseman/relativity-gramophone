@@ -34,6 +34,7 @@ import {
   frequencyToNoteName,
   launchGuidance,
   reduceSoundflightState,
+  shouldApplyGestationUpdate,
   voiceVisual,
 } from "./lib/soundflight.js";
 
@@ -76,6 +77,9 @@ export function App() {
   const [sonicCue, setSonicCue] = useState("");
   const audioRef = useRef(new AudioEngine());
   const gestationEngagedRef = useRef(false);
+  const gestationReadyRef = useRef(false);
+  const gestationResumeRef = useRef(null);
+  const gestationRequestRef = useRef(0);
   const physicsFrameRef = useRef(null);
   const lastPhysicsPaintRef = useRef(0);
   const eventCountRef = useRef(composition.events.length);
@@ -264,20 +268,43 @@ export function App() {
   }, [announceSonicCue, performHaptic]);
 
   const handleGestationTone = useCallback(async (candidate) => {
+    const requestId = gestationRequestRef.current + 1;
+    gestationRequestRef.current = requestId;
     if (!candidate) {
       gestationEngagedRef.current = false;
+      gestationReadyRef.current = false;
+      gestationResumeRef.current = null;
       audioRef.current.endGestation();
       return;
     }
     try {
       if (!gestationEngagedRef.current) {
         gestationEngagedRef.current = true;
-        await audioRef.current.resume(true);
+        gestationReadyRef.current = false;
+      }
+      if (!gestationReadyRef.current) {
+        if (!gestationResumeRef.current) gestationResumeRef.current = audioRef.current.resume(true);
+        await gestationResumeRef.current;
+        if (!shouldApplyGestationUpdate({
+          requestId,
+          currentRequestId: gestationRequestRef.current,
+          engaged: gestationEngagedRef.current,
+        })) return;
+        gestationReadyRef.current = true;
+        gestationResumeRef.current = null;
         setIsPlaying(true);
       }
+      if (!shouldApplyGestationUpdate({
+        requestId,
+        currentRequestId: gestationRequestRef.current,
+        engaged: gestationEngagedRef.current,
+      })) return;
       audioRef.current.updateGestation({ frequency: candidate.frequency, pan: candidate.pan });
     } catch (error) {
+      if (requestId !== gestationRequestRef.current) return;
       gestationEngagedRef.current = false;
+      gestationReadyRef.current = false;
+      gestationResumeRef.current = null;
       setIsPlaying(false);
       audioRef.current.endGestation();
       setRuntimeError(error instanceof Error ? error.message : "The gestation tone could not start");

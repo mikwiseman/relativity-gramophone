@@ -28,6 +28,7 @@ import {
   canBeginRadialLaunchFromHit,
   nextCameraDistance,
   selectRenderProfile,
+  shouldRefreshMusicalConnection,
   sonicIntensity,
   voiceVisual,
 } from "../lib/soundflight.js";
@@ -393,7 +394,7 @@ function createHarmonicKnot() {
 
 function createMusicalLink(color) {
   const geometry = new LineGeometry();
-  geometry.setPositions([0, 0, 0, 0, 0, 0]);
+  geometry.setPositions(new Float32Array(37 * 3));
   const material = new LineMaterial({
     color,
     linewidth: 2.1,
@@ -417,27 +418,69 @@ function createMusicalLink(color) {
   }));
   pulse.scale.setScalar(0.42);
   pulse.visible = false;
-  return { line, pulse, color, sourceId: null, points: [], pulseAt: -Infinity };
+  return {
+    line,
+    pulse,
+    color,
+    sourceId: null,
+    endpoints: new Float32Array(4),
+    hasGeometry: false,
+    geometryUpdatedAt: -Infinity,
+    curve: { firstX: 0, firstZ: 0, secondX: 0, secondZ: 0, bendDirection: 1 },
+    pulseAt: -Infinity,
+  };
 }
 
-function musicalCurve(first, second, bendDirection) {
+function setCurvePosition(target, curve, progress) {
+  const {
+    firstX,
+    firstZ,
+    secondX,
+    secondZ,
+    bendDirection,
+  } = curve;
+  const dx = secondX - firstX;
+  const dz = secondZ - firstZ;
+  const length = Math.max(0.001, Math.hypot(dx, dz));
+  const arc = Math.sin(progress * Math.PI) * Math.min(0.42, length * 0.12) * bendDirection;
+  target.set(
+    THREE.MathUtils.lerp(firstX, secondX, progress) - (dz / length) * arc,
+    0.07 + Math.sin(progress * Math.PI) * 0.07,
+    THREE.MathUtils.lerp(firstZ, secondZ, progress) + (dx / length) * arc,
+  );
+}
+
+function writeMusicalCurve(link, first, second, bendDirection, now) {
   const dx = second.x - first.x;
   const dz = second.z - first.z;
   const length = Math.max(0.001, Math.hypot(dx, dz));
   const normalX = -dz / length;
   const normalZ = dx / length;
   const bend = Math.min(0.42, length * 0.12) * bendDirection;
-  const points = [];
-  for (let index = 0; index <= 36; index += 1) {
-    const progress = index / 36;
-    const arc = Math.sin(progress * Math.PI) * bend;
-    points.push({
-      x: THREE.MathUtils.lerp(first.x, second.x, progress) + normalX * arc,
-      y: 0.04 + Math.sin(progress * Math.PI) * 0.07,
-      z: THREE.MathUtils.lerp(first.z, second.z, progress) + normalZ * arc,
-    });
+  const buffer = link.line.geometry.attributes.instanceStart.data;
+  const positions = buffer.array;
+  for (let segment = 0; segment < 36; segment += 1) {
+    for (let endpoint = 0; endpoint < 2; endpoint += 1) {
+      const progress = (segment + endpoint) / 36;
+      const arc = Math.sin(progress * Math.PI) * bend;
+      const offset = segment * 6 + endpoint * 3;
+      positions[offset] = THREE.MathUtils.lerp(first.x, second.x, progress) + normalX * arc;
+      positions[offset + 1] = 0.04 + Math.sin(progress * Math.PI) * 0.07;
+      positions[offset + 2] = THREE.MathUtils.lerp(first.z, second.z, progress) + normalZ * arc;
+    }
   }
-  return points;
+  buffer.needsUpdate = true;
+  link.endpoints[0] = first.x;
+  link.endpoints[1] = first.z;
+  link.endpoints[2] = second.x;
+  link.endpoints[3] = second.z;
+  link.curve.firstX = first.x;
+  link.curve.firstZ = first.z;
+  link.curve.secondX = second.x;
+  link.curve.secondZ = second.z;
+  link.curve.bendDirection = bendDirection;
+  link.geometryUpdatedAt = now;
+  link.hasGeometry = true;
 }
 
 function updateMusicalLinks(runtime, snapshot, stageBodies, now) {
@@ -479,11 +522,19 @@ function updateMusicalLinks(runtime, snapshot, stageBodies, now) {
       continue;
     }
     link.sourceId = definition.sourceId;
-    link.points = musicalCurve(first, second, index % 2 === 0 ? 1 : -1);
+    if (shouldRefreshMusicalConnection({
+      now,
+      lastUpdatedAt: link.geometryUpdatedAt,
+      previous: link.hasGeometry ? link.endpoints : null,
+      first,
+      second,
+      minInterval: 1 / 30,
+    })) {
+      writeMusicalCurve(link, first, second, index % 2 === 0 ? 1 : -1, now);
+    }
     const bodyVisual = runtime.bodyVisuals.get(definition.bodyId);
     const selected = definition.bodyId === runtime.selectedBodyId;
     const impulse = bodyVisual?.impulse ?? 0;
-    link.line.geometry.setPositions(link.points.flatMap((point) => [point.x, point.y, point.z]));
     link.line.material.resolution.set(runtime.renderer.domElement.clientWidth, runtime.renderer.domElement.clientHeight);
     link.line.material.opacity = 0.36 + (selected ? 0.12 : 0) + impulse * 0.4;
     link.line.visible = true;
@@ -496,8 +547,7 @@ function updateMusicalLinks(runtime, snapshot, stageBodies, now) {
     const pulseAge = now - link.pulseAt;
     if (pulseAge >= 0 && pulseAge <= 0.9) {
       const progress = pulseAge / 0.9;
-      const point = link.points[Math.min(link.points.length - 1, Math.floor(progress * link.points.length))];
-      link.pulse.position.set(point.x, point.y + 0.03, point.z);
+      setCurvePosition(link.pulse.position, link.curve, progress);
       link.pulse.material.opacity = Math.sin(progress * Math.PI) * 0.92;
       link.pulse.scale.setScalar(0.28 + Math.sin(progress * Math.PI) * 0.34);
       link.pulse.visible = true;
@@ -882,6 +932,7 @@ export function SoundflightStage(props) {
       if (propsRef.current.interactionMode === "launch" && !canBeginRadialLaunchFromHit(bodyId)) {
         event.stopImmediatePropagation();
         propsRef.current.onLaunchPhase("armed");
+        propsRef.current.onBirthRefused("START AT THE STAR — THEN DRAG OUTWARD");
         return;
       }
       if (bodyId && propsRef.current.interactionMode !== "launch") {

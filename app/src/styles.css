@@ -1668,25 +1668,40 @@ input:focus-visible {
 }
 
 .soundflight-zoom-controls button {
+  position: relative;
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
   padding: 0;
-  border: 1px solid rgb(226 190 125 / 20%);
+  border: 0;
   border-radius: 50%;
   color: rgb(226 190 125 / 64%);
-  background: rgb(3 3 2 / 22%);
-  backdrop-filter: blur(10px);
+  background: transparent;
   cursor: pointer;
   place-items: center;
-  transition: border-color 180ms ease, color 180ms ease, transform 180ms ease;
+  transition: color 180ms ease, transform 180ms ease;
+}
+
+.soundflight-zoom-controls button::before {
+  position: absolute;
+  inset: 8px;
+  border: 1px solid rgb(226 190 125 / 20%);
+  border-radius: 50%;
+  background: rgb(3 3 2 / 22%);
+  backdrop-filter: blur(10px);
+  content: "";
+  transition: border-color 180ms ease;
 }
 
 .soundflight-zoom-controls button:hover,
 .soundflight-zoom-controls button:focus-visible {
-  border-color: rgb(226 190 125 / 62%);
   color: #f4c978;
   outline: none;
+}
+
+.soundflight-zoom-controls button:hover::before,
+.soundflight-zoom-controls button:focus-visible::before {
+  border-color: rgb(226 190 125 / 62%);
 }
 
 .soundflight-zoom-controls button:active {
@@ -1694,6 +1709,7 @@ input:focus-visible {
 }
 
 .soundflight-zoom-controls svg {
+  position: relative;
   width: 13px;
   height: 13px;
 }
