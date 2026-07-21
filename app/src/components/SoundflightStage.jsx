@@ -25,6 +25,7 @@ import {
   bodyToStage,
   buildMusicalConnections,
   cameraScaleLabel,
+  canBeginRadialLaunchFromHit,
   nextCameraDistance,
   selectRenderProfile,
   sonicIntensity,
@@ -878,12 +879,12 @@ export function SoundflightStage(props) {
 
     const onPointerDown = (event) => {
       const bodyId = hitBody(event);
-      if (bodyId && propsRef.current.interactionMode === "launch") {
+      if (propsRef.current.interactionMode === "launch" && !canBeginRadialLaunchFromHit(bodyId)) {
         event.stopImmediatePropagation();
         propsRef.current.onLaunchPhase("armed");
         return;
       }
-      if (bodyId) {
+      if (bodyId && propsRef.current.interactionMode !== "launch") {
         event.stopImmediatePropagation();
         renderer.domElement.setPointerCapture(event.pointerId);
         propsRef.current.onBodySelect(bodyId);

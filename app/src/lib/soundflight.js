@@ -42,6 +42,10 @@ export function launchGuidance(phase) {
   return { ...guidance };
 }
 
+export function canBeginRadialLaunchFromHit(bodyId) {
+  return bodyId == null || bodyId === "star";
+}
+
 export function voiceVisual(voiceId) {
   const visual = VOICE_VISUALS[voiceId];
   if (!visual) throw new Error(`Unknown cosmic voice: ${voiceId}`);

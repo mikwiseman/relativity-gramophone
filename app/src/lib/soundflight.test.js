@@ -5,6 +5,7 @@ import {
   bodyToStage,
   cameraScaleLabel,
   buildMusicalConnections,
+  canBeginRadialLaunchFromHit,
   createSoundflightState,
   frequencyToNoteName,
   launchGuidance,
@@ -56,6 +57,12 @@ test("free camera flight is an explicit explore mode that always returns to comp
   assert.deepEqual(exploring, { mode: "explore", followingBodyId: null });
   assert.deepEqual(reduceSoundflightState(exploring, { type: "USER_NAVIGATE" }), exploring);
   assert.deepEqual(reduceSoundflightState(exploring, { type: "EXIT_EXPLORE" }), createSoundflightState());
+});
+
+test("a radial launch accepts the star itself but rejects existing planets", () => {
+  assert.equal(canBeginRadialLaunchFromHit(null), true);
+  assert.equal(canBeginRadialLaunchFromHit("star"), true);
+  assert.equal(canBeginRadialLaunchFromHit("europa"), false);
 });
 
 test("render profile preserves the artwork while bounding GPU cost", () => {
