@@ -4,20 +4,20 @@
 
 - The user selected the current production styling rather than one of the generated redesigns.
 - Production URL: `https://waiwai.is/relativity`
-- Source screenshot: `/Users/mikwiseman/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/source-current-805x1000.png`
+- Source screenshot: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/source-current-805x1000.png`
 
 **Rendered implementation**
 
-- Local URL: `http://127.0.0.1:4173/`
-- Screenshot: `/Users/mikwiseman/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/implementation-latest-1280x720.png`
+- Local surface: Vite preview
+- Screenshot: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/implementation-latest-1280x720.png`
 - Viewport: 1280 × 720 CSS px at DPR 2 for both source and implementation
 - State: lacquer theme, Quinta, paused, systems closed, editorial composition camera
-- Full-view comparison: `/Users/mikwiseman/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/comparison-full.png`
-- Focused left controls: `/Users/mikwiseman/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/comparison-left-controls.png`
-- Focused right controls: `/Users/mikwiseman/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/comparison-right-controls.png`
-- Note-pulse evidence: `/Users/mikwiseman/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/11-latest-pulse.png`
-- Explore-return evidence: `/Users/mikwiseman/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/08-returned-compose.png`
-- Integrated `wai-web` launch evidence: `/Users/mikwiseman/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/wai-web-local-launch-1280x720.png`
+- Full-view comparison: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/comparison-full.png`
+- Focused left controls: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/comparison-left-controls.png`
+- Focused right controls: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/comparison-right-controls.png`
+- Note-pulse evidence: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/11-latest-pulse.png`
+- Explore-return evidence: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/08-returned-compose.png`
+- Integrated `wai-web` launch evidence: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/wai-web-local-launch-1280x720.png`
 
 **Findings**
 
@@ -50,7 +50,7 @@
 - Zoom in/out updates the AU scale from 1.5 to 1.3 and back.
 - Systems opens with presets and the existing Voices, Physics, and Share actions.
 - Browser console warnings/errors after the final interaction pass: none.
-- The production-shaped `wai-web` bundle at `http://127.0.0.1:3000/relativity` loads its JS, CSS, and generated textures from `/relativity/assets`, completes the same launch flow, and has no browser console warnings or errors.
+- The production-shaped local `wai-web` build loads its JS, CSS, and generated textures from `/relativity/assets`, completes the same launch flow, and has no browser console warnings or errors.
 
 **Implementation checklist**
 
