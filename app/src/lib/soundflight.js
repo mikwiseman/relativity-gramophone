@@ -1,4 +1,11 @@
-const DEFAULT_STATE = Object.freeze({ mode: "navigate", followingBodyId: null });
+const DEFAULT_STATE = Object.freeze({ mode: "compose", followingBodyId: null });
+
+const VOICE_VISUALS = Object.freeze({
+  earth: Object.freeze({ label: "EARTH", colorName: "CYAN", color: 0x72edff }),
+  moon: Object.freeze({ label: "MOON", colorName: "AMBER", color: 0xffc66d }),
+  light: Object.freeze({ label: "LIGHT", colorName: "MAGENTA", color: 0xff76d6 }),
+  "alpha-centauri": Object.freeze({ label: "ALPHA CEN", colorName: "MINT", color: 0x8fffc1 }),
+});
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -11,20 +18,20 @@ export function createSoundflightState() {
 const LAUNCH_GUIDANCE = Object.freeze({
   armed: Object.freeze({
     eyebrow: "CREATE A SINGING WORLD",
-    title: "PRESS EMPTY SPACE",
-    detail: "Hold to grow its mass",
+    title: "DRAG FROM THE STAR",
+    detail: "Distance chooses the pitch",
     activeStep: 0,
   }),
   forming: Object.freeze({
     eyebrow: "A NEW VOICE IS FORMING",
-    title: "HOLD · THEN DRAG",
-    detail: "Drag to choose its orbit",
+    title: "MOVE OUTWARD",
+    detail: "Low · mid · high",
     activeStep: 1,
   }),
   aiming: Object.freeze({
     eyebrow: "THE ORBIT IS READY",
     title: "RELEASE TO HEAR IT",
-    detail: "The world will join the symphony",
+    detail: "A stable voice joins the symphony",
     activeStep: 2,
   }),
 });
@@ -35,18 +42,50 @@ export function launchGuidance(phase) {
   return { ...guidance };
 }
 
+export function voiceVisual(voiceId) {
+  const visual = VOICE_VISUALS[voiceId];
+  if (!visual) throw new Error(`Unknown cosmic voice: ${voiceId}`);
+  return { ...visual };
+}
+
+export function buildMusicalConnections(bodies, star) {
+  if (![star?.x, star?.y].every(Number.isFinite)) throw new Error("Musical connections require a finite star position");
+  return bodies.map((body, index) => {
+    if (![body?.x, body?.y].every(Number.isFinite)) throw new Error(`Musical connection requires a finite body: ${body?.id ?? "missing"}`);
+    const visual = voiceVisual(body.voice);
+    return {
+      bodyId: body.id,
+      sourceId: index === 0 ? "star" : bodies[index - 1].id,
+      voice: body.voice,
+      color: visual.color,
+    };
+  });
+}
+
+export function frequencyToNoteName(frequency) {
+  if (!Number.isFinite(frequency) || frequency <= 0) throw new Error("Frequency must be positive");
+  const midi = Math.round(69 + 12 * Math.log2(frequency / 440));
+  const notes = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+  return `${notes[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
+}
+
 export function reduceSoundflightState(state, action) {
   switch (action.type) {
     case "ARM_LAUNCH":
       return { mode: "launch", followingBodyId: null };
     case "FOLLOW_BODY":
       if (!action.bodyId) throw new Error("FOLLOW_BODY requires a bodyId");
-      return { mode: "follow", followingBodyId: action.bodyId };
+      return createSoundflightState();
     case "COMPLETE_LAUNCH":
       if (!action.bodyId) throw new Error("COMPLETE_LAUNCH requires a bodyId");
-      return { mode: "follow", followingBodyId: action.bodyId };
-    case "CANCEL":
+      return createSoundflightState();
+    case "ENTER_EXPLORE":
+      return { mode: "explore", followingBodyId: null };
+    case "EXIT_EXPLORE":
+      return createSoundflightState();
     case "USER_NAVIGATE":
+      return state.mode === "explore" ? state : createSoundflightState();
+    case "CANCEL":
       return createSoundflightState();
     default:
       throw new Error(`Unknown soundflight action: ${action.type}`);
@@ -81,7 +120,7 @@ export function selectRenderProfile({
       particleCount: 480,
       trailSamples: 96,
       bloomStrength: 0.92,
-      autoDrift: true,
+      autoDrift: false,
     };
   }
 
@@ -90,7 +129,7 @@ export function selectRenderProfile({
     particleCount: 1100,
     trailSamples: 160,
     bloomStrength: 1.18,
-    autoDrift: true,
+    autoDrift: false,
   };
 }
 

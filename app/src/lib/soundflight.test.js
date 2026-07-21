@@ -4,31 +4,34 @@ import assert from "node:assert/strict";
 import {
   bodyToStage,
   cameraScaleLabel,
+  buildMusicalConnections,
   createSoundflightState,
+  frequencyToNoteName,
   launchGuidance,
   nextCameraDistance,
   reduceSoundflightState,
   selectRenderProfile,
   sonicIntensity,
+  voiceVisual,
 } from "./soundflight.js";
 
 test("launch guidance turns one unfamiliar gesture into three explicit moments", () => {
   assert.deepEqual(launchGuidance("armed"), {
     eyebrow: "CREATE A SINGING WORLD",
-    title: "PRESS EMPTY SPACE",
-    detail: "Hold to grow its mass",
+    title: "DRAG FROM THE STAR",
+    detail: "Distance chooses the pitch",
     activeStep: 0,
   });
   assert.deepEqual(launchGuidance("forming"), {
     eyebrow: "A NEW VOICE IS FORMING",
-    title: "HOLD · THEN DRAG",
-    detail: "Drag to choose its orbit",
+    title: "MOVE OUTWARD",
+    detail: "Low · mid · high",
     activeStep: 1,
   });
   assert.deepEqual(launchGuidance("aiming"), {
     eyebrow: "THE ORBIT IS READY",
     title: "RELEASE TO HEAR IT",
-    detail: "The world will join the symphony",
+    detail: "A stable voice joins the symphony",
     activeStep: 2,
   });
   assert.throws(() => launchGuidance("mystery"), /unknown launch phase/i);
@@ -36,7 +39,7 @@ test("launch guidance turns one unfamiliar gesture into three explicit moments",
 
 test("soundflight interaction state keeps navigation and launch mutually exclusive", () => {
   const initial = createSoundflightState();
-  assert.deepEqual(initial, { mode: "navigate", followingBodyId: null });
+  assert.deepEqual(initial, { mode: "compose", followingBodyId: null });
 
   const launching = reduceSoundflightState(initial, { type: "ARM_LAUNCH" });
   assert.deepEqual(launching, { mode: "launch", followingBodyId: null });
@@ -45,18 +48,14 @@ test("soundflight interaction state keeps navigation and launch mutually exclusi
     type: "COMPLETE_LAUNCH",
     bodyId: "nova-1",
   });
-  assert.deepEqual(completed, { mode: "follow", followingBodyId: "nova-1" });
+  assert.deepEqual(completed, { mode: "compose", followingBodyId: null });
 });
 
-test("following a body yields immediately when the visitor flies the camera", () => {
-  const following = reduceSoundflightState(createSoundflightState(), {
-    type: "FOLLOW_BODY",
-    bodyId: "europa",
-  });
-  assert.deepEqual(following, { mode: "follow", followingBodyId: "europa" });
-
-  const navigating = reduceSoundflightState(following, { type: "USER_NAVIGATE" });
-  assert.deepEqual(navigating, createSoundflightState());
+test("free camera flight is an explicit explore mode that always returns to composition", () => {
+  const exploring = reduceSoundflightState(createSoundflightState(), { type: "ENTER_EXPLORE" });
+  assert.deepEqual(exploring, { mode: "explore", followingBodyId: null });
+  assert.deepEqual(reduceSoundflightState(exploring, { type: "USER_NAVIGATE" }), exploring);
+  assert.deepEqual(reduceSoundflightState(exploring, { type: "EXIT_EXPLORE" }), createSoundflightState());
 });
 
 test("render profile preserves the artwork while bounding GPU cost", () => {
@@ -70,7 +69,7 @@ test("render profile preserves the artwork while bounding GPU cost", () => {
   assert.equal(desktop.pixelRatio, 1.5);
   assert.equal(desktop.particleCount, 1100);
   assert.equal(desktop.trailSamples, 160);
-  assert.equal(desktop.autoDrift, true);
+  assert.equal(desktop.autoDrift, false);
 
   const compact = selectRenderProfile({
     width: 390,
@@ -93,6 +92,34 @@ test("render profile preserves the artwork while bounding GPU cost", () => {
   assert.equal(reduced.particleCount, 90);
   assert.equal(reduced.trailSamples, 40);
   assert.equal(reduced.autoDrift, false);
+});
+
+test("voice colors are stable, named, and never rely on color alone", () => {
+  assert.deepEqual(voiceVisual("earth"), { label: "EARTH", colorName: "CYAN", color: 0x72edff });
+  assert.deepEqual(voiceVisual("moon"), { label: "MOON", colorName: "AMBER", color: 0xffc66d });
+  assert.deepEqual(voiceVisual("light"), { label: "LIGHT", colorName: "MAGENTA", color: 0xff76d6 });
+  assert.deepEqual(voiceVisual("alpha-centauri"), { label: "ALPHA CEN", colorName: "MINT", color: 0x8fffc1 });
+  assert.throws(() => voiceVisual("mystery"), /unknown cosmic voice/i);
+});
+
+test("musical connections keep one stable colored ensemble chain in score order", () => {
+  const links = buildMusicalConnections([
+    { id: "outer", x: 0.5, y: 0, voice: "light" },
+    { id: "inner", x: 0.2, y: 0, voice: "earth" },
+    { id: "middle", x: 0, y: 0.35, voice: "moon" },
+  ], { x: 0, y: 0 });
+
+  assert.deepEqual(links, [
+    { bodyId: "outer", sourceId: "star", voice: "light", color: 0xff76d6 },
+    { bodyId: "inner", sourceId: "outer", voice: "earth", color: 0x72edff },
+    { bodyId: "middle", sourceId: "inner", voice: "moon", color: 0xffc66d },
+  ]);
+});
+
+test("the sounding pitch has a compact musical note name", () => {
+  assert.equal(frequencyToNoteName(440), "A4");
+  assert.equal(frequencyToNoteName(261.63), "C4");
+  assert.throws(() => frequencyToNoteName(0), /positive/i);
 });
 
 test("body positions map the deterministic 2D simulation into one stable orbital plane", () => {

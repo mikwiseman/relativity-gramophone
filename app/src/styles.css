@@ -1546,16 +1546,16 @@ input:focus-visible {
 
 .soundflight-title,
 .soundflight-systems-trigger,
-.soundflight-flight-cue,
-.soundflight-following,
+.soundflight-voice-key,
+.soundflight-explore,
 .soundflight-voice-breath {
   transition: opacity 260ms ease;
 }
 
 .app-shell[data-launch-mode="true"] .soundflight-title,
 .app-shell[data-launch-mode="true"] .soundflight-systems-trigger,
-.app-shell[data-launch-mode="true"] .soundflight-flight-cue,
-.app-shell[data-launch-mode="true"] .soundflight-following,
+.app-shell[data-launch-mode="true"] .soundflight-voice-key,
+.app-shell[data-launch-mode="true"] .soundflight-explore,
 .app-shell[data-launch-mode="true"] .soundflight-voice-breath {
   opacity: 0.18;
 }
@@ -1590,33 +1590,70 @@ input:focus-visible {
   height: 19px;
 }
 
-.soundflight-flight-cue {
+.soundflight-voice-key {
   position: absolute;
   z-index: 4;
   top: 50%;
   right: clamp(32px, 4vw, 64px);
   display: grid;
-  width: 172px;
-  gap: 9px;
+  width: 180px;
+  gap: 12px;
   color: rgb(226 190 125 / 52%);
   transform: translateY(-50%);
 }
 
-.soundflight-flight-cue svg {
-  width: 20px;
-  height: 20px;
-}
-
-.soundflight-flight-cue span {
-  max-width: 165px;
-  font-size: 8px;
+.soundflight-voice-key > span,
+.soundflight-voice-key > p {
+  margin: 0;
+  font-size: 7px;
   font-weight: 600;
-  letter-spacing: 0.22em;
-  line-height: 1.65;
+  letter-spacing: 0.28em;
 }
 
-.soundflight-flight-cue strong {
-  margin-top: 8px;
+.soundflight-voice-key ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+  list-style: none;
+}
+
+.soundflight-voice-key li {
+  display: grid;
+  grid-template-columns: 8px auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.soundflight-voice-key li i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--voice-color);
+  box-shadow: 0 0 12px var(--voice-color);
+}
+
+.soundflight-voice-key li strong,
+.soundflight-voice-key li small {
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+}
+
+.soundflight-voice-key li strong {
+  color: rgb(236 198 132 / 78%);
+}
+
+.soundflight-voice-key li small {
+  color: rgb(226 190 125 / 38%);
+}
+
+.soundflight-voice-key > p {
+  color: rgb(116 226 241 / 68%);
+}
+
+.soundflight-voice-key > b {
   padding-top: 13px;
   border-top: 1px solid rgb(226 190 125 / 18%);
   color: #d9aa5c;
@@ -1692,7 +1729,7 @@ input:focus-visible {
   transform: translateX(-50%);
 }
 
-.soundflight-following {
+.soundflight-explore {
   position: absolute;
   z-index: 6;
   right: clamp(32px, 4vw, 64px);
@@ -1711,13 +1748,14 @@ input:focus-visible {
   letter-spacing: 0.28em;
 }
 
-.soundflight-following svg {
+.soundflight-explore svg {
   width: 13px;
   height: 13px;
 }
 
-.soundflight-following:hover,
-.soundflight-following:focus-visible {
+.soundflight-explore:hover,
+.soundflight-explore:focus-visible,
+.soundflight-explore[aria-pressed="true"] {
   color: #f1c77b;
 }
 
@@ -1876,6 +1914,16 @@ input:focus-visible {
   gap: 5px;
 }
 
+@media (max-width: 960px) {
+  .soundflight-voice-key {
+    top: auto;
+    right: 24px;
+    bottom: 132px;
+    width: 150px;
+    transform: none;
+  }
+}
+
 .sound-atlas-control,
 .relativity-control {
   position: static;
@@ -1989,19 +2037,22 @@ input:focus-visible {
     height: 48px;
   }
 
-  .soundflight-flight-cue {
+  .soundflight-voice-key {
     top: auto;
     right: 16px;
-    bottom: 120px;
-    width: 128px;
+    bottom: 126px;
+    width: 146px;
     transform: none;
   }
 
-  .soundflight-flight-cue span {
+  .soundflight-voice-key > span,
+  .soundflight-voice-key > p,
+  .soundflight-voice-key li strong,
+  .soundflight-voice-key li small {
     font-size: 6px;
   }
 
-  .soundflight-following {
+  .soundflight-explore {
     right: 16px;
     bottom: 63px;
     max-width: 154px;
@@ -2059,7 +2110,7 @@ input:focus-visible {
   }
 
   .soundflight-title p,
-  .soundflight-flight-cue,
+  .soundflight-voice-key,
   .soundflight-voice-breath {
     display: none;
   }
@@ -2101,7 +2152,7 @@ input:focus-visible {
     margin-top: 7px;
   }
 
-  .soundflight-following {
+  .soundflight-explore {
     right: 16px;
     bottom: 9px;
   }

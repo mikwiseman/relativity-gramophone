@@ -18,14 +18,17 @@ import {
 } from "../lib/physicsEngine.js";
 import {
   STAR_CORE_RADIUS,
-  birthBodyFromGesture,
+  birthBodyFromRadialLaunch,
+  previewOrbit,
 } from "../lib/starBirth.js";
 import {
   bodyToStage,
+  buildMusicalConnections,
   cameraScaleLabel,
   nextCameraDistance,
   selectRenderProfile,
   sonicIntensity,
+  voiceVisual,
 } from "../lib/soundflight.js";
 import { nearestStringPoint } from "../lib/harpStrings.js";
 
@@ -150,7 +153,7 @@ function createRibbonTrail() {
   return { group, lines };
 }
 
-function updateRibbonTrail(ribbon, history, intensity) {
+function updateRibbonTrail(ribbon, history, intensity, color) {
   if (history.length < 2) {
     ribbon.group.visible = false;
     return;
@@ -175,8 +178,9 @@ function updateRibbonTrail(ribbon, history, intensity) {
       );
     }
     const line = ribbon.lines[lineIndex];
+    line.material.color.setHex(color);
     line.geometry.setPositions(positions);
-    line.material.opacity = (0.12 + intensity * 0.2) * (1 - lineIndex * 0.12);
+    line.material.opacity = (0.004 + intensity * 0.014) * (1 - lineIndex * 0.22);
   }
 }
 
@@ -319,33 +323,28 @@ function createLaunchPreview() {
     }),
   );
   group.add(seed);
-  const line = createTrailLine(0xc79cff);
-  group.add(line);
+  const guideLine = createTrailLine(0xc79cff);
+  const orbitLine = createTrailLine(0xc79cff);
+  group.add(guideLine, orbitLine);
   group.visible = false;
-  return { group, seed, line };
+  return { group, seed, guideLine, orbitLine };
 }
 
 function createParticleCloud() {
   const random = seededRandom(1905);
   const positions = new Float32Array(MAX_TRAIL_PARTICLES * 3);
-  const colors = new Float32Array(MAX_TRAIL_PARTICLES * 3);
-  const palette = TRAIL_COLORS.map((color) => new THREE.Color(color));
   for (let index = 0; index < MAX_TRAIL_PARTICLES; index += 1) {
-    const color = palette[index % palette.length];
-    colors[index * 3] = color.r;
-    colors[index * 3 + 1] = color.g;
-    colors[index * 3 + 2] = color.b;
     positions[index * 3] = random() * 0.001;
     positions[index * 3 + 1] = random() * 0.001;
     positions[index * 3 + 2] = random() * 0.001;
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
   const material = new THREE.PointsMaterial({
     map: createRadialTexture(),
     size: 0.038,
-    vertexColors: true,
+    vertexColors: false,
+    color: 0xffffff,
     transparent: true,
     opacity: 0.62,
     depthWrite: false,
@@ -389,6 +388,122 @@ function createHarmonicKnot() {
   const line = createTrailLine(0xf8dd99);
   line.material.uniforms.uOpacity.value = 0;
   return line;
+}
+
+function createMusicalLink(color) {
+  const geometry = new LineGeometry();
+  geometry.setPositions([0, 0, 0, 0, 0, 0]);
+  const material = new LineMaterial({
+    color,
+    linewidth: 2.1,
+    transparent: true,
+    opacity: 0.34,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+    alphaToCoverage: true,
+  });
+  const line = new Line2(geometry, material);
+  line.frustumCulled = false;
+  const pulse = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: createRadialTexture(),
+    color,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  }));
+  pulse.scale.setScalar(0.42);
+  pulse.visible = false;
+  return { line, pulse, color, sourceId: null, points: [], pulseAt: -Infinity };
+}
+
+function musicalCurve(first, second, bendDirection) {
+  const dx = second.x - first.x;
+  const dz = second.z - first.z;
+  const length = Math.max(0.001, Math.hypot(dx, dz));
+  const normalX = -dz / length;
+  const normalZ = dx / length;
+  const bend = Math.min(0.42, length * 0.12) * bendDirection;
+  const points = [];
+  for (let index = 0; index <= 36; index += 1) {
+    const progress = index / 36;
+    const arc = Math.sin(progress * Math.PI) * bend;
+    points.push({
+      x: THREE.MathUtils.lerp(first.x, second.x, progress) + normalX * arc,
+      y: 0.04 + Math.sin(progress * Math.PI) * 0.07,
+      z: THREE.MathUtils.lerp(first.z, second.z, progress) + normalZ * arc,
+    });
+  }
+  return points;
+}
+
+function updateMusicalLinks(runtime, snapshot, stageBodies, now) {
+  const star = snapshot.bodies.find((body) => body.kind === "star");
+  const planets = snapshot.bodies.filter((body) => body.kind === "planet");
+  if (!star) return;
+  const definitions = buildMusicalConnections(planets, star);
+  const liveIds = new Set(definitions.map((definition) => definition.bodyId));
+
+  for (const [bodyId, link] of runtime.musicalLinks) {
+    if (liveIds.has(bodyId)) continue;
+    runtime.scene.remove(link.line, link.pulse);
+    disposeObject(link.line);
+    link.pulse.material.map?.dispose();
+    link.pulse.material.dispose();
+    runtime.musicalLinks.delete(bodyId);
+  }
+
+  for (let index = 0; index < definitions.length; index += 1) {
+    const definition = definitions[index];
+    let link = runtime.musicalLinks.get(definition.bodyId);
+    if (!link || link.color !== definition.color) {
+      if (link) {
+        runtime.scene.remove(link.line, link.pulse);
+        disposeObject(link.line);
+        link.pulse.material.map?.dispose();
+        link.pulse.material.dispose();
+      }
+      link = createMusicalLink(definition.color);
+      runtime.scene.add(link.line, link.pulse);
+      runtime.musicalLinks.set(definition.bodyId, link);
+    }
+
+    const first = stageBodies.get(definition.sourceId);
+    const second = stageBodies.get(definition.bodyId);
+    if (!first || !second) {
+      link.line.visible = false;
+      link.pulse.visible = false;
+      continue;
+    }
+    link.sourceId = definition.sourceId;
+    link.points = musicalCurve(first, second, index % 2 === 0 ? 1 : -1);
+    const bodyVisual = runtime.bodyVisuals.get(definition.bodyId);
+    const selected = definition.bodyId === runtime.selectedBodyId;
+    const impulse = bodyVisual?.impulse ?? 0;
+    link.line.geometry.setPositions(link.points.flatMap((point) => [point.x, point.y, point.z]));
+    link.line.material.resolution.set(runtime.renderer.domElement.clientWidth, runtime.renderer.domElement.clientHeight);
+    link.line.material.opacity = 0.36 + (selected ? 0.12 : 0) + impulse * 0.4;
+    link.line.visible = true;
+
+    const pendingPulseAt = runtime.pendingLinkPulses.get(definition.bodyId);
+    if (pendingPulseAt !== undefined) {
+      link.pulseAt = pendingPulseAt;
+      runtime.pendingLinkPulses.delete(definition.bodyId);
+    }
+    const pulseAge = now - link.pulseAt;
+    if (pulseAge >= 0 && pulseAge <= 0.9) {
+      const progress = pulseAge / 0.9;
+      const point = link.points[Math.min(link.points.length - 1, Math.floor(progress * link.points.length))];
+      link.pulse.position.set(point.x, point.y + 0.03, point.z);
+      link.pulse.material.opacity = Math.sin(progress * Math.PI) * 0.92;
+      link.pulse.scale.setScalar(0.28 + Math.sin(progress * Math.PI) * 0.34);
+      link.pulse.visible = true;
+    } else {
+      link.pulse.visible = false;
+    }
+  }
 }
 
 function updateHarmonicKnot(line, resonance, bodiesById) {
@@ -527,6 +642,9 @@ export function SoundflightStage(props) {
     controls.enableDamping = true;
     controls.dampingFactor = 0.055;
     controls.zoomToCursor = true;
+    controls.enableRotate = false;
+    controls.enablePan = false;
+    controls.enableZoom = true;
     controls.rotateSpeed = 0.34;
     controls.panSpeed = 0.62;
     controls.zoomSpeed = 0.82;
@@ -604,13 +722,17 @@ export function SoundflightStage(props) {
       ribbonTrail,
       harmonicKnot,
       bodyVisuals: new Map(),
+      musicalLinks: new Map(),
+      pendingLinkPulses: new Map(),
+      selectedBodyId: props.selectedBodyId,
       profile: null,
       selectedHistory: [],
       lastParticleUpdate: -Infinity,
       lastCameraReport: -Infinity,
       lastCameraCommandId: 0,
-      lastUserNavigation: performance.now(),
-      lastFollowingBodyId: null,
+      resettingCamera: false,
+      editorialCameraPosition: new THREE.Vector3(-1.6, 4.6, 11.2),
+      editorialCameraTarget: new THREE.Vector3(0.5, 0, 0),
       raycaster: new THREE.Raycaster(),
       pointer: new THREE.Vector2(),
       plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
@@ -703,29 +825,48 @@ export function SoundflightStage(props) {
       propsRef.current.onPluckBloom({ ...body }, pluck);
     };
 
-    const showLaunchPreview = (birth, now) => {
+    const showLaunchPreview = (birth) => {
       const engine = engineRef.current;
       const star = engine.getBody("star");
       try {
-        const candidate = birthBodyFromGesture({
-          press: birth.press,
-          aim: birth.aim,
-          holdSeconds: (now - birth.startedAt) / 1000,
+        const candidate = birthBodyFromRadialLaunch({
+          release: birth.release,
           star,
           existingIds: engine.state.bodies.filter((body) => body.kind === "planet").map((body) => body.id),
           birthIndex: birthCountRef.current,
         });
         const position = bodyToStage(candidate, STAGE_SCALE);
+        const starPosition = bodyToStage(star, STAGE_SCALE);
+        const voice = voiceVisual(candidate.voice);
         launchPreview.group.visible = true;
         launchPreview.seed.position.set(position.x, 0.08, position.z);
-        launchPreview.seed.scale.setScalar(0.72 + clamp((now - birth.startedAt) / 1800, 0, 1) * 0.72);
-        const pressPoint = bodyToStage(birth.press, STAGE_SCALE);
-        updateTrailLine(launchPreview.line, [
-          { x: pressPoint.x, y: 0.03, z: pressPoint.z },
+        launchPreview.seed.scale.setScalar(1.1);
+        launchPreview.seed.material.emissive.setHex(voice.color);
+        launchPreview.guideLine.material.uniforms.uColor.value.setHex(voice.color);
+        launchPreview.orbitLine.material.uniforms.uColor.value.setHex(voice.color);
+        updateTrailLine(launchPreview.guideLine, [
+          { x: starPosition.x, y: 0.03, z: starPosition.z },
           { x: position.x, y: 0.08, z: position.z },
-        ], 0.4, 0.9);
+        ], 0.4, 0.72);
+        updateTrailLine(
+          launchPreview.orbitLine,
+          previewOrbit(candidate, star).map((point) => bodyToStage(point, STAGE_SCALE)),
+          0,
+          0.36,
+        );
         propsRef.current.onGestationTone(candidate);
       } catch (error) {
+        if (error instanceof Error && /drag outward/i.test(error.message)) {
+          const starPosition = bodyToStage(star, STAGE_SCALE);
+          const releasePosition = bodyToStage(birth.release, STAGE_SCALE);
+          launchPreview.group.visible = true;
+          launchPreview.seed.position.set(releasePosition.x, 0.08, releasePosition.z);
+          launchPreview.seed.scale.setScalar(0.72);
+          updateTrailLine(launchPreview.guideLine, [starPosition, releasePosition], 0, 0.34);
+          launchPreview.orbitLine.visible = false;
+          propsRef.current.onGestationTone(null);
+          return;
+        }
         runtime.birth = null;
         controls.enabled = true;
         launchPreview.group.visible = false;
@@ -747,7 +888,6 @@ export function SoundflightStage(props) {
         renderer.domElement.setPointerCapture(event.pointerId);
         propsRef.current.onBodySelect(bodyId);
         propsRef.current.onBodyAudition(bodyId);
-        propsRef.current.onFollowBody(bodyId);
         if (!propsRef.current.isListener) {
           const planePoint = intersectPlane(event);
           runtime.drag = { id: bodyId, start: planePoint, pointerId: event.pointerId };
@@ -778,8 +918,8 @@ export function SoundflightStage(props) {
       if (!point) return;
       const star = engineRef.current.getBody("star");
       const world = stageToWorld(point);
-      if (Math.hypot(world.x - star.x, world.y - star.y) < STAR_CORE_RADIUS) {
-        propsRef.current.onBirthRefused("A WORLD CANNOT BE BORN INSIDE THE STAR");
+      if (Math.hypot(world.x - star.x, world.y - star.y) > STAR_CORE_RADIUS * 1.8) {
+        propsRef.current.onBirthRefused("START AT THE STAR — THEN DRAG OUTWARD");
         return;
       }
       if (engineRef.current.state.bodies.filter((body) => body.kind === "planet").length >= MAX_WORLDS) {
@@ -787,10 +927,10 @@ export function SoundflightStage(props) {
         return;
       }
       renderer.domElement.setPointerCapture(event.pointerId);
-      runtime.birth = { startedAt: performance.now(), press: world, aim: null, phase: "forming", pointerId: event.pointerId };
+      runtime.birth = { release: world, phase: "forming", pointerId: event.pointerId };
       propsRef.current.onLaunchPhase("forming");
       controls.enabled = false;
-      showLaunchPreview(runtime.birth, performance.now());
+      showLaunchPreview(runtime.birth);
     };
 
     const onPointerMove = (event) => {
@@ -799,15 +939,13 @@ export function SoundflightStage(props) {
         const point = intersectPlane(event);
         if (!point) return;
         const world = stageToWorld(point);
-        runtime.birth.aim = {
-          x: world.x - runtime.birth.press.x,
-          y: world.y - runtime.birth.press.y,
-        };
-        if (runtime.birth.phase !== "aiming" && Math.hypot(runtime.birth.aim.x, runtime.birth.aim.y) > 0.035) {
+        runtime.birth.release = world;
+        const star = engineRef.current.getBody("star");
+        if (runtime.birth.phase !== "aiming" && Math.hypot(world.x - star.x, world.y - star.y) > 0.1) {
           runtime.birth.phase = "aiming";
           propsRef.current.onLaunchPhase("aiming");
         }
-        showLaunchPreview(runtime.birth, performance.now());
+        showLaunchPreview(runtime.birth);
         return;
       }
       if (runtime.pluck) {
@@ -884,10 +1022,8 @@ export function SoundflightStage(props) {
         propsRef.current.onGestationTone(null);
         try {
           const engine = engineRef.current;
-          const spec = birthBodyFromGesture({
-            press: birth.press,
-            aim: birth.aim,
-            holdSeconds: (performance.now() - birth.startedAt) / 1000,
+          const spec = birthBodyFromRadialLaunch({
+            release: birth.release,
             star: engine.getBody("star"),
             existingIds: engine.state.bodies.filter((body) => body.kind === "planet").map((body) => body.id),
             birthIndex: birthCountRef.current,
@@ -896,8 +1032,8 @@ export function SoundflightStage(props) {
           birthCountRef.current += 1;
           propsRef.current.onBodySelect(spec.id);
           propsRef.current.onBodyGesture(birthEvent);
+          runtime.pendingLinkPulses.set(spec.id, performance.now() / 1000);
           propsRef.current.onBirthBloom({ ...engine.getBody(spec.id) });
-          propsRef.current.onFollowBody(spec.id);
           propsRef.current.onLaunchComplete(spec.id);
         } catch (error) {
           propsRef.current.onBirthRefused(error instanceof Error ? error.message.toUpperCase() : "THE WORLD COULD NOT BE BORN");
@@ -925,7 +1061,6 @@ export function SoundflightStage(props) {
     renderer.domElement.addEventListener("pointerup", finishPointer, { capture: true });
     renderer.domElement.addEventListener("pointercancel", cancelPointer, { capture: true });
     controls.addEventListener("start", () => {
-      runtime.lastUserNavigation = performance.now();
       propsRef.current.onCameraNavigate();
     });
 
@@ -970,7 +1105,10 @@ export function SoundflightStage(props) {
           if (event.kind === "add-body") {
             applyPlaybackEvent(engine, event);
             const born = engine.getBody(event.body.id);
-            if (born) currentProps.onBirthBloom({ ...born });
+            if (born) {
+              runtime.pendingLinkPulses.set(born.id, performance.now() / 1000);
+              currentProps.onBirthBloom({ ...born });
+            }
           } else {
             applyPlaybackEvent(engine, event);
           }
@@ -992,6 +1130,7 @@ export function SoundflightStage(props) {
           };
           const visual = runtime.bodyVisuals.get(body.id);
           if (visual) visual.impulse = 1;
+          runtime.pendingLinkPulses.set(body.id, performance.now() / 1000);
           currentProps.onNote(note);
         }
         if (side) previousSideRef.current.set(body.id, side);
@@ -1020,9 +1159,8 @@ export function SoundflightStage(props) {
         runtime.bodyVisuals.delete(bodyId);
       }
 
-      const selectedId = propsRef.current.interactionMode === "launch"
-        ? null
-        : propsRef.current.followingBodyId ?? propsRef.current.selectedBodyId;
+      const selectedId = propsRef.current.interactionMode === "launch" ? null : propsRef.current.selectedBodyId;
+      runtime.selectedBodyId = selectedId;
       const stageBodies = new Map();
       for (const body of snapshot.bodies) {
         const stage = bodyToStage(body, STAGE_SCALE);
@@ -1048,7 +1186,7 @@ export function SoundflightStage(props) {
         const target = new THREE.Vector3(stage.x, 0, stage.z);
         visual.group.position.lerp(target, 1 - Math.exp(-delta * 22));
         const selected = body.id === selectedId;
-        const scale = (0.24 + body.displayMass * 0.095) * (selected ? 3.2 : 0.5);
+        const scale = (0.24 + body.displayMass * 0.095) * (selected ? 2.15 : 0.72);
         visual.mesh.scale.setScalar(scale);
         visual.rim.scale.setScalar(scale * 4.2);
         visual.mesh.rotation.y += delta * (0.12 + body.properRate * 0.08);
@@ -1063,6 +1201,8 @@ export function SoundflightStage(props) {
           ? 0.52 + intensity * 1.7
           : 0.08 + intensity * 0.34;
         visual.rim.material.opacity = selected ? 0.18 + intensity * 0.62 : 0.04 + intensity * 0.08;
+        const voiceColor = voiceVisual(body.voice).color;
+        visual.trailLines[0].material.uniforms.uColor.value.setHex(voiceColor);
 
         if (propsRef.current.isPlaying && now - visual.lastTrailSample > 1 / 36) {
           visual.lastTrailSample = now;
@@ -1071,11 +1211,12 @@ export function SoundflightStage(props) {
           if (visual.history.length > limit) visual.history.splice(0, visual.history.length - limit);
         }
         for (let index = 0; index < visual.trailLines.length; index += 1) {
+          const showTrail = propsRef.current.isPlaying;
           updateTrailLine(
             visual.trailLines[index],
             visual.history,
             index * 2.1,
-            selected ? 0.16 + intensity * 0.42 : index === 0 ? 0.035 + intensity * 0.1 : 0,
+            showTrail && index === 0 ? (selected ? 0.012 + visual.impulse * 0.08 : 0.008 + visual.impulse * 0.04) : 0,
           );
         }
       }
@@ -1089,8 +1230,14 @@ export function SoundflightStage(props) {
         resonanceStrength: snapshot.resonance?.bodyIds.includes(selectedBody.id) ? snapshot.resonance.strength : 0,
         impulse: selectedVisual.impulse,
       }) : 0;
-      updateRibbonTrail(ribbonTrail, runtime.selectedHistory, selectedIntensity);
-      if (now - runtime.lastParticleUpdate > 1 / 30) {
+      const selectedVoiceColor = selectedBody ? voiceVisual(selectedBody.voice).color : TRAIL_COLORS[0];
+      updateRibbonTrail(
+        ribbonTrail,
+        propsRef.current.isPlaying ? runtime.selectedHistory : [],
+        selectedIntensity,
+        selectedVoiceColor,
+      );
+      if (propsRef.current.isPlaying && now - runtime.lastParticleUpdate > 1 / 30) {
         runtime.lastParticleUpdate = now;
         updateParticleCloud(
           particleCloud,
@@ -1099,8 +1246,12 @@ export function SoundflightStage(props) {
           snapshot.time,
           selectedIntensity,
         );
+        particleCloud.material.color.setHex(selectedVoiceColor);
+      } else if (!propsRef.current.isPlaying) {
+        particleCloud.visible = false;
       }
       updateHarmonicKnot(harmonicKnot, snapshot.resonance, stageBodies);
+      updateMusicalLinks(runtime, snapshot, stageBodies, now);
     };
 
     const animate = (milliseconds) => {
@@ -1108,7 +1259,12 @@ export function SoundflightStage(props) {
       const delta = Math.min(MAX_FRAME_DELTA, Math.max(0, (milliseconds - previousFrameRef.current) / 1000));
       previousFrameRef.current = milliseconds;
       const currentProps = propsRef.current;
+      const exploring = currentProps.interactionMode === "explore";
+      if (exploring) runtime.resettingCamera = false;
       controls.enabled = !runtime.drag && !runtime.birth && currentProps.interactionMode !== "launch";
+      controls.enableRotate = exploring;
+      controls.enablePan = exploring;
+      controls.enableZoom = currentProps.interactionMode !== "launch";
 
       if (currentProps.isPlaying) {
         accumulatorRef.current += delta;
@@ -1128,31 +1284,29 @@ export function SoundflightStage(props) {
       currentProps.onPhysicsFrame({ time: snapshot.time, bodies: planets, star, resonance });
       syncVisuals(visualSnapshot, delta, now);
 
-      const following = currentProps.followingBodyId
-        ? runtime.bodyVisuals.get(currentProps.followingBodyId)
-        : null;
-      if (following) {
-        const followTarget = following.group.position;
-        controls.target.lerp(followTarget, 1 - Math.exp(-delta * 8));
-        const desiredCamera = followTarget.clone().add(new THREE.Vector3(-3.7, 3, 6.4));
-        camera.position.lerp(desiredCamera, 1 - Math.exp(-delta * 5.5));
-        runtime.lastFollowingBodyId = currentProps.followingBodyId;
-      } else {
-        runtime.lastFollowingBodyId = null;
-      }
-
       const cameraCommand = currentProps.cameraCommand;
       if (cameraCommand?.id > runtime.lastCameraCommandId) {
         runtime.lastCameraCommandId = cameraCommand.id;
-        const offset = camera.position.clone().sub(controls.target);
-        if (offset.lengthSq() < 0.001) offset.set(-3.7, 3, 6.4);
-        offset.setLength(nextCameraDistance(offset.length(), cameraCommand.direction));
-        camera.position.copy(controls.target).add(offset);
+        if (cameraCommand.type === "reset") {
+          runtime.resettingCamera = true;
+        } else {
+          const offset = camera.position.clone().sub(controls.target);
+          if (offset.lengthSq() < 0.001) offset.set(-3.7, 3, 6.4);
+          offset.setLength(nextCameraDistance(offset.length(), cameraCommand.direction));
+          camera.position.copy(controls.target).add(offset);
+        }
       }
-      controls.autoRotate = runtime.profile.autoDrift &&
-        !currentProps.followingBodyId &&
-        performance.now() - runtime.lastUserNavigation > 2800;
-      controls.autoRotateSpeed = 0.16;
+      if (runtime.resettingCamera) {
+        const easing = 1 - Math.exp(-delta * 6.5);
+        camera.position.lerp(runtime.editorialCameraPosition, easing);
+        controls.target.lerp(runtime.editorialCameraTarget, easing);
+        if (camera.position.distanceTo(runtime.editorialCameraPosition) < 0.015 && controls.target.distanceTo(runtime.editorialCameraTarget) < 0.01) {
+          camera.position.copy(runtime.editorialCameraPosition);
+          controls.target.copy(runtime.editorialCameraTarget);
+          runtime.resettingCamera = false;
+        }
+      }
+      controls.autoRotate = false;
       controls.update(delta);
 
       if (now - runtime.lastCameraReport > 0.12) {
@@ -1190,7 +1344,7 @@ export function SoundflightStage(props) {
       className="soundflight-stage"
       data-interaction-mode={props.interactionMode}
       role="application"
-      aria-label="Three-dimensional musical universe. Drag to fly, scroll or pinch to zoom. Choose Create World, then press empty space, hold to grow mass, drag to aim, and release to hear its orbit. Touch a planet to follow and hear it."
+      aria-label="Three-dimensional musical universe. Choose Add Planet, drag outward from the star, and release to add a colored voice. Colored threads pulse when notes sound. Zoom at any time; choose Explore for free camera flight. Touch a planet to hear it."
       tabIndex={0}
     />
   );
