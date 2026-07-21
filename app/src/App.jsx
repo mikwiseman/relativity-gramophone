@@ -339,6 +339,7 @@ export function App() {
     setElapsed(0);
     setSelectedBodyId("europa");
     dispatchSoundflight({ type: "CANCEL" });
+    setCameraCommand((current) => ({ id: current.id + 1, type: "reset" }));
     setChallengeTarget(null);
     setChallengeStatus("CHOOSE A RATIO");
     setChallengeGuide(null);

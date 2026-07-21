@@ -2126,9 +2126,21 @@ input:focus-visible {
   }
 
   .soundflight-title p,
-  .soundflight-voice-key,
+  .soundflight-voice-key > span,
+  .soundflight-voice-key > ul,
+  .soundflight-voice-key > p,
+  .soundflight-voice-key > b,
   .soundflight-voice-breath {
     display: none;
+  }
+
+  .soundflight-voice-key {
+    top: 62px;
+    right: 16px;
+    bottom: auto;
+    display: block;
+    width: auto;
+    transform: none;
   }
 
   .soundflight-systems-trigger {

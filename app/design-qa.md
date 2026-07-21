@@ -4,20 +4,20 @@
 
 - The user selected the current production styling rather than one of the generated redesigns.
 - Production URL: `https://waiwai.is/relativity`
-- Source screenshot: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/source-current-805x1000.png`
+- Source screenshot: [source-current-805x1000.png](design-qa/evidence/source-current-805x1000.png)
 
 **Rendered implementation**
 
 - Local surface: Vite preview
-- Screenshot: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/implementation-latest-1280x720.png`
+- Screenshot: [implementation-latest-1280x720.png](design-qa/evidence/implementation-latest-1280x720.png)
 - Viewport: 1280 × 720 CSS px at DPR 2 for both source and implementation
 - State: lacquer theme, Quinta, paused, systems closed, editorial composition camera
-- Full-view comparison: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/comparison-full.png`
-- Focused left controls: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/comparison-left-controls.png`
-- Focused right controls: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/comparison-right-controls.png`
-- Note-pulse evidence: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/11-latest-pulse.png`
-- Explore-return evidence: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/08-returned-compose.png`
-- Integrated `wai-web` launch evidence: `~/.codex/visualizations/2026/07/21/019f8516-a6d2-79c2-9955-fda99417f8e6/relativity-qa/wai-web-local-launch-1280x720.png`
+- Full-view comparison: [comparison-full.png](design-qa/evidence/comparison-full.png)
+- Focused left controls: [comparison-left-controls.png](design-qa/evidence/comparison-left-controls.png)
+- Focused right controls: [comparison-right-controls.png](design-qa/evidence/comparison-right-controls.png)
+- Note-pulse evidence: [11-latest-pulse.png](design-qa/evidence/11-latest-pulse.png)
+- Explore-return evidence: [08-returned-compose.png](design-qa/evidence/08-returned-compose.png)
+- Integrated `wai-web` launch evidence: [wai-web-local-launch-1280x720.png](design-qa/evidence/wai-web-local-launch-1280x720.png)
 
 **Findings**
 
@@ -35,8 +35,8 @@
 
 1. Initial audit found a P1 causality gap: a birth displayed only `NOVA-N JOINS`, while the multicolor trail did not state which voice or note it represented. It also found a P1 interaction collision: drag controlled both creation and free camera flight.
 2. First implementation added fixed voice colors, musical links, a radial star launch, and explicit Explore mode. Browser evidence then exposed a P1 visual hierarchy issue: the old bright multicolor selected trail overpowered the new causal links. At narrow portrait width, the selected planet also collided with the new legend (P2).
-3. Fixed those issues by making trails single-color and event-driven, hiding decorative motion while paused, promoting musical links to stable screen-space colored lines, and moving the legend at ≤960 px. Post-fix evidence: `10-latest-default.png` and `11-latest-pulse.png`.
-4. Explore testing exposed a P1 return-state issue: leaving free flight disabled controls but retained the rotated camera. Fixed with a damped reset to the editorial camera and cancellation of reset if Explore is immediately re-entered. Post-fix evidence: `08-returned-compose.png`.
+3. Fixed those issues by making trails single-color and event-driven, hiding decorative motion while paused, promoting musical links to stable screen-space colored lines, and moving the legend at ≤960 px. Post-fix evidence: [10-latest-default.png](design-qa/evidence/10-latest-default.png) and [11-latest-pulse.png](design-qa/evidence/11-latest-pulse.png).
+4. Explore testing exposed a P1 return-state issue: leaving free flight disabled controls but retained the rotated camera. Fixed with a damped reset to the editorial camera and cancellation of reset if Explore is immediately re-entered. Post-fix evidence: [08-returned-compose.png](design-qa/evidence/08-returned-compose.png).
 5. Final same-viewport full and focused comparisons preserve the selected art direction while making planets, voice colors, causal pulses, and the single launch action legible. No P0/P1/P2 findings remain.
 
 **Primary interactions tested in the in-app browser**

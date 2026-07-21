@@ -873,6 +873,7 @@ export function SoundflightStage(props) {
         });
       }
       propsRef.current.onBodySelect(body.id);
+      runtime.pendingLinkPulses.set(body.id, performance.now() / 1000);
       propsRef.current.onPluckBloom({ ...body }, pluck);
     };
 
@@ -1142,6 +1143,7 @@ export function SoundflightStage(props) {
             if (body) {
               const visual = runtime.bodyVisuals.get(body.id);
               if (visual) visual.impulse = 1;
+              runtime.pendingLinkPulses.set(body.id, performance.now() / 1000);
               currentProps.onPluckBloom({ ...body }, {
                 offset: event.offset,
                 strength: event.strength,
