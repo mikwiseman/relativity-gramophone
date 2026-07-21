@@ -137,6 +137,41 @@ test("a radial launch must visibly leave the star before it can create a world",
   }), /drag outward/i);
 });
 
+test("a radial launch refuses corrupt state and a full sky without creating a fallback world", () => {
+  const existingIds = ["io", "europa", "callisto", ...Array.from({ length: MAX_WORLDS - 3 }, (_, index) => `nova-${index + 1}`)];
+
+  assert.throws(() => birthBodyFromRadialLaunch({
+    release: { x: 0.3, y: 0.1 },
+    star: STAR,
+    existingIds,
+    birthIndex: 0,
+  }), /sky is full/i);
+  assert.throws(() => birthBodyFromRadialLaunch({
+    release: { x: Number.NaN, y: 0.1 },
+    star: STAR,
+    existingIds: ["io", "europa", "callisto"],
+    birthIndex: 0,
+  }), /finite star and release coordinates/i);
+});
+
+test("radial launches allocate the first available id and cycle score fields deterministically", () => {
+  const input = {
+    release: { x: 0, y: 0.48 },
+    star: STAR,
+    existingIds: ["io", "europa", "callisto", "nova-1", "nova-3"],
+    birthIndex: 4,
+  };
+  const spec = birthBodyFromRadialLaunch(input);
+
+  assert.equal(spec.id, "nova-2");
+  assert.equal(spec.voice, COSMIC_VOICE_ORDER[0]);
+  assert.equal(spec.sprite, 2);
+  assert.deepEqual(spec, birthBodyFromRadialLaunch(input));
+  for (const key of ["x", "y", "vx", "vy", "mass", "frequency", "pan"]) {
+    assert.ok(Number.isFinite(spec[key]), `${key} must be finite`);
+  }
+});
+
 test("the aim ghost is a closed bound ellipse that brackets the birth radius", () => {
   const spec = birthBodyFromGesture(gesture({ aim: { x: 0.05, y: 0.16 } }));
   const points = previewOrbit(spec, STAR);

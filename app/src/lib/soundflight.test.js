@@ -52,6 +52,17 @@ test("soundflight interaction state keeps navigation and launch mutually exclusi
   assert.deepEqual(completed, { mode: "compose", followingBodyId: null });
 });
 
+test("soundflight interaction state fails loudly for incomplete or unknown commands", () => {
+  const initial = createSoundflightState();
+
+  assert.deepEqual(reduceSoundflightState({ mode: "launch", followingBodyId: null }, { type: "CANCEL" }), initial);
+  assert.deepEqual(reduceSoundflightState({ mode: "launch", followingBodyId: null }, { type: "USER_NAVIGATE" }), initial);
+  assert.deepEqual(reduceSoundflightState(initial, { type: "FOLLOW_BODY", bodyId: "europa" }), initial);
+  assert.throws(() => reduceSoundflightState(initial, { type: "FOLLOW_BODY" }), /requires a bodyId/i);
+  assert.throws(() => reduceSoundflightState(initial, { type: "COMPLETE_LAUNCH" }), /requires a bodyId/i);
+  assert.throws(() => reduceSoundflightState(initial, { type: "TELEPORT" }), /unknown soundflight action/i);
+});
+
 test("free camera flight is an explicit explore mode that always returns to composition", () => {
   const exploring = reduceSoundflightState(createSoundflightState(), { type: "ENTER_EXPLORE" });
   assert.deepEqual(exploring, { mode: "explore", followingBodyId: null });
@@ -99,6 +110,14 @@ test("render profile preserves the artwork while bounding GPU cost", () => {
   assert.equal(reduced.particleCount, 90);
   assert.equal(reduced.trailSamples, 40);
   assert.equal(reduced.autoDrift, false);
+
+  assert.throws(() => selectRenderProfile({
+    width: 390,
+    height: 844,
+    devicePixelRatio: Number.NaN,
+    hardwareConcurrency: 4,
+    reducedMotion: false,
+  }), /finite device metrics/i);
 });
 
 test("voice colors are stable, named, and never rely on color alone", () => {
@@ -121,6 +140,14 @@ test("musical connections keep one stable colored ensemble chain in score order"
     { bodyId: "inner", sourceId: "outer", voice: "earth", color: 0x72edff },
     { bodyId: "middle", sourceId: "inner", voice: "moon", color: 0xffc66d },
   ]);
+});
+
+test("musical connections reject corrupt positions instead of drawing a misleading thread", () => {
+  assert.deepEqual(buildMusicalConnections([], { x: 0, y: 0 }), []);
+  assert.throws(() => buildMusicalConnections([], { x: Number.NaN, y: 0 }), /finite star position/i);
+  assert.throws(() => buildMusicalConnections([
+    { id: "broken", x: undefined, y: 0, voice: "earth" },
+  ], { x: 0, y: 0 }), /finite body/i);
 });
 
 test("the sounding pitch has a compact musical note name", () => {
