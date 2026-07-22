@@ -18,6 +18,8 @@ body {
 }
 
 .app-shell {
+  --sf-gold: #e2ba6c;
+  --sf-accent: #7ce0ef;
   position: relative;
   width: 100vw;
   height: 100dvh;
@@ -36,164 +38,6 @@ input {
 
 button {
   -webkit-tap-highlight-color: transparent;
-}
-
-.theme-backdrop {
-  position: absolute;
-  z-index: -2;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center;
-  pointer-events: none;
-  user-select: none;
-  animation: reveal-material 620ms ease both;
-}
-
-.orbital-canvas {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  touch-action: none;
-  cursor: grab;
-}
-
-.orbital-canvas.is-dragging {
-  cursor: grabbing;
-}
-
-.orbital-canvas.is-conceiving {
-  cursor: crosshair;
-}
-
-.orbital-canvas.is-string-hover,
-.orbital-canvas.is-plucking {
-  cursor: pointer;
-}
-
-.topline {
-  position: absolute;
-  z-index: 3;
-  top: clamp(24px, 4.3vh, 46px);
-  right: clamp(24px, 4vw, 60px);
-  left: clamp(24px, 4vw, 60px);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  pointer-events: none;
-}
-
-.topline h1 {
-  margin: 0;
-  font-size: clamp(10px, 0.92vw, 14px);
-  font-weight: 500;
-  letter-spacing: 0.34em;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.time-state {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
-  font-size: clamp(14px, 1.3vw, 19px);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.08em;
-}
-
-.record-light {
-  width: 5px;
-  height: 5px;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  opacity: 0.52;
-}
-
-.record-light.is-live {
-  border-color: var(--coral);
-  background-color: var(--coral);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--coral) 70%, transparent);
-}
-
-.challenge-strip {
-  position: absolute;
-  z-index: 4;
-  top: clamp(72px, 9vh, 94px);
-  left: 50%;
-  display: flex;
-  min-height: 40px;
-  padding: 8px 14px;
-  align-items: center;
-  gap: 15px;
-  border: 0;
-  border-top: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--ink) 13%, transparent);
-  color: inherit;
-  background: color-mix(in srgb, var(--paper) 72%, transparent);
-  cursor: pointer;
-  backdrop-filter: blur(10px);
-  transform: translateX(-50%);
-}
-
-.challenge-strip span,
-.challenge-strip strong {
-  font-size: 7px;
-  font-weight: 600;
-  letter-spacing: 0.18em;
-  white-space: nowrap;
-}
-
-.challenge-strip strong {
-  color: var(--cyan);
-}
-
-.play-whisper {
-  position: absolute;
-  z-index: 3;
-  bottom: clamp(88px, 13vh, 126px);
-  left: 50%;
-  display: grid;
-  gap: 7px;
-  width: min(380px, calc(100vw - 48px));
-  margin: 0;
-  padding: 11px 16px;
-  border-top: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
-  background: color-mix(in srgb, var(--paper) 54%, transparent);
-  pointer-events: none;
-  text-align: center;
-  transform: translateX(-50%);
-  backdrop-filter: blur(8px);
-  animation: whisper-in 700ms 360ms ease both;
-}
-
-.play-whisper span,
-.play-whisper strong {
-  font-size: 7px;
-  font-weight: 600;
-  letter-spacing: 0.2em;
-  line-height: 1.45;
-}
-
-.play-whisper strong {
-  color: var(--cyan);
-}
-
-.bottom-left-controls {
-  position: absolute;
-  z-index: 5;
-  bottom: clamp(24px, 4.4vh, 48px);
-  left: clamp(24px, 4vw, 60px);
-  display: flex;
-  align-items: center;
-  gap: 9px;
 }
 
 .transport {
@@ -227,9 +71,6 @@ button {
 }
 
 .icon-button:focus-visible,
-.challenge-strip:focus-visible,
-.inscribe-action:focus-visible,
-.theme-option:focus-visible,
 .body-selector-option:focus-visible,
 .voice-card:focus-visible,
 .resonance-targets button:focus-visible,
@@ -246,10 +87,6 @@ input:focus-visible {
 
 .transport-button:first-child svg {
   transform: translateX(1px);
-}
-
-.theme-chooser {
-  position: relative;
 }
 
 .relativity-control {
@@ -301,7 +138,7 @@ input:focus-visible {
 .orbit-game-heading span,
 .atlas-truth,
 .orbit-game > p {
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.21em;
 }
@@ -347,7 +184,7 @@ input:focus-visible {
   color: inherit;
   background: transparent;
   cursor: pointer;
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.12em;
 }
@@ -422,7 +259,7 @@ input:focus-visible {
 
 .voice-card > span:not(.voice-card-topline) {
   min-height: 20px;
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.14em;
   line-height: 1.45;
@@ -469,7 +306,7 @@ input:focus-visible {
 .orbit-game-heading output {
   max-width: 178px;
   color: var(--cyan);
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.15em;
   line-height: 1.4;
@@ -499,7 +336,7 @@ input:focus-visible {
 
 .resonance-targets button small {
   font-family: "Avenir Next", Avenir, "Helvetica Neue", Helvetica, Arial, sans-serif;
-  font-size: 6px;
+  font-size: 8px;
   font-weight: 600;
   letter-spacing: 0.18em;
   opacity: 0.46;
@@ -590,7 +427,7 @@ input:focus-visible {
 .lens-column-labels,
 .lens-resonance span,
 .relativity-lens > p {
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.22em;
 }
@@ -680,176 +517,6 @@ input:focus-visible {
   line-height: 1.7;
 }
 
-.theme-trigger::after {
-  position: absolute;
-  right: -2px;
-  bottom: 2px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--cyan);
-  content: "";
-}
-
-.theme-menu {
-  position: absolute;
-  bottom: calc(100% + 13px);
-  left: 0;
-  display: grid;
-  width: 214px;
-  padding: 9px 0;
-  border-top: 1px solid color-mix(in srgb, var(--ink) 30%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
-  color: var(--ink);
-  background: color-mix(in srgb, var(--paper) 90%, transparent);
-  box-shadow: 0 18px 38px color-mix(in srgb, #000 12%, transparent);
-  backdrop-filter: blur(14px);
-  animation: rise-menu 220ms ease both;
-}
-
-.theme-option {
-  display: grid;
-  grid-template-columns: 30px 1fr;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 40px;
-  padding: 5px 13px;
-  border: 0;
-  color: inherit;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.22em;
-}
-
-.theme-option:hover,
-.theme-option[aria-checked="true"] {
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-}
-
-.theme-option[aria-checked="true"]::after {
-  justify-self: end;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: currentColor;
-  content: "";
-}
-
-.theme-option[aria-checked="true"] {
-  grid-template-columns: 30px 1fr 4px;
-}
-
-.theme-sample {
-  display: block;
-  width: 30px;
-  height: 22px;
-  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
-  background-position: center;
-  background-size: cover;
-}
-
-.harp-shelf {
-  position: relative;
-}
-
-.harp-menu {
-  position: absolute;
-  bottom: calc(100% + 13px);
-  left: 0;
-  display: grid;
-  width: 252px;
-  padding: 9px 0;
-  border-top: 1px solid color-mix(in srgb, var(--ink) 30%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
-  color: var(--ink);
-  background: color-mix(in srgb, var(--paper) 90%, transparent);
-  box-shadow: 0 18px 38px color-mix(in srgb, #000 12%, transparent);
-  backdrop-filter: blur(14px);
-  animation: rise-menu 220ms ease both;
-}
-
-.harp-option {
-  display: grid;
-  gap: 4px;
-  width: 100%;
-  min-height: 44px;
-  padding: 8px 14px;
-  border: 0;
-  color: inherit;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-}
-
-.harp-option strong {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.24em;
-}
-
-.harp-option span {
-  font-size: 7px;
-  font-weight: 500;
-  letter-spacing: 0.16em;
-  opacity: 0.62;
-}
-
-.harp-option:hover,
-.harp-option[aria-checked="true"] {
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-}
-
-.harp-option[aria-checked="true"] strong {
-  color: var(--cyan);
-}
-
-.inscribe-action {
-  position: absolute;
-  z-index: 5;
-  right: clamp(24px, 4vw, 60px);
-  bottom: clamp(29px, 5vh, 54px);
-  display: inline-flex;
-  align-items: center;
-  gap: 14px;
-  padding: 7px 0;
-  border: 0;
-  color: var(--ink);
-  background: transparent;
-  cursor: pointer;
-  font-size: clamp(10px, 0.82vw, 12px);
-  font-weight: 500;
-  letter-spacing: 0.34em;
-}
-
-.inscribe-action::after {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 1px;
-  background: currentColor;
-  content: "";
-  transform: scaleX(0.28);
-  transform-origin: right;
-  transition: transform 240ms ease;
-}
-
-.inscribe-action:hover::after,
-.inscribe-action:focus-visible::after {
-  transform: scaleX(1);
-}
-
-.inscribe-action > span {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--coral);
-}
-
 .runtime-message {
   position: absolute;
   z-index: 9;
@@ -919,7 +586,7 @@ input:focus-visible {
 }
 
 .dance-signature span {
-  font-size: 6px;
+  font-size: 8px;
   font-weight: 600;
   letter-spacing: 0.18em;
   opacity: 0.5;
@@ -1036,26 +703,10 @@ input:focus-visible {
 }
 
 .app-shell[data-theme="lacquer"] .icon-button,
-.app-shell[data-theme="lacquer"] .theme-menu,
 .app-shell[data-theme="lacquer"] .sound-atlas-panel,
 .app-shell[data-theme="lacquer"] .relativity-lens,
 .app-shell[data-theme="lacquer"] .inscription-dialog {
   box-shadow: 0 24px 72px rgb(0 0 0 / 34%);
-}
-
-.app-shell[data-theme="sumi"] .orbital-canvas {
-  filter: saturate(0.92) contrast(1.03);
-}
-
-@keyframes reveal-material {
-  from {
-    opacity: 0;
-    transform: scale(1.012);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
 }
 
 @keyframes rise-menu {
@@ -1080,61 +731,10 @@ input:focus-visible {
   }
 }
 
-@keyframes whisper-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 7px);
-  }
-  to {
-    opacity: 0.82;
-    transform: translate(-50%, 0);
-  }
-}
-
 @media (max-width: 620px) {
-  .topline {
-    top: 24px;
-    right: 20px;
-    left: 20px;
-    align-items: flex-start;
-  }
-
-  .topline h1 {
-    max-width: 185px;
-    font-size: 9px;
-    letter-spacing: 0.28em;
-    line-height: 1.5;
-    white-space: normal;
-  }
-
-  .time-state {
-    gap: 7px;
-    font-size: 14px;
-  }
-
-  .challenge-strip {
-    top: 72px;
-    min-height: 44px;
-    max-width: calc(100vw - 40px);
-  }
-
-  .play-whisper {
-    bottom: 88px;
-    width: calc(100vw - 40px);
-  }
-
-  .bottom-left-controls {
-    bottom: 21px;
-    left: 20px;
-  }
-
   .icon-button {
     width: 44px;
     height: 44px;
-  }
-
-  .bottom-left-controls {
-    gap: 7px;
   }
 
   .sound-atlas-panel {
@@ -1158,33 +758,9 @@ input:focus-visible {
     min-height: 44px;
   }
 
-  .theme-menu,
-  .harp-menu {
-    position: fixed;
-    left: 16px;
-    bottom: 84px;
-    width: min(300px, calc(100vw - 32px));
-  }
-
-  .theme-option {
-    min-height: 44px;
-  }
-
-  .harp-option {
-    min-height: 48px;
-  }
-
   .relativity-lens {
     left: -88px;
     width: min(380px, calc(100vw - 40px));
-  }
-
-  .inscribe-action {
-    right: 20px;
-    bottom: 22px;
-    min-height: 44px;
-    font-size: 9px;
-    letter-spacing: 0.26em;
   }
 
   .inscription-dialog {
@@ -1225,16 +801,6 @@ input:focus-visible {
 }
 
 @media (max-width: 380px) {
-  .bottom-left-controls {
-    left: 16px;
-    gap: 5px;
-  }
-
-  .inscribe-action {
-    right: 16px;
-    bottom: 76px;
-  }
-
   .sound-atlas-panel {
     right: 16px;
     left: 16px;
@@ -1258,23 +824,9 @@ input:focus-visible {
     bottom: 70px;
   }
 
-  .bottom-left-controls {
-    bottom: 8px;
-  }
-
   .icon-button {
     width: 44px;
     height: 44px;
-  }
-
-  .inscribe-action {
-    bottom: 7px;
-    min-height: 44px;
-  }
-
-  .challenge-strip {
-    top: 17px;
-    min-height: 44px;
   }
 
   .inscription-dialog {
@@ -1320,7 +872,7 @@ input:focus-visible {
 }
 
 .soundflight-stage:focus-visible {
-  outline: 1px solid color-mix(in srgb, #e5bb70 80%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--sf-gold) 80%, transparent);
   outline-offset: -4px;
 }
 
@@ -1337,7 +889,7 @@ input:focus-visible {
   left: clamp(32px, 4vw, 64px);
   display: grid;
   gap: 20px;
-  color: #e4b969;
+  color: var(--sf-gold);
   pointer-events: none;
 }
 
@@ -1372,7 +924,7 @@ input:focus-visible {
   gap: 16px;
   border: 1px solid rgb(225 184 108 / 28%);
   border-radius: 999px;
-  color: #ddb367;
+  color: var(--sf-gold);
   background: rgb(4 4 3 / 36%);
   cursor: pointer;
   font-size: 10px;
@@ -1418,7 +970,7 @@ input:focus-visible {
   gap: 17px;
   border: 1px solid rgb(226 181 100 / 72%);
   border-radius: 50%;
-  color: #e5bb70;
+  color: var(--sf-gold);
   background: rgb(3 3 2 / 26%);
   cursor: pointer;
   text-align: center;
@@ -1483,7 +1035,7 @@ input:focus-visible {
 
 .soundflight-launch-guide > span {
   color: rgb(116 226 241 / 74%);
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.42em;
 }
@@ -1529,7 +1081,7 @@ input:focus-visible {
 }
 
 .soundflight-launch-guide li small {
-  font-size: 6px;
+  font-size: 8px;
   letter-spacing: 0.2em;
 }
 
@@ -1539,23 +1091,23 @@ input:focus-visible {
 }
 
 .soundflight-launch-guide li[data-state="active"] {
-  border-color: #77e7f4;
+  border-color: var(--sf-accent);
   color: #f2c778;
   text-shadow: 0 0 14px rgb(112 229 243 / 34%);
 }
 
 .soundflight-title,
 .soundflight-systems-trigger,
-.soundflight-flight-cue,
-.soundflight-following,
+.soundflight-voice-key,
+.soundflight-explore,
 .soundflight-voice-breath {
   transition: opacity 260ms ease;
 }
 
 .app-shell[data-launch-mode="true"] .soundflight-title,
 .app-shell[data-launch-mode="true"] .soundflight-systems-trigger,
-.app-shell[data-launch-mode="true"] .soundflight-flight-cue,
-.app-shell[data-launch-mode="true"] .soundflight-following,
+.app-shell[data-launch-mode="true"] .soundflight-voice-key,
+.app-shell[data-launch-mode="true"] .soundflight-explore,
 .app-shell[data-launch-mode="true"] .soundflight-voice-breath {
   opacity: 0.18;
 }
@@ -1580,7 +1132,7 @@ input:focus-visible {
   width: 54px;
   height: 54px;
   border-color: rgb(226 181 100 / 32%);
-  color: #e5bb70;
+  color: var(--sf-gold);
   background: rgb(3 3 2 / 32%);
   backdrop-filter: blur(12px);
 }
@@ -1590,33 +1142,70 @@ input:focus-visible {
   height: 19px;
 }
 
-.soundflight-flight-cue {
+.soundflight-voice-key {
   position: absolute;
   z-index: 4;
   top: 50%;
   right: clamp(32px, 4vw, 64px);
   display: grid;
-  width: 172px;
-  gap: 9px;
+  width: 180px;
+  gap: 12px;
   color: rgb(226 190 125 / 52%);
   transform: translateY(-50%);
 }
 
-.soundflight-flight-cue svg {
-  width: 20px;
-  height: 20px;
-}
-
-.soundflight-flight-cue span {
-  max-width: 165px;
-  font-size: 8px;
+.soundflight-voice-key > span,
+.soundflight-voice-key > p {
+  margin: 0;
+  font-size: 9px;
   font-weight: 600;
-  letter-spacing: 0.22em;
-  line-height: 1.65;
+  letter-spacing: 0.28em;
 }
 
-.soundflight-flight-cue strong {
-  margin-top: 8px;
+.soundflight-voice-key ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  gap: 8px;
+  list-style: none;
+}
+
+.soundflight-voice-key li {
+  display: grid;
+  grid-template-columns: 8px auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.soundflight-voice-key li i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--voice-color);
+  box-shadow: 0 0 12px var(--voice-color);
+}
+
+.soundflight-voice-key li strong,
+.soundflight-voice-key li small {
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+}
+
+.soundflight-voice-key li strong {
+  color: rgb(236 198 132 / 78%);
+}
+
+.soundflight-voice-key li small {
+  color: rgb(226 190 125 / 38%);
+}
+
+.soundflight-voice-key > p {
+  color: rgb(116 226 241 / 68%);
+}
+
+.soundflight-voice-key > b {
   padding-top: 13px;
   border-top: 1px solid rgb(226 190 125 / 18%);
   color: #d9aa5c;
@@ -1631,25 +1220,40 @@ input:focus-visible {
 }
 
 .soundflight-zoom-controls button {
+  position: relative;
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
   padding: 0;
-  border: 1px solid rgb(226 190 125 / 20%);
+  border: 0;
   border-radius: 50%;
   color: rgb(226 190 125 / 64%);
-  background: rgb(3 3 2 / 22%);
-  backdrop-filter: blur(10px);
+  background: transparent;
   cursor: pointer;
   place-items: center;
-  transition: border-color 180ms ease, color 180ms ease, transform 180ms ease;
+  transition: color 180ms ease, transform 180ms ease;
+}
+
+.soundflight-zoom-controls button::before {
+  position: absolute;
+  inset: 8px;
+  border: 1px solid rgb(226 190 125 / 20%);
+  border-radius: 50%;
+  background: rgb(3 3 2 / 22%);
+  backdrop-filter: blur(10px);
+  content: "";
+  transition: border-color 180ms ease;
 }
 
 .soundflight-zoom-controls button:hover,
 .soundflight-zoom-controls button:focus-visible {
-  border-color: rgb(226 190 125 / 62%);
   color: #f4c978;
   outline: none;
+}
+
+.soundflight-zoom-controls button:hover::before,
+.soundflight-zoom-controls button:focus-visible::before {
+  border-color: rgb(226 190 125 / 62%);
 }
 
 .soundflight-zoom-controls button:active {
@@ -1657,6 +1261,7 @@ input:focus-visible {
 }
 
 .soundflight-zoom-controls svg {
+  position: relative;
   width: 13px;
   height: 13px;
 }
@@ -1685,14 +1290,14 @@ input:focus-visible {
   position: absolute;
   left: 50%;
   bottom: -16px;
-  font-size: 6px;
+  font-size: 8px;
   font-weight: 600;
   letter-spacing: 0.24em;
   white-space: nowrap;
   transform: translateX(-50%);
 }
 
-.soundflight-following {
+.soundflight-explore {
   position: absolute;
   z-index: 6;
   right: clamp(32px, 4vw, 64px);
@@ -1711,13 +1316,14 @@ input:focus-visible {
   letter-spacing: 0.28em;
 }
 
-.soundflight-following svg {
+.soundflight-explore svg {
   width: 13px;
   height: 13px;
 }
 
-.soundflight-following:hover,
-.soundflight-following:focus-visible {
+.soundflight-explore:hover,
+.soundflight-explore:focus-visible,
+.soundflight-explore[aria-pressed="true"] {
   color: #f1c77b;
 }
 
@@ -1757,7 +1363,7 @@ input:focus-visible {
 .soundflight-systems h2 {
   margin: 0;
   color: rgb(226 185 111 / 56%);
-  font-size: 7px;
+  font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.28em;
 }
@@ -1821,7 +1427,7 @@ input:focus-visible {
 }
 
 .soundflight-system-list button[aria-checked="true"] {
-  color: #76dae8;
+  color: var(--sf-accent);
 }
 
 .soundflight-system-list strong,
@@ -1876,6 +1482,16 @@ input:focus-visible {
   gap: 5px;
 }
 
+@media (max-width: 960px) {
+  .soundflight-voice-key {
+    top: auto;
+    right: 24px;
+    bottom: 132px;
+    width: 150px;
+    transform: none;
+  }
+}
+
 .sound-atlas-control,
 .relativity-control {
   position: static;
@@ -1887,7 +1503,7 @@ input:focus-visible {
   z-index: 12;
   bottom: clamp(32px, 5vh, 58px);
   left: clamp(32px, 4vw, 64px);
-  color: #e5bb70;
+  color: var(--sf-gold);
   background: rgb(5 4 3 / 91%);
   border-color: rgb(229 188 113 / 32%);
 }
@@ -1916,7 +1532,7 @@ input:focus-visible {
 
   .soundflight-title p {
     max-width: 210px;
-    font-size: 6px;
+    font-size: 8px;
     letter-spacing: 0.28em;
   }
 
@@ -1989,24 +1605,27 @@ input:focus-visible {
     height: 48px;
   }
 
-  .soundflight-flight-cue {
+  .soundflight-voice-key {
     top: auto;
     right: 16px;
-    bottom: 120px;
-    width: 128px;
+    bottom: 126px;
+    width: 146px;
     transform: none;
   }
 
-  .soundflight-flight-cue span {
-    font-size: 6px;
+  .soundflight-voice-key > span,
+  .soundflight-voice-key > p,
+  .soundflight-voice-key li strong,
+  .soundflight-voice-key li small {
+    font-size: 8px;
   }
 
-  .soundflight-following {
+  .soundflight-explore {
     right: 16px;
     bottom: 63px;
     max-width: 154px;
     justify-content: flex-end;
-    font-size: 7px;
+    font-size: 9px;
     letter-spacing: 0.2em;
     text-align: right;
   }
@@ -2023,7 +1642,14 @@ input:focus-visible {
   }
 
   .soundflight-voice-breath span {
-    display: none;
+    left: auto;
+    right: 0;
+    max-width: 74vw;
+    overflow: hidden;
+    font-size: 8px;
+    text-align: right;
+    text-overflow: ellipsis;
+    transform: none;
   }
 
   .soundflight-systems {
@@ -2059,9 +1685,21 @@ input:focus-visible {
   }
 
   .soundflight-title p,
-  .soundflight-flight-cue,
+  .soundflight-voice-key > span,
+  .soundflight-voice-key > ul,
+  .soundflight-voice-key > p,
+  .soundflight-voice-key > b,
   .soundflight-voice-breath {
     display: none;
+  }
+
+  .soundflight-voice-key {
+    top: 62px;
+    right: 16px;
+    bottom: auto;
+    display: block;
+    width: auto;
+    transform: none;
   }
 
   .soundflight-systems-trigger {
@@ -2101,7 +1739,7 @@ input:focus-visible {
     margin-top: 7px;
   }
 
-  .soundflight-following {
+  .soundflight-explore {
     right: 16px;
     bottom: 9px;
   }
@@ -2114,5 +1752,108 @@ input:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .soundflight-voice-breath {
     filter: none;
+  }
+}
+
+/* First-run overture — a quiet invitation, never a tutorial */
+
+.soundflight-overture {
+  position: absolute;
+  z-index: 3;
+  top: 24%;
+  left: 50%;
+  display: grid;
+  gap: 13px;
+  justify-items: center;
+  width: min(560px, calc(100vw - 48px));
+  pointer-events: none;
+  text-align: center;
+  transform: translateX(-50%);
+  animation: overture-in 1400ms 700ms ease both;
+}
+
+.soundflight-overture em {
+  color: color-mix(in srgb, var(--sf-gold) 88%, #fff);
+  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-size: clamp(19px, 2.3vw, 27px);
+  font-style: italic;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 24px rgb(0 0 0 / 55%);
+}
+
+.soundflight-overture span {
+  color: color-mix(in srgb, var(--sf-gold) 72%, transparent);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  line-height: 1.8;
+}
+
+@keyframes overture-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 9px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* Until the first play, the transport quietly invites */
+
+.soundflight-launch-dock[data-invite="true"] .transport-button:first-child {
+  animation: transport-invite 2600ms ease-in-out infinite;
+}
+
+@keyframes transport-invite {
+  0%, 100% {
+    border-color: color-mix(in srgb, var(--sf-gold) 42%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--sf-gold) 34%, transparent);
+  }
+  50% {
+    border-color: color-mix(in srgb, var(--sf-gold) 88%, transparent);
+    box-shadow: 0 0 22px 1px color-mix(in srgb, var(--sf-gold) 26%, transparent);
+  }
+}
+
+/* Runtime messages read as a calm line, not an alarm */
+
+.runtime-message {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  border-top-color: color-mix(in srgb, var(--coral) 62%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--coral) 34%, transparent);
+  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-size: 13.5px;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  animation: toast-in 300ms ease both, toast-out 700ms ease 5.6s both;
+}
+
+.runtime-message button {
+  font-family: "Avenir Next", Avenir, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-style: normal;
+  flex-shrink: 0;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }

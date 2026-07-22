@@ -28,8 +28,15 @@ import {
 import { THEMES } from "./lib/themes.js";
 import { createHarpComposition, HARPS, HARP_ORDER, harpForComposition } from "./lib/starHarps.js";
 import { captureResonance, measureTargetResonance, RESONANCE_TARGETS } from "./lib/gameProgress.js";
-import { COSMIC_VOICES, hapticPattern, isResonanceChallengeComplete } from "./lib/sonification.js";
-import { launchGuidance, reduceSoundflightState } from "./lib/soundflight.js";
+import { COSMIC_VOICES, hapticPattern, isResonanceChallengeComplete, voiceParameters } from "./lib/sonification.js";
+import {
+  createSoundflightState,
+  frequencyToNoteName,
+  launchGuidance,
+  reduceSoundflightState,
+  shouldApplyGestationUpdate,
+  voiceVisual,
+} from "./lib/soundflight.js";
 
 function formatTime(value) {
   const seconds = Math.max(0, Math.floor(value));
@@ -60,19 +67,22 @@ export function App() {
   const [systemsOpen, setSystemsOpen] = useState(false);
   const [launchPhase, setLaunchPhase] = useState("armed");
   const [cameraScale, setCameraScale] = useState("1.2 AU");
-  const [cameraCommand, setCameraCommand] = useState({ id: 0, direction: -1 });
-  const [soundflightState, dispatchSoundflight] = useReducer(reduceSoundflightState, {
-    mode: "follow",
-    followingBodyId: "europa",
-  });
+  const [cameraCommand, setCameraCommand] = useState({ id: 0, type: "zoom", direction: -1 });
+  const [soundflightState, dispatchSoundflight] = useReducer(reduceSoundflightState, null, createSoundflightState);
   const [selectedBodyId, setSelectedBodyId] = useState("europa");
   const [challengeTarget, setChallengeTarget] = useState(null);
   const [challengeStatus, setChallengeStatus] = useState("CHOOSE A RATIO");
   const [challengeGuide, setChallengeGuide] = useState(null);
   const [physicsFrame, setPhysicsFrame] = useState(null);
   const [sonicCue, setSonicCue] = useState("");
+  const [overtureDismissed, setOvertureDismissed] = useState(() => Boolean(initial.score));
+  const [hasEverPlayed, setHasEverPlayed] = useState(false);
   const audioRef = useRef(new AudioEngine());
+  if (import.meta.env.DEV && typeof window !== "undefined") window.__rgAudio = audioRef.current;
   const gestationEngagedRef = useRef(false);
+  const gestationReadyRef = useRef(false);
+  const gestationResumeRef = useRef(null);
+  const gestationRequestRef = useRef(0);
   const physicsFrameRef = useRef(null);
   const lastPhysicsPaintRef = useRef(0);
   const eventCountRef = useRef(composition.events.length);
@@ -95,6 +105,8 @@ export function App() {
       .map((body) => ({ id: body.id, voice: body.voice }));
     return [...composition.bodies, ...liveNovas];
   }, [composition.bodies, physicsFrame]);
+  const voiceLegend = useMemo(() => [...new Set(atlasBodies.map((body) => body.voice))]
+    .map((voiceId) => ({ id: voiceId, ...voiceVisual(voiceId) })), [atlasBodies]);
 
   useEffect(() => {
     document.documentElement.style.colorScheme = "dark";
@@ -102,11 +114,28 @@ export function App() {
 
   useEffect(() => () => window.clearTimeout(sonicCueTimeoutRef.current), []);
 
-  const announceSonicCue = useCallback((message) => {
+  const announceSonicCue = useCallback((message, holdMs = 1500) => {
     window.clearTimeout(sonicCueTimeoutRef.current);
     setSonicCue(message);
-    sonicCueTimeoutRef.current = window.setTimeout(() => setSonicCue(""), 1500);
+    sonicCueTimeoutRef.current = window.setTimeout(() => setSonicCue(""), holdMs);
   }, []);
+
+  const dismissOverture = useCallback(() => {
+    setOvertureDismissed(true);
+  }, []);
+
+  useEffect(() => {
+    if (isPlaying) {
+      setHasEverPlayed(true);
+      setOvertureDismissed(true);
+    }
+  }, [isPlaying]);
+
+  useEffect(() => {
+    if (!runtimeError) return undefined;
+    const timer = window.setTimeout(() => setRuntimeError(null), 6500);
+    return () => window.clearTimeout(timer);
+  }, [runtimeError]);
 
   useEffect(() => {
     const handleKeyDown = (event) => {
@@ -136,7 +165,9 @@ export function App() {
   const handleNote = useCallback((note) => {
     audioRef.current.playOrbitNote(note);
     performHaptic({ kind: "crossing", strength: note.displayMass ?? note.mass });
-  }, [performHaptic]);
+    const visual = voiceVisual(note.voice);
+    announceSonicCue(`${visual.colorName} · ${visual.label} · ${frequencyToNoteName(voiceParameters(note).frequency)}`);
+  }, [announceSonicCue, performHaptic]);
 
   const handlePhysicsFrame = useCallback((frame) => {
     physicsFrameRef.current = frame;
@@ -211,6 +242,9 @@ export function App() {
     if (!authoredBody && !liveBody) return;
     setIsPlaying(true);
     setDialogOpen(false);
+    const voiceId = liveBody?.voice ?? authoredBody?.voice;
+    const visual = voiceVisual(voiceId);
+    announceSonicCue(`SOLO · ${visual.colorName} ${visual.label}`);
     try {
       await audioRef.current.resume(true);
       setRuntimeError(null);
@@ -225,7 +259,6 @@ export function App() {
         voice: liveBody?.voice ?? authoredBody?.voice,
       });
       performHaptic({ kind: "audition", strength: authoredBody?.mass ?? liveBody?.displayMass ?? 0.5 });
-      announceSonicCue(`SOLO · ${bodyId.toUpperCase()}`);
     } catch (error) {
       setIsPlaying(false);
       setRuntimeError(error instanceof Error ? error.message : "Planetary voice could not start");
@@ -240,7 +273,8 @@ export function App() {
       setRuntimeError(null);
       audioRef.current.playBirthBloom(body);
       performHaptic({ kind: "birth", strength: body.displayMass ?? body.mass ?? 0.5 });
-      announceSonicCue(`${body.id.toUpperCase()} JOINS THE SYMPHONY`);
+      const visual = voiceVisual(body.voice);
+      announceSonicCue(`${body.id.toUpperCase()} · ${visual.colorName} ${visual.label} JOINS`);
     } catch (error) {
       setIsPlaying(false);
       setRuntimeError(error instanceof Error ? error.message : "The newborn voice could not start");
@@ -254,20 +288,43 @@ export function App() {
   }, [announceSonicCue, performHaptic]);
 
   const handleGestationTone = useCallback(async (candidate) => {
+    const requestId = gestationRequestRef.current + 1;
+    gestationRequestRef.current = requestId;
     if (!candidate) {
       gestationEngagedRef.current = false;
+      gestationReadyRef.current = false;
+      gestationResumeRef.current = null;
       audioRef.current.endGestation();
       return;
     }
     try {
       if (!gestationEngagedRef.current) {
         gestationEngagedRef.current = true;
-        await audioRef.current.resume(true);
+        gestationReadyRef.current = false;
+      }
+      if (!gestationReadyRef.current) {
+        if (!gestationResumeRef.current) gestationResumeRef.current = audioRef.current.resume(true);
+        await gestationResumeRef.current;
+        if (!shouldApplyGestationUpdate({
+          requestId,
+          currentRequestId: gestationRequestRef.current,
+          engaged: gestationEngagedRef.current,
+        })) return;
+        gestationReadyRef.current = true;
+        gestationResumeRef.current = null;
         setIsPlaying(true);
       }
+      if (!shouldApplyGestationUpdate({
+        requestId,
+        currentRequestId: gestationRequestRef.current,
+        engaged: gestationEngagedRef.current,
+      })) return;
       audioRef.current.updateGestation({ frequency: candidate.frequency, pan: candidate.pan });
     } catch (error) {
+      if (requestId !== gestationRequestRef.current) return;
       gestationEngagedRef.current = false;
+      gestationReadyRef.current = false;
+      gestationResumeRef.current = null;
       setIsPlaying(false);
       audioRef.current.endGestation();
       setRuntimeError(error instanceof Error ? error.message : "The gestation tone could not start");
@@ -277,6 +334,10 @@ export function App() {
   const handleBirthRefused = useCallback((message) => {
     setRuntimeError(message);
   }, []);
+
+  const handleWorldGrabbed = useCallback(() => {
+    announceSonicCue("BEND THE ORBIT · OR DRAG INTO THE STAR TO SET THIS VOICE FREE", 2800);
+  }, [announceSonicCue]);
 
   const handlePluckBloom = useCallback(async (body, pluck) => {
     try {
@@ -301,7 +362,8 @@ export function App() {
     setInscribed(null);
     setElapsed(0);
     setSelectedBodyId("europa");
-    dispatchSoundflight({ type: "FOLLOW_BODY", bodyId: "europa" });
+    dispatchSoundflight({ type: "CANCEL" });
+    setCameraCommand((current) => ({ id: current.id + 1, type: "reset" }));
     setChallengeTarget(null);
     setChallengeStatus("CHOOSE A RATIO");
     setChallengeGuide(null);
@@ -347,11 +409,11 @@ export function App() {
       setChallengeStatus(`SEEKING ${challengeTargetRef.current}`);
     }
     if (eventCountRef.current >= MAX_SCORE_EVENTS) {
-      setRuntimeError("TAU RECORD LIMIT REACHED — INSCRIBE THIS ORBIT BEFORE CONTINUING");
+      setRuntimeError("The record is full — share this dance, then begin a fresh one");
       return;
     }
     if (event.at > 3600) {
-      setRuntimeError("THE TAU RECORD ENDS AT ONE HOUR — INSCRIBE THIS DANCE OR RESTART");
+      setRuntimeError("A dance ends at one hour — share it, or restart for a fresh take");
       return;
     }
     eventCountRef.current += 1;
@@ -444,7 +506,7 @@ export function App() {
       setElapsed(0);
       setRuntimeError(null);
       setSelectedBodyId("europa");
-      dispatchSoundflight({ type: "FOLLOW_BODY", bodyId: "europa" });
+      dispatchSoundflight({ type: "CANCEL" });
       setChallengeTarget(null);
       setChallengeStatus("CHOOSE A RATIO");
       setChallengeGuide(null);
@@ -494,7 +556,6 @@ export function App() {
         onCameraScale={setCameraScale}
         onConsumptionBloom={handleConsumptionBloom}
         onElapsed={handleElapsed}
-        onFollowBody={(bodyId) => dispatchSoundflight({ type: "FOLLOW_BODY", bodyId })}
         onGestationTone={handleGestationTone}
         onHaptic={performHaptic}
         onLaunchComplete={(bodyId) => {
@@ -505,6 +566,7 @@ export function App() {
         onNote={handleNote}
         onPhysicsFrame={handlePhysicsFrame}
         onPluckBloom={handlePluckBloom}
+        onWorldGrabbed={handleWorldGrabbed}
         selectedBodyId={selectedBodyId}
       />
 
@@ -512,6 +574,13 @@ export function App() {
         <h1>RELATIVITY<br />GRAMOPHONE</h1>
         <p>A PLAYABLE N-BODY MUSICAL UNIVERSE</p>
       </header>
+
+      {!dialogOpen && !overtureDismissed && (
+        <section className="soundflight-overture" aria-label="How to begin">
+          <em>Every orbit is a string.</em>
+          <span>PRESS PLAY TO HEAR THE SKY TURN · TOUCH A THREAD TO PLUCK IT</span>
+        </section>
+      )}
 
       {!dialogOpen && (
         <>
@@ -530,7 +599,7 @@ export function App() {
             <span>SYSTEMS</span>
           </button>
 
-          <div className="soundflight-launch-dock">
+          <div className="soundflight-launch-dock" data-invite={!hasEverPlayed && !isListener}>
             <button
               type="button"
               className="soundflight-launch"
@@ -542,14 +611,18 @@ export function App() {
                   return;
                 }
                 const cancelLaunch = soundflightState.mode === "launch";
+                if (!cancelLaunch && soundflightState.mode === "explore") {
+                  setCameraCommand((current) => ({ id: current.id + 1, type: "reset" }));
+                }
+                dismissOverture();
                 setLaunchPhase("armed");
                 dispatchSoundflight({ type: cancelLaunch ? "CANCEL" : "ARM_LAUNCH" });
               }}
             >
               <Planet aria-hidden="true" weight="thin" />
               <span>
-                <strong>{isListener ? "ANSWER" : soundflightState.mode === "launch" ? "CANCEL" : "CREATE WORLD"}</strong>
-                <small>{isListener ? "Enter this universe" : soundflightState.mode === "launch" ? "Return to flight" : "Hold · aim · release"}</small>
+                <strong>{isListener ? "ANSWER" : soundflightState.mode === "launch" ? "CANCEL" : "ADD PLANET"}</strong>
+                <small>{isListener ? "Enter this universe" : soundflightState.mode === "launch" ? "Return to composition" : "Drag from the star"}</small>
               </span>
             </button>
             <Transport isPlaying={isPlaying} isListener={isListener} onToggle={handleTogglePlayback} onRestart={restart} />
@@ -561,7 +634,7 @@ export function App() {
               <strong>{launchCopy.title}</strong>
               <p>{launchCopy.detail}</p>
               <ol aria-label="Launch steps">
-                {["HOLD", "AIM", "RELEASE"].map((step, index) => (
+                {["DRAG", "PITCH", "RELEASE"].map((step, index) => (
                   <li key={step} data-state={index < launchCopy.activeStep ? "done" : index === launchCopy.activeStep ? "active" : "next"}>
                     <small>0{index + 1}</small>
                     {step}
@@ -571,25 +644,34 @@ export function App() {
             </section>
           )}
 
-          <div className="soundflight-flight-cue" aria-label="Camera controls">
-            <NavigationArrow aria-hidden="true" weight="thin" />
-            <span>DRAG TO FLY · SCROLL / PINCH TO ZOOM</span>
-            <strong>{cameraScale}</strong>
+          <aside className="soundflight-voice-key" aria-label="Musical thread colors">
+            <span>MUSICAL THREADS · {atlasBodies.length} VOICES</span>
+            <ul>
+              {voiceLegend.map((voice) => (
+                <li key={voice.id}>
+                  <i aria-hidden="true" style={{ "--voice-color": `#${voice.color.toString(16).padStart(6, "0")}` }} />
+                  <strong>{voice.colorName}</strong>
+                  <small>{voice.label}</small>
+                </li>
+              ))}
+            </ul>
+            <p>PULSE = NOTE</p>
+            <b>{cameraScale}</b>
             <div className="soundflight-zoom-controls">
               <button type="button" aria-label="Zoom in" onClick={() => {
                 dispatchSoundflight({ type: "USER_NAVIGATE" });
-                setCameraCommand((current) => ({ id: current.id + 1, direction: -1 }));
+                setCameraCommand((current) => ({ id: current.id + 1, type: "zoom", direction: -1 }));
               }}>
                 <Plus aria-hidden="true" weight="thin" />
               </button>
               <button type="button" aria-label="Zoom out" onClick={() => {
                 dispatchSoundflight({ type: "USER_NAVIGATE" });
-                setCameraCommand((current) => ({ id: current.id + 1, direction: 1 }));
+                setCameraCommand((current) => ({ id: current.id + 1, type: "zoom", direction: 1 }));
               }}>
                 <Minus aria-hidden="true" weight="thin" />
               </button>
             </div>
-          </div>
+          </aside>
 
           <div className="soundflight-voice-breath" aria-live="polite">
             <WaveSine aria-hidden="true" weight="thin" />
@@ -598,13 +680,18 @@ export function App() {
 
           <button
             type="button"
-            className="soundflight-following"
-            onClick={() => dispatchSoundflight({ type: "USER_NAVIGATE" })}
+            className="soundflight-explore"
+            aria-pressed={soundflightState.mode === "explore"}
+            onClick={() => {
+              const leavingExplore = soundflightState.mode === "explore";
+              if (leavingExplore) setCameraCommand((current) => ({ id: current.id + 1, type: "reset" }));
+              dispatchSoundflight({ type: leavingExplore ? "EXIT_EXPLORE" : "ENTER_EXPLORE" });
+            }}
           >
-            {soundflightState.followingBodyId
-              ? `FOLLOWING · ${soundflightState.followingBodyId.toUpperCase()}`
-              : "FREE FLIGHT"}
-            {soundflightState.followingBodyId && <X aria-hidden="true" weight="thin" />}
+            {soundflightState.mode === "explore" ? "RETURN TO COMPOSITION" : "EXPLORE"}
+            {soundflightState.mode === "explore"
+              ? <X aria-hidden="true" weight="thin" />
+              : <NavigationArrow aria-hidden="true" weight="thin" />}
           </button>
 
           {systemsOpen && (
@@ -612,7 +699,7 @@ export function App() {
               <header>
                 <div>
                   <span>THE INSTRUMENT</span>
-                  <strong>{formatTime(elapsed)} · {composition.bodies.length} VOICES</strong>
+                  <strong>{formatTime(elapsed)} · {atlasBodies.length} VOICES</strong>
                 </div>
                 <button type="button" aria-label="Close systems" onClick={() => setSystemsOpen(false)}>
                   <X aria-hidden="true" weight="thin" />

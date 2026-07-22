@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 
 import {
   COSMIC_VOICES,
+  COSMIC_VOICE_ORDER,
   SONIFICATION_MODEL,
+  VOICE_HARMONICS,
   hapticPattern,
   isResonanceChallengeComplete,
   keplerPitch,
@@ -130,4 +132,17 @@ test("haptic patterns remain short and scale with physical intensity", () => {
   assert.deepEqual(hapticPattern({ kind: "pericenter", strength: 0.3 }), [5, 22, 4]);
   assert.deepEqual(hapticPattern({ kind: "pericenter", strength: 1.1 }), [9, 18, 7]);
   assert.deepEqual(hapticPattern({ kind: "resonance", strength: 0.9 }), [7, 22, 11]);
+});
+
+test("every cosmic voice has an audible harmonic recipe anchored to its fundamental", () => {
+  for (const voiceId of COSMIC_VOICE_ORDER) {
+    const harmonics = VOICE_HARMONICS[voiceId];
+    assert.ok(Array.isArray(harmonics) || ArrayBuffer.isView(harmonics), `${voiceId} has harmonics`);
+    assert.equal(harmonics[0], 0, `${voiceId} has no DC offset`);
+    assert.equal(harmonics[1], 1, `${voiceId} anchors the fundamental at unity`);
+    assert.ok(harmonics.length >= 6, `${voiceId} is richer than a bare sine`);
+    for (const amplitude of harmonics.slice(2)) {
+      assert.ok(amplitude > 0 && amplitude < 1, `${voiceId} overtones stay below the fundamental`);
+    }
+  }
 });

@@ -9,10 +9,12 @@ export const BIRTH_MAX_RADIUS = 0.56;
 export const BIRTH_MIN_MASS = 0.34;
 export const BIRTH_MAX_MASS = 1.18;
 export const AIM_DEADZONE = 0.02;
+export const MUSICAL_ORBIT_RADII = Object.freeze([0.21, 0.27, 0.3538000882, 0.4636092682, 0.54]);
 const MASS_GROWTH_RATE = 0.62;
 const AIM_SPEED_RANGE = 2.1;
 const MIN_THROW_FRACTION = 0.62;
 const MAX_BOUND_SPEED_FRACTION = 0.93;
+const RADIAL_LAUNCH_MIN_DISTANCE = 0.1;
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -108,5 +110,41 @@ export function birthBodyFromGesture({ press, aim, holdSeconds, star, existingId
     y,
     vx: star.vx + relativeVx,
     vy: star.vy + relativeVy,
+  };
+}
+
+export function birthBodyFromRadialLaunch({ release, star, existingIds, birthIndex }) {
+  if (existingIds.length >= MAX_WORLDS) throw new Error("The sky is full — feed a world to the star");
+  if (![release?.x, release?.y, star?.x, star?.y, star?.vx, star?.vy, star?.mass].every(Number.isFinite)) {
+    throw new Error("A radial launch requires finite star and release coordinates");
+  }
+
+  const dx = release.x - star.x;
+  const dy = release.y - star.y;
+  const draggedRadius = Math.hypot(dx, dy);
+  if (draggedRadius < RADIAL_LAUNCH_MIN_DISTANCE) throw new Error("Drag outward from the star to choose a pitch");
+
+  const radius = MUSICAL_ORBIT_RADII.reduce((closest, candidate) => (
+    Math.abs(candidate - draggedRadius) < Math.abs(closest - draggedRadius) ? candidate : closest
+  ));
+  const unitX = dx / draggedRadius;
+  const unitY = dy / draggedRadius;
+  const circularSpeed = Math.sqrt(GRAVITATIONAL_CONSTANT * star.mass / radius);
+  const period = TAU * Math.sqrt((radius ** 3) / (GRAVITATIONAL_CONSTANT * star.mass));
+  const x = star.x + unitX * radius;
+  const y = star.y + unitY * radius;
+
+  return {
+    id: allocateWorldId(existingIds),
+    created: true,
+    sprite: 1 + (birthIndex % 3),
+    voice: COSMIC_VOICE_ORDER[birthIndex % COSMIC_VOICE_ORDER.length],
+    mass: clamp(BIRTH_MIN_MASS + (birthIndex % 4) * 0.16, BIRTH_MIN_MASS, BIRTH_MAX_MASS),
+    frequency: keplerPitch(period) ?? 220,
+    pan: clamp(x / 0.52, -0.86, 0.86),
+    x,
+    y,
+    vx: star.vx - unitY * circularSpeed,
+    vy: star.vy + unitX * circularSpeed,
   };
 }

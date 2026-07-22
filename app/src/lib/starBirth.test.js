@@ -5,8 +5,10 @@ import {
   BIRTH_MAX_MASS,
   BIRTH_MIN_MASS,
   BIRTH_MIN_RADIUS,
+  MUSICAL_ORBIT_RADII,
   STAR_CORE_RADIUS,
   birthBodyFromGesture,
+  birthBodyFromRadialLaunch,
   birthMassFromHold,
   previewOrbit,
 } from "./starBirth.js";
@@ -106,6 +108,68 @@ test("a full sky refuses another birth", () => {
   const existingIds = ["io", "europa", "callisto", ...Array.from({ length: MAX_WORLDS - 3 }, (_, i) => `nova-${i + 1}`)];
 
   assert.throws(() => birthBodyFromGesture(gesture({ existingIds })), /sky is full/i);
+});
+
+test("a radial launch snaps distance to a stable musical orbit without a hold gesture", () => {
+  const spec = birthBodyFromRadialLaunch({
+    release: { x: 0.34, y: 0.02 },
+    star: STAR,
+    existingIds: ["io", "europa", "callisto"],
+    birthIndex: 1,
+  });
+  const radius = Math.hypot(spec.x - STAR.x, spec.y - STAR.y);
+  const speed = Math.hypot(spec.vx - STAR.vx, spec.vy - STAR.vy);
+  const expectedCircularSpeed = Math.sqrt(GRAVITATIONAL_CONSTANT * STAR.mass / radius);
+
+  assert.ok(Math.abs(radius - MUSICAL_ORBIT_RADII[2]) < 1e-12);
+  assert.ok(Math.abs(speed - expectedCircularSpeed) < 1e-12, "launch must settle onto a circular orbit");
+  assert.ok(spec.x * spec.vy - spec.y * spec.vx > 0, "launch must use one calm prograde direction");
+  assert.equal(spec.voice, COSMIC_VOICE_ORDER[1]);
+  assert.ok(spec.frequency >= 55 && spec.frequency <= 1760);
+});
+
+test("a radial launch must visibly leave the star before it can create a world", () => {
+  assert.throws(() => birthBodyFromRadialLaunch({
+    release: { x: 0.03, y: 0.01 },
+    star: STAR,
+    existingIds: ["io", "europa", "callisto"],
+    birthIndex: 0,
+  }), /drag outward/i);
+});
+
+test("a radial launch refuses corrupt state and a full sky without creating a fallback world", () => {
+  const existingIds = ["io", "europa", "callisto", ...Array.from({ length: MAX_WORLDS - 3 }, (_, index) => `nova-${index + 1}`)];
+
+  assert.throws(() => birthBodyFromRadialLaunch({
+    release: { x: 0.3, y: 0.1 },
+    star: STAR,
+    existingIds,
+    birthIndex: 0,
+  }), /sky is full/i);
+  assert.throws(() => birthBodyFromRadialLaunch({
+    release: { x: Number.NaN, y: 0.1 },
+    star: STAR,
+    existingIds: ["io", "europa", "callisto"],
+    birthIndex: 0,
+  }), /finite star and release coordinates/i);
+});
+
+test("radial launches allocate the first available id and cycle score fields deterministically", () => {
+  const input = {
+    release: { x: 0, y: 0.48 },
+    star: STAR,
+    existingIds: ["io", "europa", "callisto", "nova-1", "nova-3"],
+    birthIndex: 4,
+  };
+  const spec = birthBodyFromRadialLaunch(input);
+
+  assert.equal(spec.id, "nova-2");
+  assert.equal(spec.voice, COSMIC_VOICE_ORDER[0]);
+  assert.equal(spec.sprite, 2);
+  assert.deepEqual(spec, birthBodyFromRadialLaunch(input));
+  for (const key of ["x", "y", "vx", "vy", "mass", "frequency", "pan"]) {
+    assert.ok(Number.isFinite(spec[key]), `${key} must be finite`);
+  }
 });
 
 test("the aim ghost is a closed bound ellipse that brackets the birth radius", () => {
