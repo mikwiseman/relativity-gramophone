@@ -625,6 +625,16 @@ function createStarVisual(solarTexture, radialTexture) {
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.25, 64, 48), material);
   group.add(mesh);
 
+  const hitArea = new THREE.Mesh(
+    new THREE.SphereGeometry(0.55, 24, 16),
+    new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+    }),
+  );
+  group.add(hitArea);
+
   const glory = new THREE.Sprite(new THREE.SpriteMaterial({
     map: createStarGloryTexture(),
     color: 0xffc678,
@@ -664,7 +674,16 @@ function createStarVisual(solarTexture, radialTexture) {
 
   const light = new THREE.PointLight(0xffb25b, 4.8, 36, 1.7);
   group.add(light);
-  return { group, mesh, glory, corona, outerCorona, ambientHalo, impulse: 0 };
+  return {
+    group,
+    mesh,
+    hitArea,
+    glory,
+    corona,
+    outerCorona,
+    ambientHalo,
+    impulse: 0,
+  };
 }
 
 function createLaunchPreview() {
@@ -1068,7 +1087,7 @@ export function SoundflightStage(props) {
     const sharedRadialTexture = createRadialTexture();
     const starVisual = createStarVisual(solarTexture, sharedRadialTexture);
     starVisual.mesh.userData.bodyId = "star";
-    starVisual.corona.userData.bodyId = "star";
+    starVisual.hitArea.userData.bodyId = "star";
     scene.add(starVisual.group);
     const launchPreview = createLaunchPreview();
     scene.add(launchPreview.group);
@@ -1213,13 +1232,16 @@ export function SoundflightStage(props) {
       const point = eventPoint(event, renderer.domElement);
       runtime.pointer.set((point.x / point.width) * 2 - 1, -(point.y / point.height) * 2 + 1);
       runtime.raycaster.setFromCamera(runtime.pointer, camera);
-      const meshes = [
-        starVisual.mesh,
-        starVisual.corona,
-        ...runtime.bodyVisuals.values().flatMap((visual) => [visual.mesh, visual.rim]),
-      ];
-      const hit = runtime.raycaster.intersectObjects(meshes, false)[0];
-      return hit?.object?.userData?.bodyId ?? null;
+      const worlds = [...runtime.bodyVisuals.values()]
+        .flatMap((visual) => [visual.mesh, visual.rim]);
+      const worldHit = runtime.raycaster.intersectObjects(worlds, false)[0];
+      if (worldHit) return worldHit.object.userData.bodyId ?? null;
+
+      const starHit = runtime.raycaster.intersectObjects(
+        [starVisual.hitArea],
+        false,
+      )[0];
+      return starHit?.object?.userData?.bodyId ?? null;
     };
 
     const trailPaths = () => {
