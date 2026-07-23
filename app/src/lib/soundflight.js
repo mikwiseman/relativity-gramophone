@@ -47,6 +47,36 @@ export function launchGuidance(phase) {
   return { ...guidance };
 }
 
+const MOON_GUIDANCE = Object.freeze({
+  armed: Object.freeze({
+    eyebrow: "ADD AN OVERTONE",
+    title: "DRAG FROM {PARENT}",
+    detail: "Release inside the luminous stable ring",
+    activeStep: 0,
+  }),
+  forming: Object.freeze({
+    eyebrow: "THE STABLE RING IS OPEN",
+    title: "CHOOSE THE INTERVAL",
+    detail: "Near is bright · far is slow",
+    activeStep: 1,
+  }),
+  aiming: Object.freeze({
+    eyebrow: "A NEW OVERTONE IS READY",
+    title: "RELEASE TO HEAR IT",
+    detail: "The moon subdivides its parent voice",
+    activeStep: 2,
+  }),
+});
+
+export function moonGuidance(phase, parentLabel = "EUROPA") {
+  const guidance = MOON_GUIDANCE[phase];
+  if (!guidance) throw new Error(`Unknown moon phase: ${phase}`);
+  return {
+    ...guidance,
+    title: guidance.title.replace("{PARENT}", parentLabel.toUpperCase()),
+  };
+}
+
 export function canBeginRadialLaunchFromHit(bodyId) {
   return bodyId == null || bodyId === "star";
 }
@@ -126,6 +156,27 @@ export function buildMusicalConnections(bodies, star) {
   });
 }
 
+export function buildResonanceBridge(bodies, resonance) {
+  if (!resonance) return null;
+  if (!Array.isArray(resonance.bodyIds) || resonance.bodyIds.length !== 2) {
+    throw new Error("A resonance bridge requires exactly two bodies");
+  }
+  const first = bodies.find((body) => body.id === resonance.bodyIds[0]);
+  const second = bodies.find((body) => body.id === resonance.bodyIds[1]);
+  if (!first || !second) throw new Error("A resonance bridge requires two live bodies");
+  if (![resonance.numerator, resonance.denominator, resonance.strength].every(Number.isFinite)) {
+    throw new Error("A resonance bridge requires a finite physical ratio");
+  }
+  return {
+    label: resonance.label,
+    numerator: resonance.numerator,
+    denominator: resonance.denominator,
+    bodyIds: [...resonance.bodyIds],
+    colors: [voiceVisual(first.voice).color, voiceVisual(second.voice).color],
+    strength: resonance.strength,
+  };
+}
+
 export function frequencyToNoteName(frequency) {
   if (!Number.isFinite(frequency) || frequency <= 0) throw new Error("Frequency must be positive");
   const midi = Math.round(69 + 12 * Math.log2(frequency / 440));
@@ -142,6 +193,12 @@ export function reduceSoundflightState(state, action) {
       return createSoundflightState();
     case "COMPLETE_LAUNCH":
       if (!action.bodyId) throw new Error("COMPLETE_LAUNCH requires a bodyId");
+      return createSoundflightState();
+    case "ARM_MOON":
+      if (!action.bodyId) throw new Error("ARM_MOON requires a bodyId");
+      return { mode: "moon", followingBodyId: action.bodyId };
+    case "COMPLETE_MOON":
+      if (!action.bodyId) throw new Error("COMPLETE_MOON requires a bodyId");
       return createSoundflightState();
     case "ENTER_EXPLORE":
       return { mode: "explore", followingBodyId: null };
@@ -236,4 +293,12 @@ export function nextCameraDistance(distance, direction) {
   if (!Number.isFinite(distance) || distance <= 0) throw new Error("Camera distance must be positive");
   if (direction !== -1 && direction !== 1) throw new Error("Camera zoom direction must be -1 or 1");
   return clamp(distance + direction * 1.6, 3.2, 24);
+}
+
+export function editorialCameraDistance(systemRadius, aspect) {
+  if (!Number.isFinite(systemRadius) || systemRadius < 0 || !Number.isFinite(aspect) || aspect <= 0) {
+    throw new Error("Editorial camera fit requires a finite system radius and aspect");
+  }
+  const portraitPenalty = aspect < 0.8 ? 0.8 / aspect : 1;
+  return clamp(Math.max(8.4, systemRadius * 2.05) * portraitPenalty, 8.4, 24);
 }

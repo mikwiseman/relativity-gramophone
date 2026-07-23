@@ -26,7 +26,7 @@ test("every harp is a valid, shareable score in the current format", () => {
   for (const harpId of HARP_ORDER) {
     const composition = createHarpComposition(harpId);
     const decoded = decodeComposition(encodeComposition(composition));
-    assert.equal(decoded.format, "tau-record/5", harpId);
+    assert.equal(decoded.format, "tau-record/6", harpId);
     assert.deepEqual(decoded, composition, harpId);
   }
 });

@@ -2,7 +2,8 @@ import { MAX_WORLDS, PHYSICS_MODEL } from "./physicsEngine.js";
 import { assertResonanceSeals } from "./gameProgress.js";
 import { defaultVoiceForBody, isCosmicVoice, SONIFICATION_MODEL } from "./sonification.js";
 
-const FORMAT = "tau-record/5";
+const FORMAT = "tau-record/6";
+const FIFTH_FORMAT = "tau-record/5";
 const FOURTH_FORMAT = "tau-record/4";
 const THIRD_FORMAT = "tau-record/3";
 const PREVIOUS_FORMAT = "tau-record/2";
@@ -11,6 +12,7 @@ export const MAX_SCORE_EVENTS = 1024;
 const VALID_THEMES = new Set(["lacquer", "white", "sumi"]);
 const VALID_BODY_IDS = new Set(["io", "europa", "callisto"]);
 const NOVA_ID_PATTERN = /^nova-\d{1,2}$/u;
+const MOON_ID_PATTERN = /^moon-[a-z0-9-]{1,32}-[12]$/u;
 
 const DEFAULT_BODIES = [
   {
@@ -77,9 +79,13 @@ function isFiniteNumber(value, minimum = -Infinity, maximum = Infinity) {
   return Number.isFinite(value) && value >= minimum && value <= maximum;
 }
 
-function assertNovaSpec(body, { withState }) {
-  if (typeof body?.id !== "string" || !NOVA_ID_PATTERN.test(body.id)) throw new Error(`Invalid score body: ${body?.id ?? "missing"}`);
+function assertCreatedSpec(body, { withState }) {
+  const isMoon = body?.kind === "moon";
+  const validId = isMoon ? MOON_ID_PATTERN.test(body?.id ?? "") : NOVA_ID_PATTERN.test(body?.id ?? "");
+  if (typeof body?.id !== "string" || !validId) throw new Error(`Invalid score body: ${body?.id ?? "missing"}`);
   if (body.created !== true) throw new Error(`Invalid created flag for ${body.id}`);
+  if (isMoon && (typeof body.parentId !== "string" || !body.parentId)) throw new Error(`Invalid moon parent for ${body.id}`);
+  if (!isMoon && body.kind !== undefined && body.kind !== "planet") throw new Error(`Invalid score body kind for ${body.id}`);
   if (!Number.isInteger(body.sprite) || body.sprite < 1 || body.sprite > 3) throw new Error(`Invalid sprite for ${body.id}`);
   if (!isCosmicVoice(body.voice)) throw new Error(`Invalid cosmic voice for ${body.id}`);
   if (!isFiniteNumber(body.mass, 0.01, 10)) throw new Error(`Invalid mass for ${body.id}`);
@@ -103,7 +109,7 @@ function assertBodies(bodies) {
       }
       if (!isCosmicVoice(body.voice)) throw new Error(`Invalid cosmic voice for ${body.id}`);
     } else {
-      assertNovaSpec(body, { withState: false });
+      assertCreatedSpec(body, { withState: false });
     }
     seen.add(body.id);
   }
@@ -125,24 +131,46 @@ function assertPhysicalState(initialState, bodies) {
       if (!isFiniteNumber(body[key], -10_000, 10_000)) throw new Error(`Invalid initial ${key} for ${body.id}`);
     }
     if (body.kind === "planet" && !isCosmicVoice(body.voice)) throw new Error(`Invalid initial cosmic voice for ${body.id}`);
+    if (body.kind === "moon") {
+      if (!isCosmicVoice(body.voice) || typeof body.parentId !== "string" || !ids.has(body.parentId)) {
+        throw new Error(`Invalid initial moon for ${body.id}`);
+      }
+    }
   }
 }
 
-function assertEvent(event, previousTime, aliveIds) {
+function assertEvent(event, previousTime, aliveIds, kindsById, parentById) {
   if (!event || !isFiniteNumber(event.at, 0, 3_600) || event.at < previousTime) throw new Error("Invalid score event");
 
   if (event.kind === "add-body") {
-    assertNovaSpec(event.body, { withState: true });
+    assertCreatedSpec(event.body, { withState: true });
     if (aliveIds.has(event.body.id)) throw new Error(`Score birth for a world already alive: ${event.body.id}`);
     if (aliveIds.size >= MAX_WORLDS) throw new Error("Too many worlds in the score");
+    if (event.body.kind === "moon") {
+      if (!aliveIds.has(event.body.parentId) || kindsById.get(event.body.parentId) !== "planet") {
+        throw new Error(`Score moon has no live planet parent: ${event.body.id}`);
+      }
+      parentById.set(event.body.id, event.body.parentId);
+    }
     aliveIds.add(event.body.id);
+    kindsById.set(event.body.id, event.body.kind === "moon" ? "moon" : "planet");
     return;
   }
 
   if (event.kind === "remove-body") {
-    if (typeof event.bodyId !== "string" || !NOVA_ID_PATTERN.test(event.bodyId)) throw new Error("Invalid score event");
+    if (typeof event.bodyId !== "string" || (!NOVA_ID_PATTERN.test(event.bodyId) && !MOON_ID_PATTERN.test(event.bodyId))) {
+      throw new Error("Invalid score event");
+    }
     if (!aliveIds.has(event.bodyId)) throw new Error(`Score event touches a world that is not alive: ${event.bodyId}`);
     aliveIds.delete(event.bodyId);
+    kindsById.delete(event.bodyId);
+    parentById.delete(event.bodyId);
+    for (const [childId, parentId] of parentById) {
+      if (parentId !== event.bodyId) continue;
+      aliveIds.delete(childId);
+      kindsById.delete(childId);
+      parentById.delete(childId);
+    }
     return;
   }
 
@@ -195,9 +223,13 @@ function assertComposition(value) {
     throw new Error("Invalid score parent");
   }
   const aliveIds = new Set(value.bodies.map((body) => body.id));
+  const kindsById = new Map(value.bodies.map((body) => [body.id, body.kind === "moon" ? "moon" : "planet"]));
+  const parentById = new Map(value.bodies
+    .filter((body) => body.kind === "moon")
+    .map((body) => [body.id, body.parentId]));
   let previousTime = -Infinity;
   for (const event of value.events) {
-    assertEvent(event, previousTime, aliveIds);
+    assertEvent(event, previousTime, aliveIds, kindsById, parentById);
     previousTime = event.at;
   }
 }
@@ -220,6 +252,13 @@ function addDefaultVoices(value) {
 }
 
 function migrateFourthComposition(value) {
+  if (!Array.isArray(value?.bodies) || !Array.isArray(value?.events)) throw new Error("Invalid score payload");
+  const migrated = { ...clone(value), format: FORMAT };
+  assertComposition(migrated);
+  return migrated;
+}
+
+function migrateFifthComposition(value) {
   if (!Array.isArray(value?.bodies) || !Array.isArray(value?.events)) throw new Error("Invalid score payload");
   const migrated = { ...clone(value), format: FORMAT };
   assertComposition(migrated);
@@ -302,6 +341,7 @@ export function createReplyComposition(parent, frame, preferredTheme) {
     .filter((body) => !VALID_BODY_IDS.has(body.id))
     .map((body) => ({
       id: body.id,
+      ...(body.kind === "moon" ? { kind: "moon", parentId: body.parentId } : {}),
       created: true,
       sprite: body.sprite,
       voice: body.voice,
@@ -350,6 +390,7 @@ export function decodeComposition(encoded) {
   if (value?.format === PREVIOUS_FORMAT) return migratePreviousComposition(value);
   if (value?.format === THIRD_FORMAT) return migrateThirdComposition(value);
   if (value?.format === FOURTH_FORMAT) return migrateFourthComposition(value);
+  if (value?.format === FIFTH_FORMAT) return migrateFifthComposition(value);
   const normalized = addDefaultResonanceSeals(value);
   assertComposition(normalized);
   return normalized;

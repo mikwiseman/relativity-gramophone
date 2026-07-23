@@ -97,7 +97,7 @@ export function createHarpComposition(harpId) {
   const initialState = createInitialPhysicsState(fullSpecs);
 
   return {
-    format: "tau-record/5",
+    format: "tau-record/6",
     physics: PHYSICS_MODEL,
     sonification: SONIFICATION_MODEL,
     seed: `harp-${harp.id}`,

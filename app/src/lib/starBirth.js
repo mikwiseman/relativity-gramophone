@@ -15,6 +15,7 @@ const AIM_SPEED_RANGE = 2.1;
 const MIN_THROW_FRACTION = 0.62;
 const MAX_BOUND_SPEED_FRACTION = 0.93;
 const RADIAL_LAUNCH_MIN_DISTANCE = 0.1;
+const MUSICAL_ORBIT_MIN_GAP = 0.018;
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -113,7 +114,31 @@ export function birthBodyFromGesture({ press, aim, holdSeconds, star, existingId
   };
 }
 
-export function birthBodyFromRadialLaunch({ release, star, existingIds, birthIndex }) {
+function freeMusicalOrbitRadius(draggedRadius, existingBodies = [], star) {
+  const occupiedRadii = existingBodies
+    .filter((body) => body.kind === "planet")
+    .map((body) => (
+      Number.isFinite(body.semiMajor)
+        ? body.semiMajor
+        : Math.hypot(body.x - star.x, body.y - star.y)
+    ))
+    .filter(Number.isFinite);
+  const candidates = MUSICAL_ORBIT_RADII
+    .filter((candidate) => occupiedRadii.every((occupied) => (
+      Math.abs(candidate - occupied) >= MUSICAL_ORBIT_MIN_GAP
+    )))
+    .sort((first, second) => Math.abs(first - draggedRadius) - Math.abs(second - draggedRadius));
+  if (!candidates.length) throw new Error("All five orbit strings are sounding — remove a planet to retune the sky");
+  return candidates[0];
+}
+
+export function birthBodyFromRadialLaunch({
+  release,
+  star,
+  existingIds,
+  existingBodies = [],
+  birthIndex,
+}) {
   if (existingIds.length >= MAX_WORLDS) throw new Error("The sky is full — feed a world to the star");
   if (![release?.x, release?.y, star?.x, star?.y, star?.vx, star?.vy, star?.mass].every(Number.isFinite)) {
     throw new Error("A radial launch requires finite star and release coordinates");
@@ -124,9 +149,7 @@ export function birthBodyFromRadialLaunch({ release, star, existingIds, birthInd
   const draggedRadius = Math.hypot(dx, dy);
   if (draggedRadius < RADIAL_LAUNCH_MIN_DISTANCE) throw new Error("Drag outward from the star to choose a pitch");
 
-  const radius = MUSICAL_ORBIT_RADII.reduce((closest, candidate) => (
-    Math.abs(candidate - draggedRadius) < Math.abs(closest - draggedRadius) ? candidate : closest
-  ));
+  const radius = freeMusicalOrbitRadius(draggedRadius, existingBodies, star);
   const unitX = dx / draggedRadius;
   const unitY = dy / draggedRadius;
   const circularSpeed = Math.sqrt(GRAVITATIONAL_CONSTANT * star.mass / radius);

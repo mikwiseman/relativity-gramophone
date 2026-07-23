@@ -3,8 +3,9 @@ const TAU = Math.PI * 2;
 export const PHYSICS_MODEL = "nbody-weak-relativity/2";
 export const FIXED_STEP = 1 / 120;
 export const GRAVITATIONAL_CONSTANT = 0.00665;
-export const GRAVITY_SOFTENING = 0.006;
+export const GRAVITY_SOFTENING = 0.0015;
 export const MAX_WORLDS = 12;
+export const MAX_MOONS_PER_PLANET = 2;
 
 const PLANET_MASS_SCALE = 0.0028;
 const FELT_RELATIVITY_GAIN = 1.18;
@@ -231,6 +232,54 @@ function osculatingElements(body, star) {
   };
 }
 
+export function orbitPathForBody(body, focus, sampleCount = 128) {
+  if (!Number.isInteger(sampleCount) || sampleCount < 12) {
+    throw new Error("An orbital string requires at least twelve samples");
+  }
+  for (const value of [
+    body?.x,
+    body?.y,
+    body?.vx,
+    body?.vy,
+    body?.mass,
+    focus?.x,
+    focus?.y,
+    focus?.vx,
+    focus?.vy,
+    focus?.mass,
+  ]) {
+    if (!Number.isFinite(value)) throw new Error("An orbital string requires finite body and focus state");
+  }
+
+  const dx = body.x - focus.x;
+  const dy = body.y - focus.y;
+  const dvx = body.vx - focus.vx;
+  const dvy = body.vy - focus.vy;
+  const radius = Math.hypot(dx, dy);
+  const mu = GRAVITATIONAL_CONSTANT * (focus.mass + body.mass);
+  const angularMomentum = dx * dvy - dy * dvx;
+  const eccentricityX = (dvy * angularMomentum) / mu - dx / radius;
+  const eccentricityY = (-dvx * angularMomentum) / mu - dy / radius;
+  const eccentricity = Math.hypot(eccentricityX, eccentricityY);
+  const semiLatus = (angularMomentum * angularMomentum) / mu;
+  const periapsisAngle = eccentricity > 1e-8
+    ? Math.atan2(eccentricityY, eccentricityX)
+    : Math.atan2(dy, dx);
+  if (!(radius > 0) || !(semiLatus > 0) || eccentricity >= 0.98) return [];
+
+  const points = [];
+  for (let index = 0; index <= sampleCount; index += 1) {
+    const trueAnomaly = (index / sampleCount) * TAU;
+    const orbitRadius = semiLatus / (1 + eccentricity * Math.cos(trueAnomaly));
+    if (!Number.isFinite(orbitRadius) || orbitRadius <= 0) return [];
+    points.push({
+      x: focus.x + orbitRadius * Math.cos(trueAnomaly + periapsisAngle),
+      y: focus.y + orbitRadius * Math.sin(trueAnomaly + periapsisAngle),
+    });
+  }
+  return points;
+}
+
 export class PhysicsEngine {
   constructor(initialState) {
     this.state = clone(initialState);
@@ -281,6 +330,7 @@ export class PhysicsEngine {
     const star = this.getBody("star");
     for (let index = 0; index < this.state.bodies.length; index += 1) {
       const body = this.state.bodies[index];
+      const focus = body.kind === "moon" ? this.getBody(body.parentId) : star;
       const potential = potentialAtBody(index, this.state.bodies);
       const speedSquared = body.vx * body.vx + body.vy * body.vy;
       const clock = computeWeakFieldClockRate({ potential, speedSquared });
@@ -288,15 +338,17 @@ export class PhysicsEngine {
       body.rawClockLoss = clock.rawLoss;
       body.properRate = clock.feltRate;
       body.properTime += clock.feltRate * stepSize;
-      body.doppler = dopplerFactor(body.vx - (star?.vx ?? 0));
+      body.doppler = dopplerFactor(body.vx - (focus?.vx ?? 0));
 
-      if (body.kind === "planet" && star) Object.assign(body, osculatingElements(body, star));
+      if ((body.kind === "planet" || body.kind === "moon") && focus) {
+        Object.assign(body, osculatingElements(body, focus));
+      }
     }
   }
 
   setBodyState(bodyId, state) {
     const body = this.getBody(bodyId);
-    if (!body || body.kind !== "planet") throw new Error(`Unknown physical body: ${bodyId}`);
+    if (!body || body.kind === "star") throw new Error(`Unknown physical body: ${bodyId}`);
     for (const key of ["x", "y", "vx", "vy"]) {
       if (!Number.isFinite(state[key])) throw new Error(`Invalid ${key} for ${bodyId}`);
       body[key] = state[key];
@@ -313,32 +365,44 @@ export class PhysicsEngine {
   setOrbitFromGesture(bodyId, { x, y, velocityScale = 1 }) {
     const body = this.getBody(bodyId);
     const star = this.getBody("star");
-    if (!body || body.kind !== "planet" || !star) throw new Error(`Unknown physical body: ${bodyId}`);
-    const dx = x - star.x;
-    const dy = y - star.y;
-    const radius = clamp(Math.hypot(dx, dy), 0.16, 0.52);
+    const focus = body?.kind === "moon" ? this.getBody(body.parentId) : star;
+    if (!body || body.kind === "star" || !focus) throw new Error(`Unknown physical body: ${bodyId}`);
+    const dx = x - focus.x;
+    const dy = y - focus.y;
+    const minimumRadius = body.kind === "moon" ? GRAVITY_SOFTENING * 3 : 0.16;
+    const maximumRadius = body.kind === "moon" ? Math.max(minimumRadius, body.semiMajor * 1.35) : 0.52;
+    const radius = clamp(Math.hypot(dx, dy), minimumRadius, maximumRadius);
     const unitX = dx / Math.max(Math.hypot(dx, dy), 1e-6);
     const unitY = dy / Math.max(Math.hypot(dx, dy), 1e-6);
-    const relativeVx = body.vx - star.vx;
-    const relativeVy = body.vy - star.vy;
+    const relativeVx = body.vx - focus.vx;
+    const relativeVy = body.vy - focus.vy;
     const direction = dx * relativeVy - dy * relativeVx >= 0 ? 1 : -1;
     const tangentX = -unitY * direction;
     const tangentY = unitX * direction;
-    const mu = GRAVITATIONAL_CONSTANT * (star.mass + body.mass);
+    const mu = GRAVITATIONAL_CONSTANT * (focus.mass + body.mass);
     const speed = Math.sqrt(mu / radius) * clamp(velocityScale, 0.72, 1.22);
 
     return this.setBodyState(bodyId, {
-      x: star.x + unitX * radius,
-      y: star.y + unitY * radius,
-      vx: star.vx + tangentX * speed,
-      vy: star.vy + tangentY * speed,
+      x: focus.x + unitX * radius,
+      y: focus.y + unitY * radius,
+      vx: focus.vx + tangentX * speed,
+      vy: focus.vy + tangentY * speed,
     });
   }
 
   addBody(spec) {
     if (this.getBody(spec.id)) throw new Error(`Duplicate physical body: ${spec.id}`);
-    if (this.state.bodies.filter((body) => body.kind === "planet").length >= MAX_WORLDS) {
+    if (this.state.bodies.filter((body) => body.kind !== "star").length >= MAX_WORLDS) {
       throw new Error("The sky is full — feed a world to the star");
+    }
+    const kind = spec.kind ?? "planet";
+    if (kind !== "planet" && kind !== "moon") throw new Error(`Invalid physical body kind: ${kind}`);
+    if (kind === "moon") {
+      const parent = this.getBody(spec.parentId);
+      if (!parent || parent.kind !== "planet") throw new Error(`Unknown moon parent: ${spec.parentId}`);
+      if (this.state.bodies.filter((body) => body.kind === "moon" && body.parentId === spec.parentId).length >= MAX_MOONS_PER_PLANET) {
+        throw new Error("A planet can hold at most two moons");
+      }
     }
     for (const key of ["x", "y", "vx", "vy", "mass", "frequency", "pan"]) {
       if (!Number.isFinite(spec[key])) throw new Error(`Invalid ${key} for ${spec.id}`);
@@ -346,7 +410,8 @@ export class PhysicsEngine {
 
     this.state.bodies.push({
       id: spec.id,
-      kind: "planet",
+      kind,
+      ...(kind === "moon" ? { parentId: spec.parentId } : {}),
       created: true,
       sprite: spec.sprite,
       mass: PLANET_MASS_SCALE * spec.mass,
@@ -374,8 +439,12 @@ export class PhysicsEngine {
   removeBody(bodyId) {
     const index = this.state.bodies.findIndex((body) => body.id === bodyId);
     if (index === -1) throw new Error(`Unknown physical body: ${bodyId}`);
-    if (this.state.bodies[index].kind !== "planet") throw new Error("The star cannot be removed");
-    this.state.bodies.splice(index, 1);
+    if (this.state.bodies[index].kind === "star") throw new Error("The star cannot be removed");
+    const removedIds = new Set([bodyId]);
+    for (const body of this.state.bodies) {
+      if (body.parentId === bodyId) removedIds.add(body.id);
+    }
+    this.state.bodies = this.state.bodies.filter((body) => !removedIds.has(body.id));
     this.updateDerived(0);
     return { kind: "remove-body", at: Number(this.state.time.toFixed(6)), bodyId };
   }

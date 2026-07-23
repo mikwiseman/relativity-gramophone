@@ -866,8 +866,11 @@ input:focus-visible {
 }
 
 .soundflight-stage[data-interaction-mode="launch"],
+.soundflight-stage[data-interaction-mode="moon"],
 .soundflight-stage[data-interaction-mode="launch"]:active,
-.soundflight-stage[data-interaction-mode="launch"] .soundflight-canvas {
+.soundflight-stage[data-interaction-mode="moon"]:active,
+.soundflight-stage[data-interaction-mode="launch"] .soundflight-canvas,
+.soundflight-stage[data-interaction-mode="moon"] .soundflight-canvas {
   cursor: crosshair;
 }
 
@@ -880,6 +883,54 @@ input:focus-visible {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.soundflight-time-needle {
+  position: absolute;
+  z-index: 1;
+  top: 14%;
+  bottom: 13%;
+  width: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgb(233 186 102 / 18%) 15%,
+    rgb(238 197 121 / 48%) 50%,
+    rgb(233 186 102 / 18%) 85%,
+    transparent
+  );
+  box-shadow: 0 0 18px rgb(111 230 242 / 8%);
+  transform: translateX(-50%);
+  transition: opacity 240ms ease;
+}
+
+.soundflight-stage[data-interaction-mode="explore"] .soundflight-time-needle {
+  opacity: 0;
+}
+
+.soundflight-time-needle i {
+  position: absolute;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  border: 1px solid rgb(241 199 118 / 66%);
+  border-radius: 50%;
+  background: #090704;
+  box-shadow: 0 0 12px rgb(237 189 101 / 28%);
+  transform: translate(-50%, -50%);
+}
+
+.soundflight-time-needle i:nth-child(1) {
+  top: 16%;
+}
+
+.soundflight-time-needle i:nth-child(2) {
+  top: 50%;
+}
+
+.soundflight-time-needle i:nth-child(3) {
+  top: 84%;
 }
 
 .soundflight-title {
@@ -1212,6 +1263,81 @@ input:focus-visible {
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.32em;
+}
+
+.soundflight-selected-orbit {
+  position: absolute;
+  z-index: 6;
+  top: clamp(152px, 20vh, 216px);
+  right: clamp(32px, 4vw, 64px);
+  display: grid;
+  width: 180px;
+  gap: 7px;
+  padding: 0 0 15px;
+  border-bottom: 1px solid color-mix(in srgb, var(--selected-voice) 34%, transparent);
+  color: rgb(229 193 129 / 62%);
+  background: linear-gradient(90deg, transparent, rgb(3 3 2 / 22%));
+  text-align: right;
+  backdrop-filter: blur(8px);
+}
+
+.soundflight-selected-orbit > span,
+.soundflight-selected-orbit > small {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.26em;
+}
+
+.soundflight-selected-orbit > strong {
+  color: var(--selected-voice);
+  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 22px color-mix(in srgb, var(--selected-voice) 32%, transparent);
+}
+
+.soundflight-selected-orbit > small {
+  color: rgb(229 193 129 / 42%);
+  letter-spacing: 0.15em;
+}
+
+.soundflight-add-moon {
+  display: inline-flex;
+  min-height: 44px;
+  margin: 7px 0 0 auto;
+  padding: 0 15px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px solid color-mix(in srgb, var(--selected-voice) 42%, transparent);
+  border-radius: 999px;
+  color: var(--selected-voice);
+  background: rgb(3 3 2 / 38%);
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.soundflight-add-moon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.soundflight-add-moon:hover,
+.soundflight-add-moon:focus-visible,
+.soundflight-add-moon[aria-pressed="true"] {
+  border-color: var(--selected-voice);
+  outline: none;
+  background: color-mix(in srgb, var(--selected-voice) 9%, rgb(3 3 2 / 58%));
+  box-shadow: 0 0 28px color-mix(in srgb, var(--selected-voice) 14%, transparent);
+}
+
+.soundflight-add-moon:disabled {
+  cursor: default;
+  opacity: 0.42;
 }
 
 .soundflight-zoom-controls {
@@ -1613,11 +1739,40 @@ input:focus-visible {
     transform: none;
   }
 
+  .soundflight-selected-orbit {
+    top: 104px;
+    right: 16px;
+    width: 142px;
+  }
+
+  .soundflight-selected-orbit > span {
+    display: none;
+  }
+
+  .soundflight-selected-orbit > strong {
+    font-size: 15px;
+  }
+
+  .soundflight-selected-orbit > small {
+    font-size: 7px;
+  }
+
+  .soundflight-add-moon {
+    min-height: 44px;
+    padding: 0 12px;
+    font-size: 7px;
+  }
+
   .soundflight-voice-key > span,
   .soundflight-voice-key > p,
   .soundflight-voice-key li strong,
   .soundflight-voice-key li small {
     font-size: 8px;
+  }
+
+  .soundflight-voice-key > ul,
+  .soundflight-voice-key > p {
+    display: none;
   }
 
   .soundflight-explore {
@@ -1744,6 +1899,21 @@ input:focus-visible {
     bottom: 9px;
   }
 
+  .soundflight-selected-orbit {
+    top: 70px;
+    right: 16px;
+    width: 138px;
+  }
+
+  .soundflight-selected-orbit > span,
+  .soundflight-selected-orbit > small {
+    display: none;
+  }
+
+  .soundflight-selected-orbit > strong {
+    font-size: 13px;
+  }
+
   .soundflight-systems {
     top: 70px;
   }
@@ -1855,5 +2025,23 @@ input:focus-visible {
   }
   to {
     opacity: 0;
+  }
+}
+
+@media (max-height: 640px) and (orientation: portrait) {
+  .soundflight-overture {
+    display: none;
+  }
+
+  .soundflight-voice-key {
+    top: auto;
+    right: 16px;
+    bottom: 118px;
+    width: auto;
+  }
+
+  .soundflight-voice-key > span,
+  .soundflight-voice-key > b {
+    display: none;
   }
 }

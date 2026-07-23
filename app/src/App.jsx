@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import {
   Atom,
   Minus,
+  MoonStars,
   NavigationArrow,
   Planet,
   Plus,
@@ -33,6 +34,7 @@ import {
   createSoundflightState,
   frequencyToNoteName,
   launchGuidance,
+  moonGuidance,
   reduceSoundflightState,
   shouldApplyGestationUpdate,
   voiceVisual,
@@ -66,6 +68,7 @@ export function App() {
   const [atlasOpen, setAtlasOpen] = useState(false);
   const [systemsOpen, setSystemsOpen] = useState(false);
   const [launchPhase, setLaunchPhase] = useState("armed");
+  const [moonPhase, setMoonPhase] = useState("armed");
   const [cameraScale, setCameraScale] = useState("1.2 AU");
   const [cameraCommand, setCameraCommand] = useState({ id: 0, type: "zoom", direction: -1 });
   const [soundflightState, dispatchSoundflight] = useReducer(reduceSoundflightState, null, createSoundflightState);
@@ -96,7 +99,11 @@ export function App() {
   const themeId = getPresentationTheme(composition, null);
   const theme = THEMES.lacquer;
   const shareScore = inscribed ?? composition;
-  const launchCopy = soundflightState.mode === "launch" ? launchGuidance(launchPhase) : null;
+  const creationCopy = soundflightState.mode === "launch"
+    ? launchGuidance(launchPhase)
+    : soundflightState.mode === "moon"
+      ? moonGuidance(moonPhase, soundflightState.followingBodyId?.toUpperCase())
+      : null;
   const shareLink = useMemo(() => createShareUrl(shareScore), [shareScore]);
   const atlasBodies = useMemo(() => {
     const rosterIds = new Set(composition.bodies.map((body) => body.id));
@@ -107,6 +114,11 @@ export function App() {
   }, [composition.bodies, physicsFrame]);
   const voiceLegend = useMemo(() => [...new Set(atlasBodies.map((body) => body.voice))]
     .map((voiceId) => ({ id: voiceId, ...voiceVisual(voiceId) })), [atlasBodies]);
+  const selectedLiveBody = physicsFrame?.bodies.find((body) => body.id === selectedBodyId) ?? null;
+  const selectedMoonCount = selectedLiveBody?.kind === "planet"
+    ? (physicsFrame?.bodies ?? []).filter((body) => body.kind === "moon" && body.parentId === selectedBodyId).length
+    : 0;
+  const selectedVoice = selectedLiveBody ? voiceVisual(selectedLiveBody.voice) : null;
 
   useEffect(() => {
     document.documentElement.style.colorScheme = "dark";
@@ -143,8 +155,9 @@ export function App() {
       setSystemsOpen(false);
       setAtlasOpen(false);
       setLensOpen(false);
-      if (soundflightState.mode === "launch") {
+      if (soundflightState.mode === "launch" || soundflightState.mode === "moon") {
         setLaunchPhase("armed");
+        setMoonPhase("armed");
         dispatchSoundflight({ type: "CANCEL" });
       }
     };
@@ -166,7 +179,8 @@ export function App() {
     audioRef.current.playOrbitNote(note);
     performHaptic({ kind: "crossing", strength: note.displayMass ?? note.mass });
     const visual = voiceVisual(note.voice);
-    announceSonicCue(`${visual.colorName} · ${visual.label} · ${frequencyToNoteName(voiceParameters(note).frequency)}`);
+    const role = note.kind === "moon" ? "OVERTONE" : visual.colorName;
+    announceSonicCue(`${role} · ${visual.label} · ${frequencyToNoteName(voiceParameters(note).frequency)}`);
   }, [announceSonicCue, performHaptic]);
 
   const handlePhysicsFrame = useCallback((frame) => {
@@ -224,7 +238,8 @@ export function App() {
       await audioRef.current.resume(isPlaying);
       audioRef.current.playVoicePreview(voiceId);
       setRuntimeError(null);
-      if (isListener || selectedBodyId.startsWith("nova-")) return;
+      const selectedLive = physicsFrameRef.current?.bodies.find((body) => body.id === selectedBodyId);
+      if (isListener || selectedLive?.created) return;
       setInscribed(null);
       setComposition((current) => ({
         ...current,
@@ -281,10 +296,28 @@ export function App() {
     }
   }, [announceSonicCue, performHaptic]);
 
+  const handleMoonBloom = useCallback(async (moon, parent) => {
+    setIsPlaying(true);
+    setDialogOpen(false);
+    try {
+      await audioRef.current.resume(true);
+      setRuntimeError(null);
+      audioRef.current.playOrbitNote(moon);
+      performHaptic({ kind: "birth", strength: moon.displayMass ?? moon.mass ?? 0.2 });
+      const visual = voiceVisual(moon.voice);
+      announceSonicCue(`${moon.id.toUpperCase()} · ${visual.label} OVERTONE OF ${parent.id.toUpperCase()}`, 2400);
+    } catch (error) {
+      setIsPlaying(false);
+      setRuntimeError(error instanceof Error ? error.message : "The moon overtone could not start");
+    }
+  }, [announceSonicCue, performHaptic]);
+
   const handleConsumptionBloom = useCallback((body) => {
     audioRef.current.playConsumption(body);
     performHaptic({ kind: "consumption", strength: body.displayMass ?? body.mass ?? 0.5 });
-    announceSonicCue(`${body.id.toUpperCase()} RETURNS TO THE STAR`);
+    announceSonicCue(body.kind === "moon"
+      ? `${body.id.toUpperCase()} RETURNS TO ${body.parentId.toUpperCase()}`
+      : `${body.id.toUpperCase()} RETURNS TO THE STAR`);
   }, [announceSonicCue, performHaptic]);
 
   const handleGestationTone = useCallback(async (candidate) => {
@@ -363,6 +396,7 @@ export function App() {
     setElapsed(0);
     setSelectedBodyId("europa");
     dispatchSoundflight({ type: "CANCEL" });
+    setMoonPhase("armed");
     setCameraCommand((current) => ({ id: current.id + 1, type: "reset" }));
     setChallengeTarget(null);
     setChallengeStatus("CHOOSE A RATIO");
@@ -482,6 +516,9 @@ export function App() {
       setInscribed(null);
       setComposition((current) => (current.events.length ? { ...current, events: [] } : current));
     }
+    setLaunchPhase("armed");
+    setMoonPhase("armed");
+    dispatchSoundflight({ type: "CANCEL" });
     setResetToken((current) => current + 1);
     setDialogOpen(false);
   }, [isListener]);
@@ -507,6 +544,7 @@ export function App() {
       setRuntimeError(null);
       setSelectedBodyId("europa");
       dispatchSoundflight({ type: "CANCEL" });
+      setMoonPhase("armed");
       setChallengeTarget(null);
       setChallengeStatus("CHOOSE A RATIO");
       setChallengeGuide(null);
@@ -526,7 +564,7 @@ export function App() {
     <main
       className="app-shell"
       data-theme="lacquer"
-      data-launch-mode={soundflightState.mode === "launch"}
+      data-launch-mode={soundflightState.mode === "launch" || soundflightState.mode === "moon"}
       style={{
         "--paper": theme.paper,
         "--ink": theme.ink,
@@ -563,6 +601,13 @@ export function App() {
           dispatchSoundflight({ type: "COMPLETE_LAUNCH", bodyId });
         }}
         onLaunchPhase={setLaunchPhase}
+        onMoonBloom={handleMoonBloom}
+        onMoonComplete={(bodyId, parentId) => {
+          setMoonPhase("armed");
+          setSelectedBodyId(parentId);
+          dispatchSoundflight({ type: "COMPLETE_MOON", bodyId });
+        }}
+        onMoonPhase={setMoonPhase}
         onNote={handleNote}
         onPhysicsFrame={handlePhysicsFrame}
         onPluckBloom={handlePluckBloom}
@@ -578,7 +623,7 @@ export function App() {
       {!dialogOpen && !overtureDismissed && (
         <section className="soundflight-overture" aria-label="How to begin">
           <em>Every orbit is a string.</em>
-          <span>PRESS PLAY TO HEAR THE SKY TURN · TOUCH A THREAD TO PLUCK IT</span>
+          <span>PRESS PLAY TO HEAR THE SKY TURN · TOUCH AN ORBIT TO PLUCK IT</span>
         </section>
       )}
 
@@ -590,8 +635,11 @@ export function App() {
             aria-controls="soundflight-systems"
             aria-expanded={systemsOpen}
             onClick={() => {
-              if (soundflightState.mode === "launch") dispatchSoundflight({ type: "CANCEL" });
+              if (soundflightState.mode === "launch" || soundflightState.mode === "moon") {
+                dispatchSoundflight({ type: "CANCEL" });
+              }
               setLaunchPhase("armed");
+              setMoonPhase("armed");
               setSystemsOpen((current) => !current);
             }}
           >
@@ -616,6 +664,7 @@ export function App() {
                 }
                 dismissOverture();
                 setLaunchPhase("armed");
+                setMoonPhase("armed");
                 dispatchSoundflight({ type: cancelLaunch ? "CANCEL" : "ARM_LAUNCH" });
               }}
             >
@@ -628,14 +677,19 @@ export function App() {
             <Transport isPlaying={isPlaying} isListener={isListener} onToggle={handleTogglePlayback} onRestart={restart} />
           </div>
 
-          {launchCopy && (
-            <section className="soundflight-launch-guide" data-phase={launchPhase} aria-live="polite" aria-label="Launch instructions">
-              <span>{launchCopy.eyebrow}</span>
-              <strong>{launchCopy.title}</strong>
-              <p>{launchCopy.detail}</p>
-              <ol aria-label="Launch steps">
-                {["DRAG", "PITCH", "RELEASE"].map((step, index) => (
-                  <li key={step} data-state={index < launchCopy.activeStep ? "done" : index === launchCopy.activeStep ? "active" : "next"}>
+          {creationCopy && (
+            <section
+              className="soundflight-launch-guide"
+              data-phase={soundflightState.mode === "moon" ? moonPhase : launchPhase}
+              aria-live="polite"
+              aria-label={soundflightState.mode === "moon" ? "Moon instructions" : "Launch instructions"}
+            >
+              <span>{creationCopy.eyebrow}</span>
+              <strong>{creationCopy.title}</strong>
+              <p>{creationCopy.detail}</p>
+              <ol aria-label={soundflightState.mode === "moon" ? "Moon steps" : "Launch steps"}>
+                {(soundflightState.mode === "moon" ? ["PARENT", "RING", "RELEASE"] : ["DRAG", "PITCH", "RELEASE"]).map((step, index) => (
+                  <li key={step} data-state={index < creationCopy.activeStep ? "done" : index === creationCopy.activeStep ? "active" : "next"}>
                     <small>0{index + 1}</small>
                     {step}
                   </li>
@@ -644,8 +698,8 @@ export function App() {
             </section>
           )}
 
-          <aside className="soundflight-voice-key" aria-label="Musical thread colors">
-            <span>MUSICAL THREADS · {atlasBodies.length} VOICES</span>
+          <aside className="soundflight-voice-key" aria-label="Orbit string colors">
+            <span>ORBIT STRINGS · {atlasBodies.length} VOICES</span>
             <ul>
               {voiceLegend.map((voice) => (
                 <li key={voice.id}>
@@ -655,7 +709,7 @@ export function App() {
                 </li>
               ))}
             </ul>
-            <p>PULSE = NOTE</p>
+            <p>LIGHT PULSE = NOTE</p>
             <b>{cameraScale}</b>
             <div className="soundflight-zoom-controls">
               <button type="button" aria-label="Zoom in" onClick={() => {
@@ -673,9 +727,51 @@ export function App() {
             </div>
           </aside>
 
+          {!isListener && selectedLiveBody?.kind === "planet" && soundflightState.mode !== "launch" && (
+            <aside
+              className="soundflight-selected-orbit"
+              style={{ "--selected-voice": `#${selectedVoice.color.toString(16).padStart(6, "0")}` }}
+              aria-label={`Selected planet ${selectedBodyId}`}
+            >
+              <span>SELECTED PLANET</span>
+              <strong>{selectedBodyId.toUpperCase()}</strong>
+              <small>{selectedVoice.label} · {selectedMoonCount}/2 OVERTONES</small>
+              <button
+                type="button"
+                className="soundflight-add-moon"
+                aria-pressed={soundflightState.mode === "moon"}
+                disabled={selectedMoonCount >= 2 && soundflightState.mode !== "moon"}
+                onClick={() => {
+                  const cancelMoon = soundflightState.mode === "moon";
+                  setSystemsOpen(false);
+                  setMoonPhase("armed");
+                  dismissOverture();
+                  if (!cancelMoon && soundflightState.mode === "explore") {
+                    setCameraCommand((current) => ({ id: current.id + 1, type: "reset" }));
+                  }
+                  dispatchSoundflight({
+                    type: cancelMoon ? "CANCEL" : "ARM_MOON",
+                    bodyId: selectedBodyId,
+                  });
+                }}
+              >
+                <MoonStars aria-hidden="true" weight="thin" />
+                {soundflightState.mode === "moon"
+                  ? "CANCEL MOON"
+                  : selectedMoonCount >= 2
+                    ? "OVERTONES FULL"
+                    : "ADD MOON"}
+              </button>
+            </aside>
+          )}
+
           <div className="soundflight-voice-breath" aria-live="polite">
             <WaveSine aria-hidden="true" weight="thin" />
-            <span>{sonicCue || (challengeTarget ? `RESONANCE ${challengeTarget} · ${challengeStatus}` : "LIVE ORBIT SONIFICATION")}</span>
+            <span>{sonicCue || (challengeTarget
+              ? `RESONANCE ${challengeTarget} · ${challengeStatus}`
+              : physicsFrame?.resonance
+                ? `${physicsFrame.resonance.label} RESONANCE · STANDING LIGHT`
+                : "LIVE ORBIT SONIFICATION")}</span>
           </div>
 
           <button
