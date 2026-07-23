@@ -1,0 +1,14 @@
+{
+  "scope": "page",
+  "genre": "atmospheric",
+  "macrostructure": "workbench",
+  "theme": "studied-DNA",
+  "anchor": "amber",
+  "decisions": [
+    "The Three.js star system is the dominant work surface.",
+    "Planet and moon creation use direct manipulation instead of modes.",
+    "Only one instruction is visible at a time.",
+    "Technical meters, presets, systems, atlas, and explore chrome are removed from the live surface."
+  ],
+  "slopTest": "pass"
+}

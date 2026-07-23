@@ -9,6 +9,8 @@ import { keplerPitch } from "./sonification.js";
 const TAU = Math.PI * 2;
 const INNER_HILL_FRACTION = 0.24;
 const OUTER_HILL_FRACTION = 0.44;
+export const SATELLITE_SOFTENING_CLEARANCE = 2.2;
+const MIN_SIBLING_GAP_FRACTION = 0.26;
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -37,7 +39,10 @@ export function satelliteStabilityBand({ parent, star }) {
     Math.hypot(parent.x - star.x, parent.y - star.y),
   );
   const hillRadius = distanceToStar * Math.cbrt(parent.mass / (3 * star.mass));
-  const innerRadius = Math.max(GRAVITY_SOFTENING * 3, hillRadius * INNER_HILL_FRACTION);
+  const innerRadius = Math.max(
+    GRAVITY_SOFTENING * SATELLITE_SOFTENING_CLEARANCE,
+    hillRadius * INNER_HILL_FRACTION,
+  );
   const outerRadius = hillRadius * OUTER_HILL_FRACTION;
   if (!(outerRadius > innerRadius)) throw new Error("This planet has no stable room for a moon");
   return { hillRadius, innerRadius, outerRadius };
@@ -78,13 +83,27 @@ export function birthSatelliteFromRadialLaunch({
   const band = satelliteStabilityBand({ parent, star });
   const dx = release.x - parent.x;
   const dy = release.y - parent.y;
-  const radius = Math.hypot(dx, dy);
-  if (radius < band.innerRadius || radius > band.outerRadius) {
-    throw new Error("Release inside the luminous stable ring");
-  }
+  const draggedRadius = Math.hypot(dx, dy);
+  if (draggedRadius < GRAVITY_SOFTENING) throw new Error("Drag outward from the planet to make a moon");
+  const desiredRadius = clamp(draggedRadius, band.innerRadius, band.outerRadius);
+  const siblingGap = (band.outerRadius - band.innerRadius) * MIN_SIBLING_GAP_FRACTION;
+  const siblingRadii = siblings.map((body) => (
+    Number.isFinite(body.semiMajor)
+      ? body.semiMajor
+      : Math.hypot(body.x - parent.x, body.y - parent.y)
+  ));
+  const isFree = (candidate) => siblingRadii.every((occupied) => (
+    Math.abs(candidate - occupied) >= siblingGap - 1e-12
+  ));
+  const radius = isFree(desiredRadius)
+    ? desiredRadius
+    : [band.innerRadius, band.outerRadius]
+      .filter(isFree)
+      .sort((first, second) => Math.abs(first - desiredRadius) - Math.abs(second - desiredRadius))[0];
+  if (!Number.isFinite(radius)) throw new Error("This planet has no stable room for another moon");
 
-  const unitX = dx / radius;
-  const unitY = dy / radius;
+  const unitX = dx / draggedRadius;
+  const unitY = dy / draggedRadius;
   const displayMass = 0.04 + siblings.length * 0.012;
   const physicalMass = displayMass * 0.0028;
   const mu = GRAVITATIONAL_CONSTANT * (parent.mass + physicalMass);

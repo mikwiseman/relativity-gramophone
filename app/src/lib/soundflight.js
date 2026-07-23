@@ -308,9 +308,31 @@ export function moonCameraDistance(haloRadius, aspect) {
   return clamp(Math.max(4.8, haloRadius * 3.25) * portraitPenalty, 4.8, 8.8);
 }
 
-export function shouldAdvancePhysics({ isPlaying, interactionMode }) {
-  if (typeof isPlaying !== "boolean" || typeof interactionMode !== "string") {
+export function shouldAdvancePhysics({ isPlaying, interactionMode, creationActive = false }) {
+  if (typeof isPlaying !== "boolean"
+    || typeof interactionMode !== "string"
+    || typeof creationActive !== "boolean") {
     throw new Error("Physics playback requires an explicit play state and interaction mode");
   }
-  return isPlaying && interactionMode !== "moon";
+  return isPlaying && !creationActive && interactionMode !== "moon";
+}
+
+export function instrumentHint({
+  planetCount,
+  selectedBody = null,
+  selectedMoonCount = 0,
+  isListener = false,
+}) {
+  if (!Number.isInteger(planetCount) || planetCount < 0) {
+    throw new Error("Instrument guidance requires a planet count");
+  }
+  if (!Number.isInteger(selectedMoonCount) || selectedMoonCount < 0) {
+    throw new Error("Instrument guidance requires a moon count");
+  }
+  if (isListener) return "TOUCH AN ORBIT TO PLAY IT";
+  if (planetCount === 0) return "DRAG FROM THE STAR TO MAKE A PLANET";
+  if (selectedBody?.kind === "planet" && selectedMoonCount < 2) {
+    return "DRAG FROM THE PLANET TO MAKE A MOON";
+  }
+  return "TOUCH AN ORBIT TO PLAY IT";
 }

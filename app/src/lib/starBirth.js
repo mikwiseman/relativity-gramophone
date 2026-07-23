@@ -9,13 +9,12 @@ export const BIRTH_MAX_RADIUS = 0.56;
 export const BIRTH_MIN_MASS = 0.34;
 export const BIRTH_MAX_MASS = 1.18;
 export const AIM_DEADZONE = 0.02;
-export const MUSICAL_ORBIT_RADII = Object.freeze([0.21, 0.27, 0.3538000882, 0.4636092682, 0.54]);
+export const PLANET_ORBIT_MIN_GAP = 0.035;
 const MASS_GROWTH_RATE = 0.62;
 const AIM_SPEED_RANGE = 2.1;
 const MIN_THROW_FRACTION = 0.62;
 const MAX_BOUND_SPEED_FRACTION = 0.93;
 const RADIAL_LAUNCH_MIN_DISTANCE = 0.1;
-const MUSICAL_ORBIT_MIN_GAP = 0.018;
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -114,7 +113,8 @@ export function birthBodyFromGesture({ press, aim, holdSeconds, star, existingId
   };
 }
 
-function freeMusicalOrbitRadius(draggedRadius, existingBodies = [], star) {
+export function resolvePlanetOrbitRadius(draggedRadius, existingBodies = [], star) {
+  const desired = clamp(draggedRadius, BIRTH_MIN_RADIUS, BIRTH_MAX_RADIUS);
   const occupiedRadii = existingBodies
     .filter((body) => body.kind === "planet")
     .map((body) => (
@@ -122,13 +122,28 @@ function freeMusicalOrbitRadius(draggedRadius, existingBodies = [], star) {
         ? body.semiMajor
         : Math.hypot(body.x - star.x, body.y - star.y)
     ))
-    .filter(Number.isFinite);
-  const candidates = MUSICAL_ORBIT_RADII
-    .filter((candidate) => occupiedRadii.every((occupied) => (
-      Math.abs(candidate - occupied) >= MUSICAL_ORBIT_MIN_GAP
-    )))
-    .sort((first, second) => Math.abs(first - draggedRadius) - Math.abs(second - draggedRadius));
-  if (!candidates.length) throw new Error("All five orbit strings are sounding — remove a planet to retune the sky");
+    .filter(Number.isFinite)
+    .sort((first, second) => first - second);
+  const isFree = (candidate) => occupiedRadii.every((occupied) => (
+    Math.abs(candidate - occupied) >= PLANET_ORBIT_MIN_GAP - 1e-12
+  ));
+  if (isFree(desired)) return desired;
+
+  const candidates = [
+    BIRTH_MIN_RADIUS,
+    BIRTH_MAX_RADIUS,
+    ...occupiedRadii.flatMap((occupied) => [
+      occupied - PLANET_ORBIT_MIN_GAP,
+      occupied + PLANET_ORBIT_MIN_GAP,
+    ]),
+  ]
+    .filter((candidate) => candidate >= BIRTH_MIN_RADIUS && candidate <= BIRTH_MAX_RADIUS)
+    .filter(isFree)
+    .sort((first, second) => (
+      Math.abs(first - desired) - Math.abs(second - desired)
+      || first - second
+    ));
+  if (!candidates.length) throw new Error("The sky is full — remove a planet to make a safe orbit");
   return candidates[0];
 }
 
@@ -149,7 +164,7 @@ export function birthBodyFromRadialLaunch({
   const draggedRadius = Math.hypot(dx, dy);
   if (draggedRadius < RADIAL_LAUNCH_MIN_DISTANCE) throw new Error("Drag outward from the star to choose a pitch");
 
-  const radius = freeMusicalOrbitRadius(draggedRadius, existingBodies, star);
+  const radius = resolvePlanetOrbitRadius(draggedRadius, existingBodies, star);
   const unitX = dx / draggedRadius;
   const unitY = dy / draggedRadius;
   const circularSpeed = Math.sqrt(GRAVITATIONAL_CONSTANT * star.mass / radius);

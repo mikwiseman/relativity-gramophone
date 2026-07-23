@@ -98,7 +98,7 @@ function assertCreatedSpec(body, { withState }) {
 }
 
 function assertBodies(bodies) {
-  if (!Array.isArray(bodies) || bodies.length < 3 || bodies.length > MAX_WORLDS) throw new Error("Invalid score bodies");
+  if (!Array.isArray(bodies) || bodies.length > MAX_WORLDS) throw new Error("Invalid score bodies");
   const seen = new Set();
   for (const body of bodies) {
     if (seen.has(body?.id)) throw new Error(`Invalid score body: ${body?.id ?? "missing"}`);
@@ -112,9 +112,6 @@ function assertBodies(bodies) {
       assertCreatedSpec(body, { withState: false });
     }
     seen.add(body.id);
-  }
-  for (const id of VALID_BODY_IDS) {
-    if (!seen.has(id)) throw new Error(`Missing core body: ${id}`);
   }
 }
 
@@ -322,6 +319,14 @@ export function createDefaultComposition() {
   };
 }
 
+export function createBlankComposition() {
+  return {
+    ...createDefaultComposition(),
+    seed: "one-star",
+    bodies: [],
+  };
+}
+
 export function fingerprintComposition(composition) {
   const source = JSON.stringify(composition);
   let hash = 0x811c9dc5;
@@ -333,7 +338,7 @@ export function fingerprintComposition(composition) {
 }
 
 export function createReplyComposition(parent, frame, preferredTheme) {
-  if (!frame?.star || !Array.isArray(frame.bodies) || frame.bodies.length < 3 || frame.bodies.length > MAX_WORLDS) {
+  if (!frame?.star || !Array.isArray(frame.bodies) || frame.bodies.length > MAX_WORLDS) {
     throw new Error("The received orbit has no physical state to reply from");
   }
   const coreBodies = parent.bodies.filter((body) => VALID_BODY_IDS.has(body.id));

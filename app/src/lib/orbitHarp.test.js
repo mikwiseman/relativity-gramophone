@@ -13,11 +13,14 @@ import {
   orbitPathForBody,
 } from "./physicsEngine.js";
 import {
+  SATELLITE_SOFTENING_CLEARANCE,
   birthSatelliteFromRadialLaunch,
   satelliteStabilityBand,
 } from "./satelliteBirth.js";
 import {
-  MUSICAL_ORBIT_RADII,
+  BIRTH_MAX_RADIUS,
+  BIRTH_MIN_RADIUS,
+  PLANET_ORBIT_MIN_GAP,
   birthBodyFromRadialLaunch,
 } from "./starBirth.js";
 import {
@@ -27,6 +30,7 @@ import {
   moonGuidance,
   reduceSoundflightState,
   createSoundflightState,
+  instrumentHint,
   shouldAdvancePhysics,
 } from "./soundflight.js";
 
@@ -44,19 +48,56 @@ test("a selected planet exposes a finite stable annulus inside its Hill sphere",
   });
 
   assert.ok(band.hillRadius > 0);
-  assert.ok(band.innerRadius >= GRAVITY_SOFTENING * 3);
+  assert.ok(band.innerRadius >= GRAVITY_SOFTENING * SATELLITE_SOFTENING_CLEARANCE);
   assert.ok(band.outerRadius > band.innerRadius);
   assert.ok(band.outerRadius < band.hillRadius * 0.5);
 });
 
-test("planet launch chooses the nearest free musical string instead of stacking worlds", () => {
+test("even the lightest innermost user-created planet has a real stable moon orbit", () => {
+  const engine = new PhysicsEngine(createInitialPhysicsState([]));
+  const star = engine.getBody("star");
+  const planet = birthBodyFromRadialLaunch({
+    release: { x: BIRTH_MIN_RADIUS, y: 0 },
+    star,
+    existingIds: [],
+    existingBodies: [],
+    birthIndex: 0,
+  });
+  engine.addBody(planet);
+  const parent = engine.getBody(planet.id);
+  const band = satelliteStabilityBand({ parent, star: engine.getBody("star") });
+  const moon = birthSatelliteFromRadialLaunch({
+    release: { x: parent.x + (band.innerRadius + band.outerRadius) / 2, y: parent.y },
+    parent,
+    star: engine.getBody("star"),
+    existingBodies: engine.state.bodies,
+  });
+  engine.addBody(moon);
+
+  let minimum = Infinity;
+  let maximum = 0;
+  for (let step = 0; step < 1_200; step += 1) {
+    engine.step();
+    const liveMoon = engine.getBody(moon.id);
+    const liveParent = engine.getBody(parent.id);
+    const distance = Math.hypot(
+      liveMoon.x - liveParent.x,
+      liveMoon.y - liveParent.y,
+    );
+    minimum = Math.min(minimum, distance);
+    maximum = Math.max(maximum, distance);
+  }
+
+  assert.ok(band.outerRadius > band.innerRadius);
+  assert.ok(minimum > GRAVITY_SOFTENING * 1.2);
+  assert.ok(maximum < band.hillRadius * 0.7);
+});
+
+test("planet launch keeps a continuous radius and gently clears occupied orbits", () => {
   const { engine } = liveDefault();
   const star = engine.getBody("star");
   const existingBodies = engine.state.bodies.filter((body) => body.kind === "planet");
-  const occupied = existingBodies.map((body) => body.semiMajor);
-  const target = MUSICAL_ORBIT_RADII.find((radius) => (
-    occupied.some((current) => Math.abs(current - radius) < 0.01)
-  ));
+  const target = existingBodies[1].semiMajor + 0.004;
   const world = birthBodyFromRadialLaunch({
     release: { x: target, y: 0 },
     star,
@@ -66,31 +107,32 @@ test("planet launch chooses the nearest free musical string instead of stacking 
   });
 
   const bornRadius = Math.hypot(world.x - star.x, world.y - star.y);
-  assert.ok(Math.abs(bornRadius - target) > 0.01, "an occupied string must not receive another planet");
-  assert.ok(
-    MUSICAL_ORBIT_RADII.some((radius) => Math.abs(radius - bornRadius) < 1e-10),
-    "the world must still land on a tuned string",
-  );
+  assert.ok(existingBodies.every((body) => (
+    Math.abs(body.semiMajor - bornRadius) >= PLANET_ORBIT_MIN_GAP - 1e-10
+  )));
+  assert.ok(bornRadius >= BIRTH_MIN_RADIUS && bornRadius <= BIRTH_MAX_RADIUS);
 });
 
-test("planet launch refuses when all five musical strings are occupied", () => {
+test("planet launch supports more than five distinct continuous orbits", () => {
   const { engine } = liveDefault();
   const star = engine.getBody("star");
-  const existingBodies = MUSICAL_ORBIT_RADII.map((semiMajor, index) => ({
+  const existingBodies = Array.from({ length: 7 }, (_, index) => ({
     id: `occupied-${index}`,
     kind: "planet",
-    semiMajor,
-    x: star.x + semiMajor,
+    semiMajor: BIRTH_MIN_RADIUS + index * PLANET_ORBIT_MIN_GAP,
+    x: star.x + BIRTH_MIN_RADIUS + index * PLANET_ORBIT_MIN_GAP,
     y: star.y,
   }));
 
-  assert.throws(() => birthBodyFromRadialLaunch({
-    release: { x: 0.4, y: 0 },
+  const world = birthBodyFromRadialLaunch({
+    release: { x: 0.51, y: 0 },
     star,
     existingIds: existingBodies.map((body) => body.id),
     existingBodies,
-    birthIndex: 0,
-  }), /five orbit strings/i);
+    birthIndex: 7,
+  });
+
+  assert.ok(Math.hypot(world.x - star.x, world.y - star.y) > 0.45);
 });
 
 test("a moon inherits its parent voice and is born on a deterministic local orbit", () => {
@@ -119,18 +161,19 @@ test("a moon inherits its parent voice and is born on a deterministic local orbi
   assert.equal(engine.getBody(moon.id).kind, "moon");
 });
 
-test("a planet accepts at most two moons and rejects releases outside the stable annulus", () => {
+test("a planet accepts at most two moons and gently fits an outward drag into its stable annulus", () => {
   const { engine } = liveDefault();
   const parent = engine.getBody("io");
   const star = engine.getBody("star");
   const band = satelliteStabilityBand({ parent, star });
 
-  assert.throws(() => birthSatelliteFromRadialLaunch({
+  const fitted = birthSatelliteFromRadialLaunch({
     release: { x: parent.x + band.outerRadius * 1.2, y: parent.y },
     parent,
     star,
     existingBodies: engine.state.bodies,
-  }), /stable ring/i);
+  });
+  assert.ok(Math.abs(Math.hypot(fitted.x - parent.x, fitted.y - parent.y) - band.outerRadius) < 1e-10);
 
   for (const fraction of [0.38, 0.72]) {
     const radius = band.innerRadius + (band.outerRadius - band.innerRadius) * fraction;
@@ -235,16 +278,30 @@ test("composition camera distance grows with the system and with a portrait view
   assert.ok(editorialCameraDistance(5, 0.55) > editorialCameraDistance(5, 16 / 9));
 });
 
-test("moon placement freezes the system and uses a bounded local camera", () => {
+test("an active direct creation gesture freezes the system and uses a bounded local camera", () => {
   assert.equal(shouldAdvancePhysics({ isPlaying: true, interactionMode: "compose" }), true);
-  assert.equal(shouldAdvancePhysics({ isPlaying: true, interactionMode: "moon" }), false);
-  assert.equal(shouldAdvancePhysics({ isPlaying: false, interactionMode: "moon" }), false);
+  assert.equal(shouldAdvancePhysics({ isPlaying: true, interactionMode: "compose", creationActive: true }), false);
+  assert.equal(shouldAdvancePhysics({ isPlaying: false, interactionMode: "compose" }), false);
 
   const landscapeDistance = moonCameraDistance(1.2, 16 / 9);
   const portraitDistance = moonCameraDistance(1.2, 390 / 844);
   assert.ok(landscapeDistance >= 4.8);
   assert.ok(landscapeDistance <= 8.8);
   assert.ok(portraitDistance > landscapeDistance);
+});
+
+test("one contextual sentence teaches the next literal gesture", () => {
+  assert.equal(instrumentHint({ planetCount: 0 }), "DRAG FROM THE STAR TO MAKE A PLANET");
+  assert.equal(instrumentHint({
+    planetCount: 2,
+    selectedBody: { kind: "planet" },
+    selectedMoonCount: 0,
+  }), "DRAG FROM THE PLANET TO MAKE A MOON");
+  assert.equal(instrumentHint({
+    planetCount: 2,
+    selectedBody: { kind: "moon" },
+    selectedMoonCount: 0,
+  }), "TOUCH AN ORBIT TO PLAY IT");
 });
 
 test("a moon birth survives the share format and listener replay contract", () => {

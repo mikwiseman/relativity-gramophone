@@ -462,43 +462,101 @@ export class AudioEngine {
     }
   }
 
-  updateGestation({ frequency, pan }) {
+  updateGestation({ frequency, pan, voice, kind = "planet" }) {
     if (!this.context || this.context.state !== "running") return;
     const now = this.context.currentTime;
     if (!this.gestation) {
       const oscillator = this.context.createOscillator();
+      const overtone = this.context.createOscillator();
       const vibrato = this.context.createOscillator();
       const vibratoDepth = this.context.createGain();
+      const overtoneGain = this.context.createGain();
+      const filter = this.context.createBiquadFilter();
       const gain = this.context.createGain();
       const panner = this.context.createStereoPanner();
-      oscillator.type = "sine";
+      const reverbSend = this.context.createGain();
+      this.applyVoiceWave(oscillator, voice, "sine");
+      overtone.type = kind === "moon" ? "sine" : "triangle";
       oscillator.frequency.value = frequency;
+      overtone.frequency.value = frequency * (kind === "moon" ? 1.5 : 2.01);
       vibrato.frequency.value = 4.4;
       vibratoDepth.gain.value = 1.7;
+      overtoneGain.gain.value = kind === "moon" ? 0.22 : 0.13;
+      filter.type = "lowpass";
+      filter.frequency.value = Math.min(8_000, Math.max(900, frequency * 6));
+      filter.Q.value = kind === "moon" ? 1.8 : 1.15;
       gain.gain.value = 0.0001;
+      reverbSend.gain.value = kind === "moon" ? 0.3 : 0.18;
       vibrato.connect(vibratoDepth).connect(oscillator.frequency);
-      oscillator.connect(gain).connect(panner).connect(this.master);
+      oscillator.connect(filter);
+      overtone.connect(overtoneGain).connect(filter);
+      filter.connect(gain).connect(panner).connect(this.master);
       panner.connect(this.delay);
+      panner.connect(reverbSend).connect(this.reverb);
       oscillator.start(now);
+      overtone.start(now);
       vibrato.start(now);
       gain.gain.exponentialRampToValueAtTime(0.02, now + 0.3);
-      this.gestation = { oscillator, vibrato, vibratoDepth, gain, panner };
+      this.gestation = {
+        oscillator,
+        overtone,
+        vibrato,
+        vibratoDepth,
+        overtoneGain,
+        filter,
+        gain,
+        panner,
+        reverbSend,
+        appliedVoiceId: voice,
+      };
+    }
+    if (this.gestation.appliedVoiceId !== voice) {
+      this.applyVoiceWave(this.gestation.oscillator, voice, "sine");
+      this.gestation.appliedVoiceId = voice;
     }
     this.gestation.oscillator.frequency.setTargetAtTime(frequency, now, 0.075);
+    this.gestation.overtone.frequency.setTargetAtTime(
+      frequency * (kind === "moon" ? 1.5 : 2.01),
+      now,
+      0.09,
+    );
+    this.gestation.filter.frequency.setTargetAtTime(
+      Math.min(8_000, Math.max(900, frequency * 6)),
+      now,
+      0.12,
+    );
     this.gestation.panner.pan.setTargetAtTime(pan, now, 0.08);
   }
 
   endGestation() {
     if (!this.gestation || !this.context) return;
-    const { oscillator, vibrato, vibratoDepth, gain, panner } = this.gestation;
+    const {
+      oscillator,
+      overtone,
+      vibrato,
+      vibratoDepth,
+      overtoneGain,
+      filter,
+      gain,
+      panner,
+      reverbSend,
+    } = this.gestation;
     this.gestation = null;
     const now = this.context.currentTime;
     gain.gain.cancelScheduledValues(now);
     gain.gain.setTargetAtTime(0.0001, now, 0.07);
     oscillator.stop(now + 0.55);
+    overtone.stop(now + 0.55);
     vibrato.stop(now + 0.55);
     setTimeout(() => {
-      for (const node of [gain, panner, vibratoDepth]) node.disconnect();
+      for (const node of [
+        gain,
+        panner,
+        vibratoDepth,
+        overtoneGain,
+        filter,
+        reverbSend,
+      ]) node.disconnect();
     }, 650);
   }
 
@@ -552,6 +610,35 @@ export class AudioEngine {
       oscillator.start(now);
       oscillator.stop(now + duration + 0.1);
     }
+  }
+
+  playMoonBloom(moon, parent) {
+    if (!this.context || this.context.state !== "running") return;
+    this.playOrbitNote({
+      ...parent,
+      displayMass: Math.max(0.12, (parent.displayMass ?? parent.mass ?? 0.5) * 0.46),
+      doppler: 1,
+    });
+    this.playOrbitNote({ ...moon, doppler: 1 });
+
+    const now = this.context.currentTime + 0.09;
+    const parameters = voiceParameters({ ...moon, doppler: 1 });
+    const shimmer = this.context.createOscillator();
+    const gain = this.context.createGain();
+    const panner = this.context.createStereoPanner();
+    const reverbSend = this.context.createGain();
+    shimmer.type = "sine";
+    shimmer.frequency.setValueAtTime(parameters.frequency * 1.5, now);
+    shimmer.frequency.exponentialRampToValueAtTime(parameters.frequency * 2, now + 1.35);
+    panner.pan.setValueAtTime(parameters.pan, now);
+    reverbSend.gain.value = 0.42;
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.028, now + 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.8);
+    shimmer.connect(gain).connect(panner).connect(this.master);
+    panner.connect(reverbSend).connect(this.reverb);
+    shimmer.start(now);
+    shimmer.stop(now + 1.9);
   }
 
   playConsumption(body) {

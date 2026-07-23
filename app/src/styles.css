@@ -1,4 +1,5 @@
-/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V5 · scope: component · genre: atmospheric · tone: strict celestial · anchor: amber · macrostructure: focused-orbit gesture · theme: studied-DNA (source: existing Relativity Gramophone) · contrast: pass (40–41) · nav: N/A · footer: N/A · slop: pass (42–45) · honest: pass (46) · chrome: pass (47) · tokens: pass (48) · responsive: pass (49) · icons: pass (30) · mobile: pass (34, 49, 50–57) */
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · scope: page · genre: atmospheric · tone: celestial instrument · anchor: amber · macrostructure: workbench · theme: studied-DNA (source: existing Relativity Gramophone) · contrast: pass (40–41) · nav: N/A (full-screen instrument) · footer: N/A (full-screen instrument) · slop: pass (42–45) · honest: pass (46) · chrome: pass (47) · tokens: pass (48) · responsive: pass (49) · icons: pass (30) · mobile: pass (34, 49, 50–57) */
+@import "./tokens.css";
 :root {
   font-family: "Avenir Next", Avenir, "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-synthesis: none;
@@ -2147,5 +2148,398 @@ input:focus-visible {
   .soundflight-voice-key > span,
   .soundflight-voice-key > b {
     display: none;
+  }
+}
+
+/* The instrument itself is the interface. */
+
+.simple-instrument .soundflight-stage,
+.simple-instrument .soundflight-stage:active {
+  cursor: crosshair;
+}
+
+.simple-title {
+  top: clamp(var(--rg-space-5), 5vh, 48px);
+  left: clamp(var(--rg-space-5), 4vw, 56px);
+  gap: var(--rg-space-3);
+}
+
+.simple-title h1 {
+  min-width: 0;
+  font-size: clamp(14px, 1.25vw, 19px);
+  letter-spacing: 0.3em;
+  line-height: 1.48;
+  overflow-wrap: anywhere;
+}
+
+.simple-title p {
+  color: var(--rg-muted);
+  font-size: 8px;
+  letter-spacing: 0.34em;
+}
+
+.instrument-guidance {
+  position: absolute;
+  z-index: 5;
+  top: clamp(108px, 15vh, 154px);
+  left: 50%;
+  display: grid;
+  width: min(620px, calc(100vw - 48px));
+  justify-items: center;
+  gap: var(--rg-space-3);
+  color: var(--rg-gold-bright);
+  pointer-events: none;
+  text-align: center;
+  text-shadow: 0 0 26px var(--rg-shadow-strong);
+  transform: translateX(-50%);
+  animation: instrument-guidance-in 700ms var(--rg-ease) both;
+}
+
+.instrument-guidance strong {
+  font-family: var(--rg-font-display);
+  font-size: clamp(18px, 2.1vw, 30px);
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+}
+
+.instrument-guidance span {
+  color: var(--rg-muted);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+  line-height: 1.7;
+}
+
+.instrument-controls {
+  position: absolute;
+  z-index: 6;
+  bottom: clamp(var(--rg-space-5), 5vh, 48px);
+  left: clamp(var(--rg-space-5), 4vw, 56px);
+  display: flex;
+  align-items: center;
+  gap: var(--rg-space-3);
+}
+
+.instrument-controls button,
+.instrument-selection button {
+  display: inline-flex;
+  min-width: var(--rg-control);
+  min-height: var(--rg-control);
+  padding: 0 var(--rg-space-4);
+  align-items: center;
+  justify-content: center;
+  gap: var(--rg-space-2);
+  border: 1px solid var(--rg-line);
+  border-radius: 999px;
+  color: var(--rg-gold);
+  background: var(--rg-panel);
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  backdrop-filter: blur(14px);
+  transition:
+    color 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.instrument-controls button:hover,
+.instrument-controls button:focus-visible,
+.instrument-selection button:hover,
+.instrument-selection button:focus-visible {
+  border-color: color-mix(in srgb, var(--rg-gold-bright) 76%, transparent);
+  color: var(--rg-gold-bright);
+  background: var(--rg-panel-hover);
+  outline: 1px solid var(--rg-focus);
+  outline-offset: 4px;
+}
+
+.instrument-controls button:active,
+.instrument-selection button:active {
+  transform: scale(0.96);
+}
+
+.instrument-controls button:disabled {
+  cursor: default;
+  opacity: 0.28;
+}
+
+.instrument-selection button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.instrument-share:disabled {
+  display: none;
+}
+
+.instrument-controls svg,
+.instrument-selection svg {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+
+.instrument-controls button,
+.instrument-selection button {
+  white-space: nowrap;
+}
+
+.instrument-play {
+  width: 76px;
+  height: 76px;
+  padding: 0 !important;
+  flex-direction: column;
+  gap: var(--rg-space-1) !important;
+}
+
+.instrument-play svg {
+  width: 21px;
+  height: 21px;
+}
+
+.instrument-selection {
+  position: absolute;
+  z-index: 6;
+  right: clamp(var(--rg-space-5), 4vw, 56px);
+  bottom: clamp(var(--rg-space-5), 5vh, 48px);
+  display: flex;
+  min-height: 58px;
+  padding: var(--rg-space-2) var(--rg-space-2) var(--rg-space-2) var(--rg-space-4);
+  align-items: center;
+  gap: var(--rg-space-3);
+  border: 1px solid color-mix(in srgb, var(--selected-voice) 36%, transparent);
+  border-radius: 999px;
+  color: var(--rg-gold);
+  background: var(--rg-panel);
+  backdrop-filter: blur(14px);
+  animation: instrument-selection-in 260ms var(--rg-ease) both;
+}
+
+.instrument-selection > i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--selected-voice);
+  box-shadow: 0 0 14px var(--selected-voice);
+}
+
+.instrument-selection > span {
+  display: grid;
+  min-width: 82px;
+  gap: 4px;
+}
+
+.instrument-selection small {
+  color: var(--rg-muted);
+  font-size: 7px;
+  letter-spacing: 0.2em;
+}
+
+.instrument-selection strong {
+  font-family: var(--rg-font-display);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.13em;
+}
+
+.instrument-selection button {
+  min-width: 50px;
+  padding: 0 var(--rg-space-3);
+  border-color: transparent;
+  background: transparent;
+}
+
+.instrument-selection button span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.simple-voice-breath {
+  bottom: clamp(17px, 2.6vh, 25px);
+  color: var(--rg-muted);
+}
+
+.simple-voice-breath span {
+  position: static;
+  font-size: 7px;
+  letter-spacing: 0.24em;
+  transform: none;
+}
+
+@keyframes instrument-guidance-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes instrument-selection-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 680px) {
+  .simple-title {
+    top: 20px;
+    left: 20px;
+  }
+
+  .simple-title h1 {
+    font-size: 12px;
+  }
+
+  .simple-title p {
+    max-width: 220px;
+    font-size: 7px;
+  }
+
+  .instrument-guidance {
+    top: 120px;
+    width: calc(100vw - 36px);
+    gap: var(--rg-space-2);
+  }
+
+  .instrument-guidance strong {
+    max-width: 23ch;
+    font-size: 19px;
+    letter-spacing: 0.075em;
+  }
+
+  .instrument-guidance span {
+    max-width: 32ch;
+    font-size: 7px;
+    letter-spacing: 0.2em;
+  }
+
+  .instrument-controls {
+    bottom: var(--rg-space-4);
+    left: var(--rg-space-4);
+    gap: var(--rg-space-2);
+  }
+
+  .instrument-play {
+    width: 68px;
+    height: 68px;
+  }
+
+  .instrument-controls .instrument-share {
+    min-width: 48px;
+    width: 48px;
+    padding: 0;
+  }
+
+  .instrument-share span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .instrument-selection {
+    right: 16px;
+    bottom: 20px;
+    min-height: 54px;
+    padding-left: var(--rg-space-3);
+    gap: var(--rg-space-2);
+  }
+
+  .instrument-selection > span {
+    min-width: 67px;
+  }
+
+  .instrument-selection button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0 var(--rg-space-3);
+  }
+
+  .simple-voice-breath {
+    right: var(--rg-space-4);
+    bottom: 96px;
+    left: auto;
+    max-width: 46vw;
+    text-align: right;
+    transform: none;
+  }
+
+  .simple-voice-breath span {
+    white-space: normal;
+  }
+
+  .runtime-message {
+    top: 88px;
+    right: var(--rg-space-4);
+    left: var(--rg-space-4);
+    max-width: none;
+  }
+}
+
+@media (max-width: 340px) {
+  .instrument-selection {
+    right: var(--rg-space-4);
+    bottom: 96px;
+  }
+
+  .simple-voice-breath {
+    display: none;
+  }
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .simple-title {
+    top: var(--rg-space-3);
+    left: 16px;
+  }
+
+  .simple-title p,
+  .simple-voice-breath {
+    display: none;
+  }
+
+  .instrument-guidance {
+    top: var(--rg-space-4);
+    width: min(500px, 58vw);
+  }
+
+  .instrument-guidance strong {
+    font-size: 16px;
+  }
+
+  .instrument-guidance span {
+    display: none;
+  }
+
+  .instrument-controls {
+    bottom: var(--rg-space-2);
+    left: 16px;
+  }
+
+  .instrument-play {
+    width: 60px;
+    height: 60px;
+  }
+
+  .instrument-selection {
+    right: 16px;
+    bottom: 12px;
   }
 }

@@ -1,0 +1,21 @@
+:root {
+  --rg-space-1: 4px;
+  --rg-space-2: 8px;
+  --rg-space-3: 12px;
+  --rg-space-4: 16px;
+  --rg-space-5: 24px;
+  --rg-space-6: 32px;
+  --rg-control: 52px;
+  --rg-gold: #e2ba6c;
+  --rg-gold-bright: #f2cc83;
+  --rg-cyan: #7ce0ef;
+  --rg-panel: rgb(5 5 4 / 68%);
+  --rg-panel-hover: rgb(20 13 5 / 78%);
+  --rg-line: rgb(226 186 108 / 28%);
+  --rg-muted: rgb(222 187 127 / 58%);
+  --rg-focus: #7ce0ef;
+  --rg-shadow-strong: rgb(0 0 0 / 84%);
+  --rg-font-body: "Avenir Next", Avenir, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --rg-font-display: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  --rg-ease: cubic-bezier(0.2, 0.75, 0.2, 1);
+}

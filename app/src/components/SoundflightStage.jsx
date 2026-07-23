@@ -19,7 +19,6 @@ import {
   orbitPathForBody,
 } from "../lib/physicsEngine.js";
 import {
-  STAR_CORE_RADIUS,
   birthBodyFromRadialLaunch,
   previewOrbit,
 } from "../lib/starBirth.js";
@@ -27,7 +26,6 @@ import {
   bodyToStage,
   buildResonanceBridge,
   cameraScaleLabel,
-  canBeginRadialLaunchFromHit,
   dopplerTintedColor,
   editorialCameraDistance,
   moonCameraDistance,
@@ -53,7 +51,8 @@ const RIBBON_HIGHLIGHT = 0xffeed6;
 const ORBIT_STRING_SAMPLES = 128;
 const ORBIT_STRING_REFRESH = 0.24;
 const NOTE_PULSE_DURATION = 1.15;
-const MOON_DISPLAY_MAGNIFICATION = 4.2;
+const MOON_DISPLAY_MAGNIFICATION = 8.2;
+const CREATION_DRAG_THRESHOLD = 8;
 
 const trailVertexShader = `
   attribute float aAlpha;
@@ -1068,6 +1067,8 @@ export function SoundflightStage(props) {
     scene.add(ambient);
     const sharedRadialTexture = createRadialTexture();
     const starVisual = createStarVisual(solarTexture, sharedRadialTexture);
+    starVisual.mesh.userData.bodyId = "star";
+    starVisual.corona.userData.bodyId = "star";
     scene.add(starVisual.group);
     const launchPreview = createLaunchPreview();
     scene.add(launchPreview.group);
@@ -1113,7 +1114,9 @@ export function SoundflightStage(props) {
       lastParticleUpdate: -Infinity,
       lastCameraReport: -Infinity,
       lastCameraCommandId: 0,
+      lastRemoveCommandId: 0,
       lastInteractionMode: props.interactionMode,
+      lastMoonMode: false,
       resettingCamera: false,
       userControllingCamera: false,
       compositionZoom: 1,
@@ -1134,6 +1137,23 @@ export function SoundflightStage(props) {
       lastGestureEmit: 0,
     };
     visualRuntimeRef.current = runtime;
+    if (import.meta.env.DEV) {
+      mount.__rgDebugState = () => ({
+        bodies: engineRef.current.state.bodies.map((body) => ({
+          id: body.id,
+          kind: body.kind,
+          parentId: body.parentId,
+        })),
+        birth: runtime.birth ? { active: runtime.birth.active, phase: runtime.birth.phase } : null,
+        moonBirth: runtime.moonBirth
+          ? {
+              active: runtime.moonBirth.active,
+              phase: runtime.moonBirth.phase,
+              parentId: runtime.moonBirth.parentId,
+            }
+          : null,
+      });
+    }
 
     const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const measure = () => {
@@ -1193,7 +1213,11 @@ export function SoundflightStage(props) {
       const point = eventPoint(event, renderer.domElement);
       runtime.pointer.set((point.x / point.width) * 2 - 1, -(point.y / point.height) * 2 + 1);
       runtime.raycaster.setFromCamera(runtime.pointer, camera);
-      const meshes = [...runtime.bodyVisuals.values()].map((visual) => visual.mesh);
+      const meshes = [
+        starVisual.mesh,
+        starVisual.corona,
+        ...runtime.bodyVisuals.values().flatMap((visual) => [visual.mesh, visual.rim]),
+      ];
       const hit = runtime.raycaster.intersectObjects(meshes, false)[0];
       return hit?.object?.userData?.bodyId ?? null;
     };
@@ -1309,9 +1333,10 @@ export function SoundflightStage(props) {
     };
 
     const updateMoonBand = () => {
-      const parent = engineRef.current.getBody(propsRef.current.selectedBodyId);
+      const parentId = runtime.moonBirth?.parentId;
+      const parent = engineRef.current.getBody(parentId);
       const star = engineRef.current.getBody("star");
-      if (!parent || parent.kind !== "planet" || !star || propsRef.current.interactionMode !== "moon") {
+      if (!runtime.moonBirth?.active || !parent || parent.kind !== "planet" || !star) {
         moonPreview.group.visible = false;
         runtime.moonFocusRadius = 0;
         return null;
@@ -1423,118 +1448,107 @@ export function SoundflightStage(props) {
 
     const onPointerDown = (event) => {
       const bodyId = hitBody(event);
-      if (propsRef.current.interactionMode === "moon") {
+      const engine = engineRef.current;
+
+      if (bodyId === "star" && !propsRef.current.isListener) {
         event.stopImmediatePropagation();
-        const parentId = propsRef.current.selectedBodyId;
-        if (bodyId !== parentId) {
-          propsRef.current.onBirthRefused(`Start on ${parentId.toUpperCase()}, then drag into its halo`);
+        if (engine.state.bodies.filter((body) => body.kind !== "star").length >= MAX_WORLDS) {
+          propsRef.current.onBirthRefused("The sky is full — remove a world before adding another");
           return;
         }
         const point = intersectPlane(event);
         if (!point) return;
         capturePointer(event.pointerId);
-        runtime.moonBirth = {
-          parentId,
+        runtime.birth = {
           release: stageToWorld(point),
           phase: "forming",
           pointerId: event.pointerId,
+          startScreen: eventPoint(event, renderer.domElement),
+          active: false,
         };
-        propsRef.current.onMoonPhase("forming");
         controls.enabled = false;
-        showMoonPreview(runtime.moonBirth);
         return;
       }
-      if (propsRef.current.interactionMode === "launch" && !canBeginRadialLaunchFromHit(bodyId)) {
-        event.stopImmediatePropagation();
-        propsRef.current.onLaunchPhase("armed");
-        propsRef.current.onBirthRefused("Start at the star, then drag gently outward");
-        return;
-      }
-      if (bodyId && propsRef.current.interactionMode !== "launch") {
+
+      if (bodyId && bodyId !== "star") {
         event.stopImmediatePropagation();
         capturePointer(event.pointerId);
         propsRef.current.onBodySelect(bodyId);
         propsRef.current.onBodyAudition(bodyId);
-        if (!propsRef.current.isListener) {
-          const planePoint = intersectPlane(event);
-          runtime.drag = { id: bodyId, start: planePoint, pointerId: event.pointerId };
-          controls.enabled = false;
-          const grabbed = engineRef.current.getBody(bodyId);
-          if (grabbed?.created) propsRef.current.onWorldGrabbed?.({ ...grabbed });
-        }
-        return;
-      }
-
-      if (propsRef.current.interactionMode !== "launch") {
-        const point = eventPoint(event, renderer.domElement);
-        const stringHit = nearestStringPoint(point, trailPaths(), STRING_TOUCH_DISTANCE);
-        if (stringHit) {
-          event.stopImmediatePropagation();
-          capturePointer(event.pointerId);
-          runtime.pluck = {
-            lastPluckAt: new Map([[stringHit.bodyId, performance.now()]]),
-            lastPoint: { x: point.x, y: point.y },
+        const parent = engine.getBody(bodyId);
+        const siblingCount = engine.state.bodies
+          .filter((body) => body.kind === "moon" && body.parentId === bodyId)
+          .length;
+        if (!propsRef.current.isListener
+          && parent?.kind === "planet"
+          && siblingCount < 2
+          && engine.state.bodies.filter((body) => body.kind !== "star").length < MAX_WORLDS) {
+          const point = intersectPlane(event);
+          if (!point) return;
+          runtime.moonBirth = {
+            parentId: bodyId,
+            release: stageToWorld(point),
+            phase: "forming",
+            pointerId: event.pointerId,
+            startScreen: eventPoint(event, renderer.domElement),
+            active: false,
           };
           controls.enabled = false;
-          performPluck(stringHit, 0.62);
-          return;
         }
+        return;
       }
 
-      if (propsRef.current.interactionMode !== "launch" || propsRef.current.isListener) return;
-      event.stopImmediatePropagation();
-      const point = intersectPlane(event);
-      if (!point) return;
-      const star = engineRef.current.getBody("star");
-      const world = stageToWorld(point);
-      if (Math.hypot(world.x - star.x, world.y - star.y) > STAR_CORE_RADIUS * 1.8) {
-        propsRef.current.onBirthRefused("Start at the star, then drag gently outward");
-        return;
+      const point = eventPoint(event, renderer.domElement);
+      const stringHit = nearestStringPoint(point, trailPaths(), STRING_TOUCH_DISTANCE);
+      if (stringHit) {
+        event.stopImmediatePropagation();
+        capturePointer(event.pointerId);
+        runtime.pluck = {
+          lastPluckAt: new Map([[stringHit.bodyId, performance.now()]]),
+          lastPoint: { x: point.x, y: point.y },
+        };
+        controls.enabled = false;
+        performPluck(stringHit, 0.62);
       }
-      if (engineRef.current.state.bodies.filter((body) => body.kind === "planet").length >= MAX_WORLDS) {
-        propsRef.current.onBirthRefused("The sky is full — feed a world to the star first");
-        return;
-      }
-      capturePointer(event.pointerId);
-      runtime.birth = { release: world, phase: "forming", pointerId: event.pointerId };
-      propsRef.current.onLaunchPhase("forming");
-      controls.enabled = false;
-      showLaunchPreview(runtime.birth);
     };
 
     const onPointerMove = (event) => {
       if (runtime.moonBirth) {
         event.stopImmediatePropagation();
+        const screen = eventPoint(event, renderer.domElement);
+        const traveled = Math.hypot(
+          screen.x - runtime.moonBirth.startScreen.x,
+          screen.y - runtime.moonBirth.startScreen.y,
+        );
+        if (!runtime.moonBirth.active && traveled < CREATION_DRAG_THRESHOLD) return;
         const point = intersectPlane(event);
         if (!point) return;
-        runtime.moonBirth.release = stageToWorld(point);
-        if (runtime.moonBirth.phase !== "aiming") {
-          const parent = engineRef.current.getBody(runtime.moonBirth.parentId);
-          const band = parent ? moonPreview.band : null;
-          const radius = parent
-            ? Math.hypot(runtime.moonBirth.release.x - parent.x, runtime.moonBirth.release.y - parent.y)
-            : 0;
-          if (band
-            && radius >= band.innerRadius * MOON_DISPLAY_MAGNIFICATION
-            && radius <= band.outerRadius * MOON_DISPLAY_MAGNIFICATION) {
-            runtime.moonBirth.phase = "aiming";
-            propsRef.current.onMoonPhase("aiming");
-          }
+        if (!runtime.moonBirth.active) {
+          runtime.moonBirth.active = true;
+          runtime.moonBirth.phase = "aiming";
+          propsRef.current.onMoonPhase("aiming");
         }
+        runtime.moonBirth.release = stageToWorld(point);
         showMoonPreview(runtime.moonBirth);
         return;
       }
       if (runtime.birth) {
         event.stopImmediatePropagation();
+        const screen = eventPoint(event, renderer.domElement);
+        const traveled = Math.hypot(
+          screen.x - runtime.birth.startScreen.x,
+          screen.y - runtime.birth.startScreen.y,
+        );
+        if (!runtime.birth.active && traveled < CREATION_DRAG_THRESHOLD) return;
         const point = intersectPlane(event);
         if (!point) return;
         const world = stageToWorld(point);
-        runtime.birth.release = world;
-        const star = engineRef.current.getBody("star");
-        if (runtime.birth.phase !== "aiming" && Math.hypot(world.x - star.x, world.y - star.y) > 0.1) {
+        if (!runtime.birth.active) {
+          runtime.birth.active = true;
           runtime.birth.phase = "aiming";
           propsRef.current.onLaunchPhase("aiming");
         }
+        runtime.birth.release = world;
         showLaunchPreview(runtime.birth);
         return;
       }
@@ -1552,46 +1566,6 @@ export function SoundflightStage(props) {
           }
         }
         return;
-      }
-      if (!runtime.drag || propsRef.current.isListener) return;
-      event.stopImmediatePropagation();
-      const point = intersectPlane(event);
-      if (!point) return;
-      const engine = engineRef.current;
-      const star = engine.getBody("star");
-      const body = engine.getBody(runtime.drag.id);
-      if (!star || !body) return;
-      const consumptionFocus = body.kind === "moon" ? engine.getBody(body.parentId) : star;
-      const displayWorld = stageToWorld(point);
-      const world = body.kind === "moon" && consumptionFocus
-        ? physicalMoonRelease(displayWorld, consumptionFocus)
-        : displayWorld;
-      const consumptionRadius = body.kind === "moon" ? Math.max(0.0035, body.semiMajor * 0.42) : STAR_CORE_RADIUS;
-      if (body.created
-        && consumptionFocus
-        && Math.hypot(world.x - consumptionFocus.x, world.y - consumptionFocus.y) < consumptionRadius) {
-        const victim = { ...body };
-        const removal = engine.removeBody(body.id);
-        runtime.drag = null;
-        runtime.latestGesture = null;
-        controls.enabled = true;
-        propsRef.current.onBodyGesture(removal);
-        propsRef.current.onConsumptionBloom(victim);
-        return;
-      }
-      const start = runtime.drag.start ?? point;
-      const tangentialTravel = Math.hypot(point.x - start.x, point.z - start.z);
-      const gesture = engine.setOrbitFromGesture(body.id, {
-        x: world.x,
-        y: world.y,
-        velocityScale: 1 + tangentialTravel / 42,
-      });
-      runtime.latestGesture = gesture;
-      const now = performance.now();
-      if (now - runtime.lastGestureEmit > 70) {
-        runtime.lastGestureEmit = now;
-        propsRef.current.onBodyGesture(gesture);
-        runtime.latestGesture = null;
       }
     };
 
@@ -1611,9 +1585,8 @@ export function SoundflightStage(props) {
         propsRef.current.onLaunchPhase("armed");
       }
       runtime.latestGesture = null;
-      runtime.drag = null;
       runtime.pluck = null;
-      controls.enabled = !["launch", "moon"].includes(propsRef.current.interactionMode);
+      controls.enabled = true;
       if (renderer.domElement.hasPointerCapture(event.pointerId)) {
         renderer.domElement.releasePointerCapture(event.pointerId);
       }
@@ -1628,7 +1601,7 @@ export function SoundflightStage(props) {
         moonPreview.guideLine.visible = false;
         moonPreview.orbitLine.visible = false;
         propsRef.current.onGestationTone(null);
-        try {
+        if (moonBirth.active) try {
           const engine = engineRef.current;
           const parent = engine.getBody(moonBirth.parentId);
           const star = engine.getBody("star");
@@ -1655,7 +1628,7 @@ export function SoundflightStage(props) {
         runtime.birth = null;
         launchPreview.group.visible = false;
         propsRef.current.onGestationTone(null);
-        try {
+        if (birth.active) try {
           const engine = engineRef.current;
           const spec = birthBodyFromRadialLaunch({
             release: birth.release,
@@ -1677,18 +1650,14 @@ export function SoundflightStage(props) {
       }
       if (runtime.pluck) {
         runtime.pluck = null;
-        controls.enabled = !["launch", "moon"].includes(propsRef.current.interactionMode);
+        controls.enabled = true;
         if (renderer.domElement.hasPointerCapture(event.pointerId)) {
           renderer.domElement.releasePointerCapture(event.pointerId);
         }
         return;
       }
-      if (runtime.latestGesture && engineRef.current.getBody(runtime.latestGesture.bodyId)) {
-        propsRef.current.onBodyGesture(runtime.latestGesture);
-      }
       runtime.latestGesture = null;
-      runtime.drag = null;
-      controls.enabled = !["launch", "moon"].includes(propsRef.current.interactionMode);
+      controls.enabled = true;
       if (renderer.domElement.hasPointerCapture(event.pointerId)) {
         renderer.domElement.releasePointerCapture(event.pointerId);
       }
@@ -1817,8 +1786,8 @@ export function SoundflightStage(props) {
         runtime.bodyVisuals.delete(bodyId);
       }
 
-      const selectedId = propsRef.current.interactionMode === "launch" ? null : propsRef.current.selectedBodyId;
-      const moonMode = propsRef.current.interactionMode === "moon";
+      const selectedId = propsRef.current.selectedBodyId;
+      const moonMode = Boolean(runtime.moonBirth?.active);
       runtime.selectedBodyId = selectedId;
       const stageBodies = new Map();
       const bodiesById = new Map(snapshot.bodies.map((body) => [body.id, body]));
@@ -1849,6 +1818,7 @@ export function SoundflightStage(props) {
         if (!visual) {
           visual = createPlanetVisual(opalTexture, sharedRadialTexture, body);
           visual.mesh.userData.bodyId = body.id;
+          visual.rim.userData.bodyId = body.id;
           scene.add(visual.orbitString);
           scene.add(visual.notePulse);
           scene.add(visual.group);
@@ -1860,9 +1830,9 @@ export function SoundflightStage(props) {
         const selected = body.id === selectedId;
         const inMoonFamily = selected || (body.kind === "moon" && body.parentId === selectedId);
         const baseScale = body.kind === "moon"
-          ? 0.085 + body.displayMass * 0.34
+          ? 0.125 + body.displayMass * 0.42
           : 0.24 + body.displayMass * 0.095;
-        const scale = baseScale * (selected ? 1.42 : body.kind === "moon" ? 0.78 : 0.86);
+        const scale = baseScale * (selected ? 1.12 : body.kind === "moon" ? 0.86 : 0.86);
         visual.mesh.scale.setScalar(scale);
         visual.rim.scale.setScalar(scale * (body.kind === "moon" ? 5.3 : 4.2));
         visual.mesh.rotation.y += delta * (0.1 + body.properRate * 0.1);
@@ -1910,7 +1880,7 @@ export function SoundflightStage(props) {
           visual.pulseStartIndex = nearestOrbitPointIndex(visual.orbitPoints, visual.group.position);
           runtime.pendingOrbitPulses.delete(body.id);
         }
-        const stringOpacity = (body.kind === "moon" ? 0.11 : 0.16)
+        const stringOpacity = (body.kind === "moon" ? 0.3 : 0.16)
           + (selected ? 0.15 : 0)
           + (propsRef.current.isPlaying ? 0.025 : 0)
           + visual.impulse * 0.42;
@@ -1919,7 +1889,7 @@ export function SoundflightStage(props) {
           visual.orbitPoints,
           voiceColor,
           moonMode && !inMoonFamily ? stringOpacity * 0.08 : stringOpacity,
-          (body.kind === "moon" ? 0.9 : 1.15) + (selected ? 0.75 : 0) + visual.impulse * 1.5,
+          (body.kind === "moon" ? 1.6 : 1.15) + (selected ? 0.75 : 0) + visual.impulse * 1.5,
           { width: renderer.domElement.clientWidth, height: renderer.domElement.clientHeight },
         );
         visual.notePulse.material.color.setHex(voiceColor);
@@ -1975,31 +1945,28 @@ export function SoundflightStage(props) {
       const delta = Math.min(MAX_FRAME_DELTA, Math.max(0, (milliseconds - previousFrameRef.current) / 1000));
       previousFrameRef.current = milliseconds;
       const currentProps = propsRef.current;
-      const exploring = currentProps.interactionMode === "explore";
-      const moonMode = currentProps.interactionMode === "moon";
-      if (currentProps.interactionMode !== runtime.lastInteractionMode) {
+      const exploring = false;
+      const moonMode = Boolean(runtime.moonBirth?.active);
+      if (moonMode !== runtime.lastMoonMode) {
         if (moonMode) {
           runtime.preMoonCompositionZoom = runtime.compositionZoom;
           runtime.compositionZoom = 1;
           runtime.resettingCamera = true;
-        } else if (runtime.lastInteractionMode === "moon") {
+        } else {
           runtime.compositionZoom = runtime.preMoonCompositionZoom;
           runtime.resettingCamera = true;
         }
-        runtime.lastInteractionMode = currentProps.interactionMode;
+        runtime.lastMoonMode = moonMode;
       }
-      if (exploring) runtime.resettingCamera = false;
-      controls.enabled = !runtime.drag
-        && !runtime.birth
-        && !runtime.moonBirth
-        && !["launch", "moon"].includes(currentProps.interactionMode);
-      controls.enableRotate = exploring;
-      controls.enablePan = exploring;
-      controls.enableZoom = !["launch", "moon"].includes(currentProps.interactionMode);
+      controls.enabled = !runtime.birth && !runtime.moonBirth;
+      controls.enableRotate = false;
+      controls.enablePan = false;
+      controls.enableZoom = true;
 
       if (shouldAdvancePhysics({
         isPlaying: currentProps.isPlaying,
         interactionMode: currentProps.interactionMode,
+        creationActive: Boolean(runtime.birth?.active || runtime.moonBirth?.active),
       })) {
         accumulatorRef.current += delta;
         while (accumulatorRef.current >= FIXED_STEP) {
@@ -2040,6 +2007,17 @@ export function SoundflightStage(props) {
           if (offset.lengthSq() < 0.001) offset.set(-3.7, 3, 6.4);
           offset.setLength(nextCameraDistance(offset.length(), cameraCommand.direction));
           camera.position.copy(controls.target).add(offset);
+        }
+      }
+      const removeCommand = currentProps.removeCommand;
+      if (removeCommand?.id > runtime.lastRemoveCommandId) {
+        runtime.lastRemoveCommandId = removeCommand.id;
+        const victim = engineRef.current.getBody(removeCommand.bodyId);
+        if (victim && victim.kind !== "star") {
+          const removal = engineRef.current.removeBody(victim.id);
+          currentProps.onBodyGesture(removal);
+          currentProps.onConsumptionBloom({ ...victim });
+          currentProps.onBodySelect(null);
         }
       }
       if (!exploring && !runtime.userControllingCamera) {
@@ -2094,6 +2072,7 @@ export function SoundflightStage(props) {
       renderer.dispose();
       renderer.domElement.remove();
       timeNeedle.remove();
+      delete mount.__rgDebugState;
       visualRuntimeRef.current = null;
     };
   }, []);
@@ -2104,7 +2083,7 @@ export function SoundflightStage(props) {
       className="soundflight-stage"
       data-interaction-mode={props.interactionMode}
       role="application"
-      aria-label="Three-dimensional orbit harp. Choose Add Planet and drag from the star to a free orbit string. Select a planet to add up to two moon overtones. A fixed light needle triggers notes as bodies cross it; the matching orbit carries the pulse. Touch an orbit to pluck it. Zoom at any time, or choose Explore for free camera flight."
+      aria-label="Three-dimensional orbit harp. Drag from the star to make a planet. Drag from a planet to make a moon. Touch an orbit to play it, and pinch or scroll to zoom."
       tabIndex={0}
     />
   );

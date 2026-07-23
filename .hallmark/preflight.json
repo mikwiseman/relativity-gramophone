@@ -1,0 +1,20 @@
+{
+  "scope": "page",
+  "genre": "atmospheric",
+  "tone": "celestial instrument",
+  "macrostructure": "workbench",
+  "theme": {
+    "mode": "studied-DNA",
+    "source": "existing Relativity Gramophone lacquer stage"
+  },
+  "anchor": "amber",
+  "enrichment": "live Three.js orbital canvas",
+  "surfaces": [
+    "orbital canvas",
+    "one contextual instruction",
+    "play and share controls",
+    "selected-body pill"
+  ],
+  "navigation": "not applicable: single full-screen instrument",
+  "footer": "not applicable: single full-screen instrument"
+}

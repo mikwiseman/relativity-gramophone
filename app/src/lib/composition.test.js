@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  createBlankComposition,
   createReplyComposition,
   createDefaultComposition,
   decodeComposition,
@@ -46,6 +47,16 @@ test("the default score speaks the harp-capable format and Kepler sonification",
 
   assert.equal(composition.format, "tau-record/6");
   assert.equal(composition.sonification, "cosmic-voices/2");
+});
+
+test("a new instrument opens as an empty star ready for the user's own system", () => {
+  const composition = createBlankComposition();
+  const physical = createInitialPhysicsState(composition.bodies);
+
+  assert.deepEqual(composition.bodies, []);
+  assert.deepEqual(composition.events, []);
+  assert.deepEqual(physical.bodies.map((body) => body.id), ["star"]);
+  assert.deepEqual(decodeComposition(encodeComposition(composition)), composition);
 });
 
 test("plucked strings are recorded, replayed, and validated against the living roster", () => {

@@ -5,7 +5,7 @@ import {
   BIRTH_MAX_MASS,
   BIRTH_MIN_MASS,
   BIRTH_MIN_RADIUS,
-  MUSICAL_ORBIT_RADII,
+  PLANET_ORBIT_MIN_GAP,
   STAR_CORE_RADIUS,
   birthBodyFromGesture,
   birthBodyFromRadialLaunch,
@@ -110,7 +110,7 @@ test("a full sky refuses another birth", () => {
   assert.throws(() => birthBodyFromGesture(gesture({ existingIds })), /sky is full/i);
 });
 
-test("a radial launch snaps distance to a stable musical orbit without a hold gesture", () => {
+test("a radial launch preserves the chosen continuous radius on a stable circular orbit", () => {
   const spec = birthBodyFromRadialLaunch({
     release: { x: 0.34, y: 0.02 },
     star: STAR,
@@ -120,12 +120,34 @@ test("a radial launch snaps distance to a stable musical orbit without a hold ge
   const radius = Math.hypot(spec.x - STAR.x, spec.y - STAR.y);
   const speed = Math.hypot(spec.vx - STAR.vx, spec.vy - STAR.vy);
   const expectedCircularSpeed = Math.sqrt(GRAVITATIONAL_CONSTANT * STAR.mass / radius);
+  const chosenRadius = Math.hypot(0.34, 0.02);
 
-  assert.ok(Math.abs(radius - MUSICAL_ORBIT_RADII[2]) < 1e-12);
+  assert.ok(Math.abs(radius - chosenRadius) < 1e-12);
   assert.ok(Math.abs(speed - expectedCircularSpeed) < 1e-12, "launch must settle onto a circular orbit");
   assert.ok(spec.x * spec.vy - spec.y * spec.vx > 0, "launch must use one calm prograde direction");
   assert.equal(spec.voice, COSMIC_VOICE_ORDER[1]);
   assert.ok(spec.frequency >= 55 && spec.frequency <= 1760);
+});
+
+test("nearby launches are nudged only as far as physics needs instead of stacking", () => {
+  const occupiedRadius = 0.31;
+  const spec = birthBodyFromRadialLaunch({
+    release: { x: occupiedRadius + 0.004, y: 0 },
+    star: STAR,
+    existingIds: ["nova-1"],
+    existingBodies: [{
+      id: "nova-1",
+      kind: "planet",
+      semiMajor: occupiedRadius,
+      x: occupiedRadius,
+      y: 0,
+    }],
+    birthIndex: 1,
+  });
+  const radius = Math.hypot(spec.x, spec.y);
+
+  assert.ok(Math.abs(radius - occupiedRadius) >= PLANET_ORBIT_MIN_GAP - 1e-12);
+  assert.ok(Math.abs(radius - (occupiedRadius + PLANET_ORBIT_MIN_GAP)) < 1e-12);
 });
 
 test("a radial launch must visibly leave the star before it can create a world", () => {
