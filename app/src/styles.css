@@ -25,13 +25,13 @@ body {
   --sf-accent: #7ce0ef;
   --sf-void: rgb(3 3 2 / 58%);
   position: relative;
-  width: 100vw;
+  width: 100%;
   height: 100dvh;
   overflow: hidden;
   color: var(--ink);
   background: var(--paper);
   isolation: isolate;
-  transition: color 540ms ease, background-color 540ms ease;
+  transition: color 540ms var(--rg-ease), background-color 540ms var(--rg-ease);
 }
 
 button,
@@ -553,30 +553,91 @@ input:focus-visible {
   z-index: 8;
   right: clamp(24px, 4vw, 60px);
   bottom: clamp(82px, 12vh, 126px);
-  width: min(430px, calc(100vw - 48px));
-  padding: 28px 30px 25px;
+  width: min(390px, calc(100vw - 48px));
+  padding: 24px 30px 25px;
   border-top: 1px solid color-mix(in srgb, var(--ink) 48%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
   color: var(--ink);
   background: color-mix(in srgb, var(--paper) 93%, transparent);
   box-shadow: 0 28px 70px color-mix(in srgb, #000 18%, transparent);
   backdrop-filter: blur(22px);
-  animation: inscribe-in 300ms ease both;
+  animation: inscribe-in 300ms var(--rg-ease) both;
 }
 
 .inscription-dialog h2 {
-  margin: 0 46px 31px 0;
+  margin: 0 46px 8px 0;
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.3em;
   line-height: 1.4;
 }
 
+.orbit-record-mark {
+  position: relative;
+  width: 100%;
+  height: 74px;
+  margin: 2px 0 18px;
+  pointer-events: none;
+}
+
+.orbit-record-mark i {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  border: 1px solid color-mix(in srgb, var(--ink) 28%, transparent);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) rotate(-8deg);
+}
+
+.orbit-record-mark i:nth-child(1) {
+  width: 92%;
+  height: 34px;
+  border-color: color-mix(in srgb, var(--coral) 62%, transparent);
+}
+
+.orbit-record-mark i:nth-child(2) {
+  width: 68%;
+  height: 48px;
+  border-color: color-mix(in srgb, var(--cyan) 58%, transparent);
+  transform: translate(-50%, -50%) rotate(7deg);
+}
+
+.orbit-record-mark i:nth-child(3) {
+  width: 39%;
+  height: 58px;
+  border-color: color-mix(in srgb, var(--ink) 43%, transparent);
+  transform: translate(-50%, -50%) rotate(-15deg);
+}
+
+.orbit-record-mark b {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow:
+    -112px 12px 0 -1px var(--coral),
+    82px -16px 0 -2px var(--cyan);
+  transform: translate(-50%, -50%);
+}
+
+.inscription-detail {
+  max-width: 48ch;
+  margin: 0 0 20px;
+  font-family: var(--rg-font-display);
+  font-size: 14px;
+  line-height: 1.45;
+  opacity: 0.68;
+}
+
 .dance-signature {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: repeat(3, 1fr);
   gap: 14px;
-  margin: -9px 0 25px;
+  margin: 0 0 20px;
   padding: 12px 0 13px;
   border-top: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 11%, transparent);
@@ -598,20 +659,27 @@ input:focus-visible {
 
 .dance-signature strong {
   overflow: hidden;
-  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
-  font-size: 10px;
+  font-family: var(--rg-font-display);
+  font-size: 17px;
   font-weight: 400;
   letter-spacing: 0.05em;
   line-height: 1.35;
   text-overflow: ellipsis;
 }
 
+.record-resonance {
+  margin: -8px 0 20px;
+  color: var(--coral);
+  font-size: 8px;
+  letter-spacing: 0.2em;
+}
+
 .close-button {
   position: absolute;
-  top: 17px;
-  right: 19px;
-  width: 34px;
-  height: 34px;
+  top: 11px;
+  right: 13px;
+  width: 44px;
+  height: 44px;
   border-color: transparent;
 }
 
@@ -633,19 +701,20 @@ input:focus-visible {
 .message-field input,
 .link-field input {
   width: 100%;
-  padding: 7px 0 9px;
+  min-height: 44px;
+  padding: 9px 0 10px;
   border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
   border-radius: 0;
   color: var(--ink);
   background: transparent;
-  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-family: var(--rg-font-display);
   font-size: 15px;
   line-height: 1.4;
 }
 
 .link-field input {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--rg-font-mono);
   font-size: 9px;
   letter-spacing: -0.02em;
   opacity: 0.72;
@@ -653,7 +722,7 @@ input:focus-visible {
 
 .received-message {
   margin: 4px 0 29px;
-  font-family: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  font-family: var(--rg-font-display);
   font-size: 20px;
   font-style: italic;
   line-height: 1.45;
@@ -664,7 +733,7 @@ input:focus-visible {
   flex-wrap: wrap;
   align-items: center;
   gap: 9px 22px;
-  margin-top: 25px;
+  margin-top: 20px;
 }
 
 .text-action {
@@ -681,10 +750,26 @@ input:focus-visible {
   font-size: 9px;
   font-weight: 500;
   letter-spacing: 0.18em;
+  white-space: nowrap;
 }
 
-.text-action:hover {
-  border-bottom-color: currentColor;
+@media (hover: hover) and (pointer: fine) {
+  .text-action:hover {
+    border-bottom-color: currentColor;
+  }
+}
+
+.text-action:active {
+  transform: translateY(1px);
+}
+
+.text-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.copy-action {
+  color: var(--cyan);
 }
 
 .text-action svg {
@@ -780,11 +865,11 @@ input:focus-visible {
   }
 
   .dance-signature {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .dance-signature p:last-child {
-    grid-column: 1 / -1;
+    grid-column: auto;
   }
 
   .runtime-message {

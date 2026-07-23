@@ -17,5 +17,6 @@
   --rg-shadow-strong: rgb(0 0 0 / 84%);
   --rg-font-body: "Avenir Next", Avenir, "Helvetica Neue", Helvetica, Arial, sans-serif;
   --rg-font-display: "Iowan Old Style", Baskerville, "Times New Roman", serif;
+  --rg-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --rg-ease: cubic-bezier(0.2, 0.75, 0.2, 1);
 }

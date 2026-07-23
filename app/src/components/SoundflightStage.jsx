@@ -28,7 +28,6 @@ import {
   cameraScaleLabel,
   dopplerTintedColor,
   editorialCameraDistance,
-  moonCameraDistance,
   nextCameraDistance,
   selectRenderProfile,
   shouldAdvancePhysics,
@@ -51,7 +50,7 @@ const RIBBON_HIGHLIGHT = 0xffeed6;
 const ORBIT_STRING_SAMPLES = 128;
 const ORBIT_STRING_REFRESH = 0.24;
 const NOTE_PULSE_DURATION = 1.15;
-const MOON_DISPLAY_MAGNIFICATION = 8.2;
+const MOON_DISPLAY_MAGNIFICATION = 54;
 const CREATION_DRAG_THRESHOLD = 8;
 
 const trailVertexShader = `
@@ -1135,13 +1134,10 @@ export function SoundflightStage(props) {
       lastCameraCommandId: 0,
       lastRemoveCommandId: 0,
       lastInteractionMode: props.interactionMode,
-      lastMoonMode: false,
       resettingCamera: false,
       userControllingCamera: false,
       compositionZoom: 1,
-      preMoonCompositionZoom: 1,
       lastFitDistance: 10,
-      moonFocusRadius: 0,
       editorialCameraPosition: new THREE.Vector3(-1.6, 4.6, 11.2),
       editorialCameraTarget: new THREE.Vector3(0.5, 0, 0),
       raycaster: new THREE.Raycaster(),
@@ -1355,12 +1351,19 @@ export function SoundflightStage(props) {
     };
 
     const updateMoonBand = () => {
-      const parentId = runtime.moonBirth?.parentId;
+      const activeBirth = runtime.moonBirth?.active ? runtime.moonBirth : null;
+      const parentId = activeBirth?.parentId ?? propsRef.current.selectedBodyId;
       const parent = engineRef.current.getBody(parentId);
       const star = engineRef.current.getBody("star");
-      if (!runtime.moonBirth?.active || !parent || parent.kind !== "planet" || !star) {
+      const siblingCount = engineRef.current.state.bodies
+        .filter((body) => body.kind === "moon" && body.parentId === parentId)
+        .length;
+      const canAddMoon = !propsRef.current.isListener
+        && parent?.kind === "planet"
+        && siblingCount < 2
+        && engineRef.current.state.bodies.filter((body) => body.kind !== "star").length < MAX_WORLDS;
+      if (!canAddMoon || !star) {
         moonPreview.group.visible = false;
-        runtime.moonFocusRadius = 0;
         return null;
       }
       const band = satelliteStabilityBand({ parent, star });
@@ -1371,46 +1374,53 @@ export function SoundflightStage(props) {
       moonPreview.group.visible = true;
       moonPreview.parentId = parent.id;
       moonPreview.band = band;
-      runtime.moonFocusRadius = displayOuterRadius;
+      const voice = voiceVisual(parent.voice);
       const resolution = {
         width: renderer.domElement.clientWidth,
         height: renderer.domElement.clientHeight,
       };
-      writeOrbitString(
-        moonPreview.innerRing,
-        localCirclePoints(displayInnerRadius),
-        0xff765f,
-        0.58,
-        1.45,
-        resolution,
-      );
-      writeOrbitString(
-        moonPreview.outerRing,
-        localCirclePoints(displayOuterRadius),
-        0xd7aa5f,
-        0.92,
-        2.15,
-        resolution,
-      );
-      if (!runtime.moonBirth) {
+      if (activeBirth) {
+        writeOrbitString(
+          moonPreview.innerRing,
+          localCirclePoints(displayInnerRadius),
+          0xff765f,
+          0.58,
+          1.45,
+          resolution,
+        );
+        writeOrbitString(
+          moonPreview.outerRing,
+          localCirclePoints(displayOuterRadius),
+          0xd7aa5f,
+          0.92,
+          2.15,
+          resolution,
+        );
+      } else {
+        moonPreview.innerRing.visible = false;
+        writeOrbitString(
+          moonPreview.outerRing,
+          localCirclePoints(displayOuterRadius),
+          voice.color,
+          0.38,
+          1.65,
+          resolution,
+        );
         const previewRadius = THREE.MathUtils.lerp(displayInnerRadius, displayOuterRadius, 0.58);
-        const previewAngle = -0.24;
+        const previewAngle = reducedMotionQuery.matches
+          ? -0.24
+          : -0.24 + performance.now() * 0.00018;
         const previewPoint = {
           x: Math.cos(previewAngle) * previewRadius,
           y: 0.08,
           z: Math.sin(previewAngle) * previewRadius,
         };
-        const voice = voiceVisual(parent.voice);
         moonPreview.seed.position.set(previewPoint.x, previewPoint.y, previewPoint.z);
         moonPreview.seed.scale.setScalar(0.76);
         moonPreview.seed.material.emissive.setHex(voice.color);
-        moonPreview.seed.material.opacity = 0.54;
+        moonPreview.seed.material.opacity = 0.72;
         moonPreview.seed.visible = true;
-        moonPreview.guideLine.material.uniforms.uColor.value.setHex(voice.color);
-        updateTrailLine(moonPreview.guideLine, [
-          { x: 0, y: 0.05, z: 0 },
-          previewPoint,
-        ], 0, 0.28);
+        moonPreview.guideLine.visible = false;
         moonPreview.orbitLine.visible = false;
       }
       return { parent, star, band, parentStage };
@@ -1957,9 +1967,7 @@ export function SoundflightStage(props) {
       const projectedStar = starStage.clone().project(camera);
       timeNeedle.style.left = `${clamp((projectedStar.x * 0.5 + 0.5) * 100, 8, 92)}%`;
       runtime.systemRadius = systemRadius;
-      runtime.editorialCameraTarget.copy(
-        moonMode && stageBodies.has(selectedId) ? stageBodies.get(selectedId) : starStage,
-      );
+      runtime.editorialCameraTarget.copy(starStage);
     };
 
     const animate = (milliseconds) => {
@@ -1968,18 +1976,6 @@ export function SoundflightStage(props) {
       previousFrameRef.current = milliseconds;
       const currentProps = propsRef.current;
       const exploring = false;
-      const moonMode = Boolean(runtime.moonBirth?.active);
-      if (moonMode !== runtime.lastMoonMode) {
-        if (moonMode) {
-          runtime.preMoonCompositionZoom = runtime.compositionZoom;
-          runtime.compositionZoom = 1;
-          runtime.resettingCamera = true;
-        } else {
-          runtime.compositionZoom = runtime.preMoonCompositionZoom;
-          runtime.resettingCamera = true;
-        }
-        runtime.lastMoonMode = moonMode;
-      }
       controls.enabled = !runtime.birth && !runtime.moonBirth;
       controls.enableRotate = false;
       controls.enablePan = false;
@@ -2043,9 +2039,7 @@ export function SoundflightStage(props) {
         }
       }
       if (!exploring && !runtime.userControllingCamera) {
-        const fitDistance = moonMode
-          ? moonCameraDistance(runtime.moonFocusRadius, camera.aspect)
-          : editorialCameraDistance(runtime.systemRadius ?? 4, camera.aspect);
+        const fitDistance = editorialCameraDistance(runtime.systemRadius ?? 4, camera.aspect);
         runtime.lastFitDistance = fitDistance;
         const desiredDistance = clamp(fitDistance * runtime.compositionZoom, controls.minDistance, controls.maxDistance);
         const viewDirection = new THREE.Vector3(0, 0.37, 0.929).normalize();

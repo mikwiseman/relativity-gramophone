@@ -3,6 +3,7 @@ import {
   GRAVITY_SOFTENING,
   MAX_MOONS_PER_PLANET,
   MAX_WORLDS,
+  physicalMassForDisplay,
 } from "./physicsEngine.js";
 import { keplerPitch } from "./sonification.js";
 
@@ -105,7 +106,7 @@ export function birthSatelliteFromRadialLaunch({
   const unitX = dx / draggedRadius;
   const unitY = dy / draggedRadius;
   const displayMass = 0.04 + siblings.length * 0.012;
-  const physicalMass = displayMass * 0.0028;
+  const physicalMass = physicalMassForDisplay(displayMass, "moon");
   const mu = GRAVITATIONAL_CONSTANT * (parent.mass + physicalMass);
   const speed = Math.sqrt(mu / radius);
   const period = TAU * Math.sqrt((radius ** 3) / mu);

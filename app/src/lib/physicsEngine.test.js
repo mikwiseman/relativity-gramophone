@@ -11,10 +11,16 @@ import {
   createInitialPhysicsState,
   dopplerFactor,
   findClosestResonance,
+  physicalMassForDisplay,
   totalEnergy,
 } from "./physicsEngine.js";
 import { createDefaultComposition } from "./composition.js";
-import { birthBodyFromGesture } from "./starBirth.js";
+import {
+  BIRTH_MIN_RADIUS,
+  PLANET_ORBIT_MIN_GAP,
+  birthBodyFromGesture,
+  birthBodyFromRadialLaunch,
+} from "./starBirth.js";
 
 function birthSpec(engine, overrides = {}) {
   const star = engine.getBody("star");
@@ -190,6 +196,63 @@ test("a born world joins the ensemble with live orbital elements and a replayabl
   assert.ok(born.mass < spec.mass, "physical mass must use the planet mass scale");
   assert.ok(Number.isFinite(born.period) && born.period > 0);
   assert.ok(Number.isFinite(born.properRate) && born.properRate <= 1);
+});
+
+test("display size never turns a planet or moon into an unrealistically heavy world", () => {
+  assert.ok(physicalMassForDisplay(1.18, "planet") < 0.00002);
+  assert.ok(physicalMassForDisplay(0.04, "moon") < physicalMassForDisplay(0.34, "planet") * 0.02);
+});
+
+test("shared legacy state is recalibrated to the current physical mass model", () => {
+  const state = createInitialPhysicsState(createDefaultComposition().bodies);
+  const europa = state.bodies.find((body) => body.id === "europa");
+  europa.mass = 0.0028 * europa.displayMass;
+
+  const engine = new PhysicsEngine(state);
+
+  assert.equal(engine.getBody("europa").mass, physicalMassForDisplay(europa.displayMass, "planet"));
+});
+
+test("a densely authored solar system keeps separate, nearly circular orbits", () => {
+  const engine = new PhysicsEngine(createInitialPhysicsState([]));
+
+  for (let index = 0; index < 10; index += 1) {
+    const star = engine.getBody("star");
+    const planets = engine.state.bodies.filter((body) => body.kind === "planet");
+    const radius = BIRTH_MIN_RADIUS + index * PLANET_ORBIT_MIN_GAP;
+    const angle = index * 2.3999632297;
+    const world = birthBodyFromRadialLaunch({
+      release: {
+        x: star.x + Math.cos(angle) * radius,
+        y: star.y + Math.sin(angle) * radius,
+      },
+      star,
+      existingIds: planets.map((body) => body.id),
+      existingBodies: planets,
+      birthIndex: index,
+    });
+    engine.addBody(world);
+  }
+
+  let closestApproach = Infinity;
+  for (let step = 0; step < Math.round(64 / FIXED_STEP); step += 1) {
+    engine.step();
+    if (step % 30 !== 0) continue;
+    const planets = engine.state.bodies.filter((body) => body.kind === "planet");
+    for (let first = 0; first < planets.length; first += 1) {
+      for (let second = first + 1; second < planets.length; second += 1) {
+        closestApproach = Math.min(
+          closestApproach,
+          Math.hypot(planets[first].x - planets[second].x, planets[first].y - planets[second].y),
+        );
+      }
+    }
+  }
+
+  const planets = engine.state.bodies.filter((body) => body.kind === "planet");
+  assert.ok(closestApproach > 0.015, `closest approach was ${closestApproach}`);
+  assert.ok(planets.every((body) => body.eccentricity < 0.12));
+  assert.ok(planets.every((body) => body.semiMajor >= 0.12 && body.semiMajor <= 0.58));
 });
 
 test("birth and consumption events replay to the exact same physical state", () => {

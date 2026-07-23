@@ -3,11 +3,12 @@ const TAU = Math.PI * 2;
 export const PHYSICS_MODEL = "nbody-weak-relativity/2";
 export const FIXED_STEP = 1 / 120;
 export const GRAVITATIONAL_CONSTANT = 0.00665;
-export const GRAVITY_SOFTENING = 0.0015;
+export const GRAVITY_SOFTENING = 0.00008;
 export const MAX_WORLDS = 12;
 export const MAX_MOONS_PER_PLANET = 2;
 
-const PLANET_MASS_SCALE = 0.0028;
+const PLANET_MASS_SCALE = 0.000008;
+const MOON_MASS_SCALE = 0.0000008;
 const FELT_RELATIVITY_GAIN = 1.18;
 const MIN_CLOCK_RATE = 0.94;
 const MAX_CLOCK_RATE = 0.9995;
@@ -25,6 +26,22 @@ function clamp(value, minimum, maximum) {
 
 function clone(value) {
   return structuredClone(value);
+}
+
+export function physicalMassForDisplay(displayMass, kind = "planet") {
+  if (!Number.isFinite(displayMass) || displayMass <= 0) {
+    throw new Error("Physical mass requires a positive display mass");
+  }
+  if (kind !== "planet" && kind !== "moon") throw new Error(`Unsupported physical body kind: ${kind}`);
+  return displayMass * (kind === "moon" ? MOON_MASS_SCALE : PLANET_MASS_SCALE);
+}
+
+function normalizePhysicalMasses(state) {
+  for (const body of state.bodies) {
+    if (body.kind === "star") continue;
+    body.mass = physicalMassForDisplay(body.displayMass, body.kind ?? "planet");
+  }
+  return state;
 }
 
 function bodyDistanceSquared(first, second, softening) {
@@ -136,7 +153,7 @@ function initialPlanetState(body) {
     kind: "planet",
     ...(body.created ? { created: true } : {}),
     sprite: body.sprite,
-    mass: PLANET_MASS_SCALE * body.mass,
+    mass: physicalMassForDisplay(body.mass, "planet"),
     displayMass: body.mass,
     frequency: body.frequency,
     pan: body.pan,
@@ -282,7 +299,7 @@ export function orbitPathForBody(body, focus, sampleCount = 128) {
 
 export class PhysicsEngine {
   constructor(initialState) {
-    this.state = clone(initialState);
+    this.state = normalizePhysicalMasses(clone(initialState));
     this.updateDerived(0);
   }
 
@@ -291,7 +308,7 @@ export class PhysicsEngine {
   }
 
   reset(initialState) {
-    this.state = clone(initialState);
+    this.state = normalizePhysicalMasses(clone(initialState));
     this.updateDerived(0);
   }
 
@@ -414,7 +431,7 @@ export class PhysicsEngine {
       ...(kind === "moon" ? { parentId: spec.parentId } : {}),
       created: true,
       sprite: spec.sprite,
-      mass: PLANET_MASS_SCALE * spec.mass,
+      mass: physicalMassForDisplay(spec.mass, kind),
       displayMass: spec.mass,
       frequency: spec.frequency,
       pan: spec.pan,

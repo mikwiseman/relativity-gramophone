@@ -18,6 +18,7 @@ import {
   readCompositionFromHash,
 } from "./lib/composition.js";
 import { THEMES } from "./lib/themes.js";
+import { copyOrbitLink, shareOrbit } from "./lib/sharing.js";
 import { COSMIC_VOICES, hapticPattern, voiceParameters } from "./lib/sonification.js";
 import {
   frequencyToNoteName,
@@ -91,8 +92,8 @@ export function App() {
     ? "HOLD THE STAR · PULL OUTWARD · RELEASE"
     : selectedBody?.kind === "planet" && selectedMoonCount < 2 && !isListener
       ? selectedMoonCount === 1
-        ? "1 MOON IN ORBIT · DRAG AGAIN FOR ANOTHER"
-        : "HOLD THIS PLANET · PULL OUTWARD · RELEASE"
+        ? "DRAG AGAIN TO ADD ONE MORE MOON"
+        : "THE SMALL LIGHT SHOWS WHERE THE MOON WILL ORBIT"
       : "TAP A PLANET TO HEAR IT · SWIPE ACROSS ITS ORBIT";
 
   useEffect(() => {
@@ -310,38 +311,29 @@ export function App() {
   }, [composition]);
 
   const copyLink = useCallback(async () => {
-    if (!navigator.clipboard?.writeText) {
-      setDialogStatus("COPY UNAVAILABLE — SELECT THE LINK MANUALLY");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(shareLink);
-      setDialogStatus("LINK COPIED");
-    } catch (error) {
-      setDialogStatus(`COPY FAILED — ${error instanceof Error ? error.message.toUpperCase() : "UNKNOWN ERROR"}`);
-    }
+    const result = await copyOrbitLink(shareLink);
+    setDialogStatus(result.kind === "copied" ? "LINK COPIED" : "SELECT THE LINK, THEN COPY IT");
   }, [shareLink]);
 
   const share = useCallback(async () => {
-    if (!navigator.share) {
-      setDialogStatus("SYSTEM SHARE UNAVAILABLE — USE COPY LINK");
+    const voices = (physicsFrameRef.current?.bodies ?? shareScore.bodies)
+      .map((body) => COSMIC_VOICES[body.voice]?.label)
+      .filter(Boolean)
+      .join(" · ");
+    const result = await shareOrbit({
+      title: "Relativity Gramophone",
+      text: [shareScore.message, voices && `A planetary composition: ${voices}.`].filter(Boolean).join("\n"),
+      url: shareLink,
+    });
+    if (result.kind === "cancelled") {
+      setDialogStatus("");
       return;
     }
-    try {
-      const voices = (physicsFrameRef.current?.bodies ?? shareScore.bodies)
-        .map((body) => COSMIC_VOICES[body.voice]?.label)
-        .filter(Boolean)
-        .join(" · ");
-      await navigator.share({
-        title: "Relativity Gramophone",
-        text: [shareScore.message, voices && `A planetary composition: ${voices}.`].filter(Boolean).join("\n"),
-        url: shareLink,
-      });
-      setDialogStatus("ORBIT SHARED");
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") return;
-      setDialogStatus(`SHARE FAILED — ${error instanceof Error ? error.message.toUpperCase() : "UNKNOWN ERROR"}`);
-    }
+    setDialogStatus(result.kind === "shared"
+      ? "ORBIT SHARED"
+      : result.kind === "copied"
+        ? "LINK COPIED — READY TO PASTE"
+        : "SELECT THE LINK, THEN COPY IT");
   }, [shareLink, shareScore]);
 
   const enterOrbit = useCallback(async () => {
