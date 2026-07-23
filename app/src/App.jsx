@@ -565,6 +565,7 @@ export function App() {
       className="app-shell"
       data-theme="lacquer"
       data-launch-mode={soundflightState.mode === "launch" || soundflightState.mode === "moon"}
+      data-creation-mode={soundflightState.mode}
       style={{
         "--paper": theme.paper,
         "--ink": theme.ink,
@@ -680,6 +681,7 @@ export function App() {
           {creationCopy && (
             <section
               className="soundflight-launch-guide"
+              data-kind={soundflightState.mode === "moon" ? "moon" : "planet"}
               data-phase={soundflightState.mode === "moon" ? moonPhase : launchPhase}
               aria-live="polite"
               aria-label={soundflightState.mode === "moon" ? "Moon instructions" : "Launch instructions"}
@@ -687,14 +689,16 @@ export function App() {
               <span>{creationCopy.eyebrow}</span>
               <strong>{creationCopy.title}</strong>
               <p>{creationCopy.detail}</p>
-              <ol aria-label={soundflightState.mode === "moon" ? "Moon steps" : "Launch steps"}>
-                {(soundflightState.mode === "moon" ? ["PARENT", "RING", "RELEASE"] : ["DRAG", "PITCH", "RELEASE"]).map((step, index) => (
-                  <li key={step} data-state={index < creationCopy.activeStep ? "done" : index === creationCopy.activeStep ? "active" : "next"}>
-                    <small>0{index + 1}</small>
-                    {step}
-                  </li>
-                ))}
-              </ol>
+              {soundflightState.mode !== "moon" && (
+                <ol aria-label="Launch steps">
+                  {["DRAG", "PITCH", "RELEASE"].map((step, index) => (
+                    <li key={step} data-state={index < creationCopy.activeStep ? "done" : index === creationCopy.activeStep ? "active" : "next"}>
+                      <small>0{index + 1}</small>
+                      {step}
+                    </li>
+                  ))}
+                </ol>
+              )}
             </section>
           )}
 
@@ -739,6 +743,7 @@ export function App() {
               <button
                 type="button"
                 className="soundflight-add-moon"
+                aria-label={soundflightState.mode === "moon" ? "Cancel moon placement" : undefined}
                 aria-pressed={soundflightState.mode === "moon"}
                 disabled={selectedMoonCount >= 2 && soundflightState.mode !== "moon"}
                 onClick={() => {
@@ -757,7 +762,7 @@ export function App() {
               >
                 <MoonStars aria-hidden="true" weight="thin" />
                 {soundflightState.mode === "moon"
-                  ? "CANCEL MOON"
+                  ? "CANCEL"
                   : selectedMoonCount >= 2
                     ? "OVERTONES FULL"
                     : "ADD MOON"}

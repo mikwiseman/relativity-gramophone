@@ -23,9 +23,11 @@ import {
 import {
   buildResonanceBridge,
   editorialCameraDistance,
+  moonCameraDistance,
   moonGuidance,
   reduceSoundflightState,
   createSoundflightState,
+  shouldAdvancePhysics,
 } from "./soundflight.js";
 
 function liveDefault() {
@@ -220,10 +222,9 @@ test("moon creation is an explicit cancellable interaction with concise guidance
     bodyId: "moon-europa-1",
   }), initial);
   assert.deepEqual(moonGuidance("armed"), {
-    eyebrow: "ADD AN OVERTONE",
-    title: "DRAG FROM EUROPA",
-    detail: "Release inside the luminous stable ring",
-    activeStep: 0,
+    eyebrow: "ADD A MOON",
+    title: "DRAG FROM EUROPA TO ITS HALO",
+    detail: "Release anywhere inside the glowing orbit",
   });
   assert.throws(() => reduceSoundflightState(initial, { type: "ARM_MOON" }), /requires a bodyId/i);
 });
@@ -232,6 +233,18 @@ test("composition camera distance grows with the system and with a portrait view
   assert.equal(editorialCameraDistance(0, 16 / 9), 8.4);
   assert.ok(editorialCameraDistance(6, 16 / 9) > editorialCameraDistance(3, 16 / 9));
   assert.ok(editorialCameraDistance(5, 0.55) > editorialCameraDistance(5, 16 / 9));
+});
+
+test("moon placement freezes the system and uses a bounded local camera", () => {
+  assert.equal(shouldAdvancePhysics({ isPlaying: true, interactionMode: "compose" }), true);
+  assert.equal(shouldAdvancePhysics({ isPlaying: true, interactionMode: "moon" }), false);
+  assert.equal(shouldAdvancePhysics({ isPlaying: false, interactionMode: "moon" }), false);
+
+  const landscapeDistance = moonCameraDistance(1.2, 16 / 9);
+  const portraitDistance = moonCameraDistance(1.2, 390 / 844);
+  assert.ok(landscapeDistance >= 4.8);
+  assert.ok(landscapeDistance <= 8.8);
+  assert.ok(portraitDistance > landscapeDistance);
 });
 
 test("a moon birth survives the share format and listener replay contract", () => {

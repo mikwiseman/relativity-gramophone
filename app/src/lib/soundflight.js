@@ -49,22 +49,19 @@ export function launchGuidance(phase) {
 
 const MOON_GUIDANCE = Object.freeze({
   armed: Object.freeze({
-    eyebrow: "ADD AN OVERTONE",
-    title: "DRAG FROM {PARENT}",
-    detail: "Release inside the luminous stable ring",
-    activeStep: 0,
+    eyebrow: "ADD A MOON",
+    title: "DRAG FROM {PARENT} TO ITS HALO",
+    detail: "Release anywhere inside the glowing orbit",
   }),
   forming: Object.freeze({
-    eyebrow: "THE STABLE RING IS OPEN",
-    title: "CHOOSE THE INTERVAL",
-    detail: "Near is bright · far is slow",
-    activeStep: 1,
+    eyebrow: "MOON ORBIT",
+    title: "MOVE INTO THE HALO",
+    detail: "Near sounds brighter · far sounds slower",
   }),
   aiming: Object.freeze({
-    eyebrow: "A NEW OVERTONE IS READY",
-    title: "RELEASE TO HEAR IT",
-    detail: "The moon subdivides its parent voice",
-    activeStep: 2,
+    eyebrow: "MOON ORBIT READY",
+    title: "RELEASE TO ADD THE MOON",
+    detail: "Its orbit becomes an overtone",
   }),
 });
 
@@ -301,4 +298,19 @@ export function editorialCameraDistance(systemRadius, aspect) {
   }
   const portraitPenalty = aspect < 0.8 ? 0.8 / aspect : 1;
   return clamp(Math.max(8.4, systemRadius * 2.05) * portraitPenalty, 8.4, 24);
+}
+
+export function moonCameraDistance(haloRadius, aspect) {
+  if (!Number.isFinite(haloRadius) || haloRadius < 0 || !Number.isFinite(aspect) || aspect <= 0) {
+    throw new Error("Moon camera fit requires a finite halo radius and aspect");
+  }
+  const portraitPenalty = aspect < 0.82 ? 0.82 / aspect : 1;
+  return clamp(Math.max(4.8, haloRadius * 3.25) * portraitPenalty, 4.8, 8.8);
+}
+
+export function shouldAdvancePhysics({ isPlaying, interactionMode }) {
+  if (typeof isPlaying !== "boolean" || typeof interactionMode !== "string") {
+    throw new Error("Physics playback requires an explicit play state and interaction mode");
+  }
+  return isPlaying && interactionMode !== "moon";
 }

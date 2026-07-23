@@ -1,3 +1,4 @@
+/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V5 · scope: component · genre: atmospheric · tone: strict celestial · anchor: amber · macrostructure: focused-orbit gesture · theme: studied-DNA (source: existing Relativity Gramophone) · contrast: pass (40–41) · nav: N/A · footer: N/A · slop: pass (42–45) · honest: pass (46) · chrome: pass (47) · tokens: pass (48) · responsive: pass (49) · icons: pass (30) · mobile: pass (34, 49, 50–57) */
 :root {
   font-family: "Avenir Next", Avenir, "Helvetica Neue", Helvetica, Arial, sans-serif;
   font-synthesis: none;
@@ -13,13 +14,15 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  overflow: hidden;
+  overflow-x: clip;
+  overflow-y: hidden;
   -webkit-font-smoothing: antialiased;
 }
 
 .app-shell {
   --sf-gold: #e2ba6c;
   --sf-accent: #7ce0ef;
+  --sf-void: rgb(3 3 2 / 58%);
   position: relative;
   width: 100vw;
   height: 100dvh;
@@ -909,6 +912,10 @@ input:focus-visible {
   opacity: 0;
 }
 
+.soundflight-stage[data-interaction-mode="moon"] .soundflight-time-needle {
+  opacity: 0;
+}
+
 .soundflight-time-needle i {
   position: absolute;
   left: 50%;
@@ -1108,6 +1115,32 @@ input:focus-visible {
   letter-spacing: 0.06em;
 }
 
+.soundflight-launch-guide[data-kind="moon"] {
+  top: clamp(104px, 14vh, 150px);
+  width: min(500px, calc(100% - 400px));
+  gap: 7px;
+}
+
+.soundflight-launch-guide[data-kind="moon"] > span {
+  color: var(--sf-accent);
+  letter-spacing: 0.3em;
+}
+
+.soundflight-launch-guide[data-kind="moon"] > strong {
+  min-width: 0;
+  max-width: 22ch;
+  color: var(--sf-gold);
+  font-size: clamp(18px, 2vw, 28px);
+  letter-spacing: 0.08em;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+
+.soundflight-launch-guide[data-kind="moon"] > p {
+  max-width: 38ch;
+  font-size: 12px;
+}
+
 .soundflight-launch-guide ol {
   display: grid;
   width: min(390px, 88vw);
@@ -1149,6 +1182,7 @@ input:focus-visible {
 
 .soundflight-title,
 .soundflight-systems-trigger,
+.soundflight-launch-dock,
 .soundflight-voice-key,
 .soundflight-explore,
 .soundflight-voice-breath {
@@ -1161,6 +1195,11 @@ input:focus-visible {
 .app-shell[data-launch-mode="true"] .soundflight-explore,
 .app-shell[data-launch-mode="true"] .soundflight-voice-breath {
   opacity: 0.18;
+}
+
+.app-shell[data-creation-mode="moon"] .soundflight-launch-dock {
+  pointer-events: none;
+  opacity: 0.14;
 }
 
 @keyframes soundflight-guide-in {
@@ -1318,7 +1357,11 @@ input:focus-visible {
   font-size: 8px;
   font-weight: 600;
   letter-spacing: 0.2em;
-  transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+  white-space: nowrap;
+  transition:
+    border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 100ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .soundflight-add-moon svg {
@@ -1327,17 +1370,46 @@ input:focus-visible {
 }
 
 .soundflight-add-moon:hover,
-.soundflight-add-moon:focus-visible,
 .soundflight-add-moon[aria-pressed="true"] {
   border-color: var(--selected-voice);
-  outline: none;
-  background: color-mix(in srgb, var(--selected-voice) 9%, rgb(3 3 2 / 58%));
-  box-shadow: 0 0 28px color-mix(in srgb, var(--selected-voice) 14%, transparent);
+  background: color-mix(in srgb, var(--selected-voice) 9%, var(--sf-void));
+}
+
+.soundflight-add-moon:focus-visible {
+  border-color: var(--selected-voice);
+  outline: 2px solid var(--selected-voice);
+  outline-offset: 3px;
+  background: color-mix(in srgb, var(--selected-voice) 9%, var(--sf-void));
+}
+
+.soundflight-add-moon:active {
+  transform: translateY(1px);
 }
 
 .soundflight-add-moon:disabled {
-  cursor: default;
+  cursor: not-allowed;
   opacity: 0.42;
+}
+
+.app-shell[data-creation-mode="moon"] .soundflight-selected-orbit {
+  top: clamp(96px, 13vh, 126px);
+  width: auto;
+  padding: 0;
+  gap: 0;
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.app-shell[data-creation-mode="moon"] .soundflight-selected-orbit > span,
+.app-shell[data-creation-mode="moon"] .soundflight-selected-orbit > strong,
+.app-shell[data-creation-mode="moon"] .soundflight-selected-orbit > small {
+  display: none;
+}
+
+.app-shell[data-creation-mode="moon"] .soundflight-add-moon {
+  min-width: 104px;
+  margin: 0;
 }
 
 .soundflight-zoom-controls {
@@ -1712,6 +1784,24 @@ input:focus-visible {
     gap: 8px;
   }
 
+  .soundflight-launch-guide[data-kind="moon"] {
+    top: 190px;
+    width: calc(100% - 32px);
+    gap: 7px;
+  }
+
+  .soundflight-launch-guide[data-kind="moon"] > strong {
+    max-width: 19ch;
+    font-size: 18px;
+    line-height: 1.22;
+  }
+
+  .soundflight-launch-guide[data-kind="moon"] > p {
+    max-width: 30ch;
+    font-size: 10px;
+    line-height: 1.45;
+  }
+
   .soundflight-launch-guide > strong {
     font-size: 21px;
     letter-spacing: 0.09em;
@@ -1743,6 +1833,11 @@ input:focus-visible {
     top: 104px;
     right: 16px;
     width: 142px;
+  }
+
+  .app-shell[data-creation-mode="moon"] .soundflight-selected-orbit {
+    top: 106px;
+    right: 16px;
   }
 
   .soundflight-selected-orbit > span {
@@ -1879,6 +1974,15 @@ input:focus-visible {
     top: 25%;
     width: min(420px, 62vw);
     gap: 5px;
+  }
+
+  .soundflight-launch-guide[data-kind="moon"] {
+    top: 76px;
+    width: min(390px, 58vw);
+  }
+
+  .soundflight-launch-guide[data-kind="moon"] > strong {
+    font-size: 15px;
   }
 
   .soundflight-launch-guide > span,
