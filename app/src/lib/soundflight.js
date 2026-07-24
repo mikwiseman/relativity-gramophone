@@ -300,6 +300,13 @@ export function shouldAutoSoundBody(body) {
   return body.kind === "planet";
 }
 
+export function shouldOrbitAffectCameraFit(body) {
+  if (body?.kind !== "planet" && body?.kind !== "moon") {
+    throw new Error("Camera fit requires a playable body kind");
+  }
+  return body.kind === "planet";
+}
+
 export function orbitStringStyle({ kind, selected, isPlaying, impulse }) {
   if ((kind !== "planet" && kind !== "moon")
     || typeof selected !== "boolean"

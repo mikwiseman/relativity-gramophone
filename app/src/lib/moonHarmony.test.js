@@ -10,6 +10,7 @@ import {
 import {
   orbitStringStyle,
   shouldAutoSoundBody,
+  shouldOrbitAffectCameraFit,
 } from "./soundflight.js";
 
 test("moons form a consonant fifth and octave above their parent instead of unrelated high notes", () => {
@@ -169,4 +170,13 @@ test("moon strings stay visually subordinate to planet strings", () => {
   assert.ok(moon.opacity < planet.opacity * 0.5);
   assert.ok(moon.linewidth < planet.linewidth);
   assert.ok(excitedMoon.opacity < 0.25);
+});
+
+test("moon halos do not pull the editorial camera away from the planetary composition", () => {
+  assert.equal(shouldOrbitAffectCameraFit({ kind: "planet" }), true);
+  assert.equal(shouldOrbitAffectCameraFit({ kind: "moon" }), false);
+  assert.throws(
+    () => shouldOrbitAffectCameraFit({ kind: "comet" }),
+    /playable body kind/i,
+  );
 });

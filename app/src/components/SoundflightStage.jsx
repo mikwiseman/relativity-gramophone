@@ -33,6 +33,7 @@ import {
   selectRenderProfile,
   shouldAutoSoundBody,
   shouldAdvancePhysics,
+  shouldOrbitAffectCameraFit,
   shouldShowMoonPlacementGuide,
   sonicIntensity,
   voiceVisual,
@@ -1912,8 +1913,10 @@ export function SoundflightStage(props) {
           });
           visual.orbitUpdatedAt = now;
         }
-        for (const point of visual.orbitPoints) {
-          systemRadius = Math.max(systemRadius, Math.hypot(point.x - starStage.x, point.z - starStage.z));
+        if (shouldOrbitAffectCameraFit(body)) {
+          for (const point of visual.orbitPoints) {
+            systemRadius = Math.max(systemRadius, Math.hypot(point.x - starStage.x, point.z - starStage.z));
+          }
         }
         const pendingPulse = runtime.pendingOrbitPulses.get(body.id);
         if (pendingPulse !== undefined && visual.orbitPoints.length > 1) {
