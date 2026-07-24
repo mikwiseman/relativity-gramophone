@@ -93,7 +93,7 @@ export const COSMIC_VOICES = Object.freeze({
   light: Object.freeze({
     id: "light",
     label: "LIGHT",
-    channel: "380–700 NM / LOG PITCH MAP",
+    channel: "380-700 NM / LOG PITCH MAP",
     explanation: "Visible wavelengths are compressed logarithmically into the audible range.",
     waveform: "sine",
     partialWaveform: "sawtooth",

@@ -267,13 +267,16 @@ test("sonic brightness stays event-driven and bounded", () => {
 test("camera distance produces calm editorial scale labels", () => {
   assert.equal(cameraScaleLabel(5), "0.6 AU");
   assert.equal(cameraScaleLabel(10), "1.2 AU");
-  assert.equal(cameraScaleLabel(24), "2.9 AU");
+  assert.equal(cameraScaleLabel(24), "20 KLY");
+  assert.equal(cameraScaleLabel(46), "1 MLY");
+  assert.equal(cameraScaleLabel(54), "36 MLY");
 });
 
 test("explicit camera zoom stays inside the same safe flight envelope as gestures", () => {
   assert.equal(nextCameraDistance(8, -1), 6.4);
   assert.equal(nextCameraDistance(3.3, -1), 3.2);
-  assert.equal(nextCameraDistance(23.4, 1), 24);
+  assert.equal(nextCameraDistance(23.4, 1), 25);
+  assert.equal(nextCameraDistance(71.5, 1), 72);
   assert.throws(() => nextCameraDistance(8, 0), /direction/i);
 });
 

@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  CrosshairSimple,
+  Minus,
+  NavigationArrow,
   Pause,
   Play,
+  Plus,
   ShareNetwork,
   Trash,
 } from "@phosphor-icons/react";
@@ -20,6 +24,7 @@ import {
 } from "./lib/composition.js";
 import { THEMES } from "./lib/themes.js";
 import { copyOrbitLink, shareOrbit } from "./lib/sharing.js";
+import { cosmicScaleForDistance } from "./lib/cosmicInstrument.js";
 import { COSMIC_VOICES, hapticPattern, voiceParameters } from "./lib/sonification.js";
 import {
   frequencyToNoteName,
@@ -61,6 +66,8 @@ export function App() {
   const [removeCommand, setRemoveCommand] = useState({ id: 0, bodyId: null });
   const [cameraCommand, setCameraCommand] = useState({ id: 0, type: "reset" });
   const [cameraScale, setCameraScale] = useState("1.2 AU");
+  const [cosmicScale, setCosmicScale] = useState(() => cosmicScaleForDistance(10));
+  const [interactionMode, setInteractionMode] = useState("compose");
 
   const audioRef = useRef(new AudioEngine());
   if (import.meta.env.DEV && typeof window !== "undefined") window.__rgAudio = audioRef.current;
@@ -73,6 +80,8 @@ export function App() {
   const gestationReadyRef = useRef(false);
   const gestationResumeRef = useRef(null);
   const gestationRequestRef = useRef(0);
+  const thereminEngagedRef = useRef(false);
+  const thereminRequestRef = useRef(0);
 
   const themeId = getPresentationTheme(composition, null);
   const theme = THEMES.lacquer;
@@ -98,7 +107,13 @@ export function App() {
       ? selectedMoonCount === 1
         ? "DRAG AGAIN TO ADD ONE MORE MOON"
         : "HOLD THE PLANET · PULL OUTWARD · RELEASE"
-      : "TAP A PLANET TO HEAR IT · SWIPE ACROSS ITS ORBIT";
+      : "SWIPE THE ORBITS · HOLD EMPTY SPACE FOR THEREMIN";
+  const activeGuidance = interactionMode === "explore"
+    ? "FLY THROUGH THE SOUNDING UNIVERSE"
+    : guidance;
+  const activeGuidanceDetail = interactionMode === "explore"
+    ? "DRAG TO FLY · PINCH OR SCROLL ACROSS SCALES"
+    : guidanceDetail;
 
   useEffect(() => {
     document.documentElement.style.colorScheme = "dark";
@@ -137,8 +152,76 @@ export function App() {
     setPhysicsFrame(frame);
   }, []);
 
+  const handleCosmicScale = useCallback((nextScale) => {
+    audioRef.current.setCosmicPerspective(nextScale);
+    setCosmicScale((current) => (
+      current.id === nextScale.id
+        && Math.abs(current.galaxyMix - nextScale.galaxyMix) < 0.025
+        && Math.abs(current.universeMix - nextScale.universeMix) < 0.025
+        ? current
+        : nextScale
+    ));
+  }, []);
+
+  const handleTheremin = useCallback(async ({ phase, parameters }) => {
+    if (phase === "end") {
+      thereminEngagedRef.current = false;
+      thereminRequestRef.current += 1;
+      audioRef.current.endTheremin();
+      return;
+    }
+
+    const requestId = phase === "prepare"
+      ? thereminRequestRef.current + 1
+      : thereminRequestRef.current;
+    if (phase === "prepare") {
+      thereminRequestRef.current = requestId;
+      thereminEngagedRef.current = true;
+    }
+    try {
+      await audioRef.current.resume(true);
+      if (!thereminEngagedRef.current || requestId !== thereminRequestRef.current) return;
+      setIsPlaying(true);
+      setDialogOpen(false);
+      setRuntimeError(null);
+      if (phase === "update" && parameters) {
+        audioRef.current.updateTheremin(parameters);
+        if (performance.now() >= protectCueUntilRef.current) {
+          protectCueUntilRef.current = performance.now() + 1600;
+          announceSonicCue("GRAVITATIONAL THEREMIN", 1600);
+        }
+      }
+    } catch (error) {
+      thereminEngagedRef.current = false;
+      audioRef.current.endTheremin();
+      setIsPlaying(false);
+      setRuntimeError(error instanceof Error ? error.message : "The theremin could not start");
+    }
+  }, [announceSonicCue]);
+
+  const handleToggleExplore = useCallback(() => {
+    if (interactionMode === "explore") {
+      setCameraCommand((command) => ({ id: command.id + 1, type: "reset" }));
+      setInteractionMode("compose");
+    } else {
+      setSelectedBodyId(null);
+      setInteractionMode("explore");
+    }
+  }, [interactionMode]);
+
+  const handleZoom = useCallback((direction) => {
+    setCameraCommand((current) => ({
+      id: current.id + 1,
+      type: "zoom",
+      direction,
+    }));
+  }, []);
+
   const handleTogglePlayback = useCallback(async () => {
     if (isPlaying) {
+      thereminEngagedRef.current = false;
+      thereminRequestRef.current += 1;
+      audioRef.current.endTheremin();
       setIsPlaying(false);
       await audioRef.current.suspend();
       return;
@@ -293,7 +376,7 @@ export function App() {
   const handleBodyGesture = useCallback((event) => {
     if (isListener) return;
     if (eventCountRef.current >= MAX_SCORE_EVENTS) {
-      setRuntimeError("This performance is full — share it, then begin a new one");
+      setRuntimeError("This performance is full. Share it, then begin a new one.");
       return;
     }
     if (event.at > 3600) {
@@ -347,7 +430,7 @@ export function App() {
     setDialogStatus(result.kind === "shared"
       ? "ORBIT SHARED"
       : result.kind === "copied"
-        ? "LINK COPIED — READY TO PASTE"
+        ? "LINK COPIED. READY TO PASTE"
         : "SELECT THE LINK, THEN COPY IT");
   }, [recordedBodies, shareLink, shareScore]);
 
@@ -386,6 +469,8 @@ export function App() {
       data-live-moon-count={liveBodies.filter((body) => body.kind === "moon").length}
       data-playing={isPlaying}
       data-camera-scale={cameraScale}
+      data-cosmic-scale={cosmicScale.id}
+      data-interaction-mode={interactionMode}
       style={{
         "--paper": theme.paper,
         "--ink": theme.ink,
@@ -400,7 +485,7 @@ export function App() {
         cameraCommand={cameraCommand}
         duration={composition.duration}
         initialState={composition.initialState}
-        interactionMode="compose"
+        interactionMode={interactionMode}
         isPlaying={isPlaying}
         isListener={isListener}
         playbackEvents={composition.events}
@@ -414,6 +499,7 @@ export function App() {
         onBodySelect={setSelectedBodyId}
         onCameraNavigate={() => {}}
         onCameraScale={setCameraScale}
+        onCosmicScale={handleCosmicScale}
         onConsumptionBloom={handleConsumptionBloom}
         onElapsed={handleElapsed}
         onGestationTone={handleGestationTone}
@@ -426,6 +512,7 @@ export function App() {
         onNote={handleNote}
         onPhysicsFrame={handlePhysicsFrame}
         onPluckBloom={handlePluckBloom}
+        onTheremin={handleTheremin}
       />
 
       <header className="soundflight-title simple-title">
@@ -436,11 +523,11 @@ export function App() {
       {!dialogOpen && (
         <>
           <section className="instrument-guidance" aria-live="polite">
-            <strong>{guidance}</strong>
-            <span>{guidanceDetail}</span>
+            <strong>{activeGuidance}</strong>
+            <span>{activeGuidanceDetail}</span>
           </section>
 
-          {selectedBody && !isListener && (
+          {selectedBody && !isListener && interactionMode === "compose" && (
             <aside
               className="instrument-selection"
               style={{ "--selected-voice": `#${selectedVoice.color.toString(16).padStart(6, "0")}` }}
@@ -480,10 +567,39 @@ export function App() {
               <ShareNetwork aria-hidden="true" weight="thin" />
               <span>SHARE</span>
             </button>
+            <button
+              type="button"
+              className="instrument-flight"
+              aria-label={interactionMode === "explore" ? "Return to composition" : "Fly through the universe"}
+              aria-pressed={interactionMode === "explore"}
+              onClick={handleToggleExplore}
+            >
+              {interactionMode === "explore"
+                ? <CrosshairSimple aria-hidden="true" weight="thin" />
+                : <NavigationArrow aria-hidden="true" weight="thin" />}
+              <span>{interactionMode === "explore" ? "RETURN" : "FLY"}</span>
+            </button>
+          </nav>
+
+          <aside className="cosmic-scale-state" aria-live="polite">
+            <strong>{cosmicScale.label}</strong>
+            <span>{cosmicScale.detail}</span>
+            <small>{cameraScale}</small>
+          </aside>
+
+          <nav className="cosmic-zoom" aria-label="Cosmic zoom">
+            <button type="button" onClick={() => handleZoom(-1)} aria-label="Zoom closer">
+              <Plus aria-hidden="true" weight="thin" />
+            </button>
+            <button type="button" onClick={() => handleZoom(1)} aria-label="Zoom out toward the galaxy">
+              <Minus aria-hidden="true" weight="thin" />
+            </button>
           </nav>
 
           <div className="soundflight-voice-breath simple-voice-breath" aria-live="polite">
-            <span>{sonicCue || (isPlaying ? `${liveBodies.length} VOICES · LIVE` : "PINCH OR SCROLL TO ZOOM")}</span>
+            <span>{sonicCue || (isPlaying
+              ? `${liveBodies.length} VOICES · ${cosmicScale.label}`
+              : "PINCH OR SCROLL TO CROSS SCALES")}</span>
           </div>
         </>
       )}

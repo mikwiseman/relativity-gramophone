@@ -410,7 +410,7 @@ export class PhysicsEngine {
   addBody(spec) {
     if (this.getBody(spec.id)) throw new Error(`Duplicate physical body: ${spec.id}`);
     if (this.state.bodies.filter((body) => body.kind !== "star").length >= MAX_WORLDS) {
-      throw new Error("The sky is full — feed a world to the star");
+      throw new Error("The sky is full. Feed a world to the star.");
     }
     const kind = spec.kind ?? "planet";
     if (kind !== "planet" && kind !== "moon") throw new Error(`Invalid physical body kind: ${kind}`);

@@ -43,6 +43,12 @@ import {
   birthSatelliteFromRadialLaunch,
   satelliteStabilityBand,
 } from "../lib/satelliteBirth.js";
+import {
+  cathedralIntensity,
+  cosmicScaleForDistance,
+  memoryCometEnvelope,
+  thereminParameters,
+} from "../lib/cosmicInstrument.js";
 
 const STAGE_SCALE = 10;
 const MAX_FRAME_DELTA = 0.1;
@@ -56,6 +62,9 @@ const ORBIT_STRING_REFRESH = 0.24;
 const NOTE_PULSE_DURATION = 1.15;
 const MOON_DISPLAY_MAGNIFICATION = 54;
 const CREATION_DRAG_THRESHOLD = 8;
+const THEREMIN_HOLD_MS = 360;
+const MEMORY_COMET_DURATION = 5.8;
+const GALAXY_CENTER = Object.freeze({ x: -13, y: -2.4, z: 1.5 });
 
 const trailVertexShader = `
   attribute float aAlpha;
@@ -840,6 +849,384 @@ function createHarmonicKnot() {
   return line;
 }
 
+function createLivingGalaxy() {
+  const random = seededRandom(31415926);
+  const group = new THREE.Group();
+  group.position.set(GALAXY_CENTER.x, GALAXY_CENTER.y, GALAXY_CENTER.z);
+  group.renderOrder = -8;
+
+  const pointCount = 1900;
+  const positions = new Float32Array(pointCount * 3);
+  const colors = new Float32Array(pointCount * 3);
+  const gold = new THREE.Color(0xe7bd72);
+  const cyan = new THREE.Color(0x72edff);
+  const opal = new THREE.Color(0xe9eee8);
+  const mixed = new THREE.Color();
+  for (let index = 0; index < pointCount; index += 1) {
+    const arm = index % 3;
+    const radius = 1.4 + Math.pow(random(), 0.72) * 29;
+    const angle = arm * ((Math.PI * 2) / 3)
+      + radius * 0.31
+      + (random() - 0.5) * (0.22 + radius * 0.018);
+    const armWidth = (random() - 0.5) * (0.28 + radius * 0.035);
+    positions[index * 3] = Math.cos(angle) * (radius + armWidth);
+    positions[index * 3 + 1] = (random() - 0.5) * (0.18 + radius * 0.035);
+    positions[index * 3 + 2] = Math.sin(angle) * (radius + armWidth);
+    const memoryThread = arm === 1 && index % 5 === 1;
+    const base = memoryThread ? cyan : random() < 0.15 ? opal : gold;
+    const brightness = 0.28 + random() * 0.68;
+    mixed.copy(base).multiplyScalar(brightness);
+    colors[index * 3] = mixed.r;
+    colors[index * 3 + 1] = mixed.g;
+    colors[index * 3 + 2] = mixed.b;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  const material = new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: 0.16,
+    sizeAttenuation: true,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.frustumCulled = false;
+  group.add(points);
+
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: createRadialTexture(),
+    color: 0xf1ad63,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  }));
+  halo.scale.set(9.5, 9.5, 1);
+  halo.position.y = 0.32;
+  halo.renderOrder = -9;
+  group.add(halo);
+
+  const grooves = [4.2, 8.5, 13.5, 19.5, 26].map((radius, index) => {
+    const groove = createOrbitString(index === 2 ? 0x72edff : 0xd9ae64, {
+      opacity: 0,
+      linewidth: index === 2 ? 1.1 : 0.72,
+    });
+    groove.geometry.setPositions(
+      localCirclePoints(radius, 160).flatMap((point) => [point.x, -0.06, point.z]),
+    );
+    groove.computeLineDistances();
+    group.add(groove);
+    return groove;
+  });
+
+  const core = new THREE.Mesh(
+    new THREE.RingGeometry(0.48, 1.05, 64),
+    new THREE.MeshBasicMaterial({
+      color: 0x050403,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    }),
+  );
+  core.rotation.x = -Math.PI / 2;
+  core.position.y = 0.03;
+  group.add(core);
+
+  const universeGroup = new THREE.Group();
+  universeGroup.renderOrder = -9;
+  const distantPositions = [];
+  const distantColors = [];
+  const centers = [
+    [-34, 5, -30],
+    [28, -4, -38],
+    [38, 9, 16],
+    [-42, -7, 24],
+    [4, 16, -48],
+    [48, -12, -8],
+    [-20, 13, 42],
+  ];
+  for (let galaxyIndex = 0; galaxyIndex < centers.length; galaxyIndex += 1) {
+    const center = centers[galaxyIndex];
+    const tilt = random() * Math.PI;
+    for (let index = 0; index < 86; index += 1) {
+      const radius = Math.pow(random(), 0.68) * (2.2 + galaxyIndex * 0.12);
+      const angle = radius * 2.3 + (index % 2) * Math.PI + (random() - 0.5) * 0.45;
+      const localX = Math.cos(angle) * radius;
+      const localZ = Math.sin(angle) * radius * 0.34;
+      distantPositions.push(
+        center[0] + localX * Math.cos(tilt) - localZ * Math.sin(tilt),
+        center[1] + (random() - 0.5) * 0.26,
+        center[2] + localX * Math.sin(tilt) + localZ * Math.cos(tilt),
+      );
+      const tint = galaxyIndex % 3 === 0 ? cyan : galaxyIndex % 3 === 1 ? gold : opal;
+      distantColors.push(tint.r, tint.g, tint.b);
+    }
+  }
+  const distantGeometry = new THREE.BufferGeometry();
+  distantGeometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(distantPositions, 3),
+  );
+  distantGeometry.setAttribute(
+    "color",
+    new THREE.Float32BufferAttribute(distantColors, 3),
+  );
+  const distantMaterial = new THREE.PointsMaterial({
+    color: 0xffffff,
+    size: 0.12,
+    sizeAttenuation: true,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  const distant = new THREE.Points(distantGeometry, distantMaterial);
+  distant.frustumCulled = false;
+  universeGroup.add(distant);
+
+  return {
+    group,
+    points,
+    halo,
+    grooves,
+    core,
+    universeGroup,
+    distant,
+  };
+}
+
+function updateLivingGalaxy(galaxy, scale, resolution, delta, reducedMotion, cathedral) {
+  const quieting = 1 - cathedral * 0.68;
+  galaxy.points.material.opacity = (0.03 + scale.galaxyMix * 0.82) * quieting;
+  galaxy.halo.material.opacity = scale.galaxyMix * 0.42 * quieting;
+  galaxy.core.material.opacity = (0.04 + scale.galaxyMix * 0.9) * quieting;
+  galaxy.distant.material.opacity = scale.universeMix * 0.58 * quieting;
+  for (let index = 0; index < galaxy.grooves.length; index += 1) {
+    const groove = galaxy.grooves[index];
+    groove.material.resolution.set(resolution.width, resolution.height);
+    groove.material.opacity = (
+      0.008
+      + scale.galaxyMix * (index === 2 ? 0.19 : 0.07)
+    ) * quieting;
+  }
+  if (!reducedMotion) {
+    galaxy.group.rotation.y += delta * (0.0022 + scale.galaxyMix * 0.0028);
+    galaxy.universeGroup.rotation.y -= delta * 0.0008;
+  }
+}
+
+function createMemoryComet(radialTexture) {
+  const group = new THREE.Group();
+  const head = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: radialTexture,
+    color: 0x72edff,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  }));
+  head.scale.setScalar(0.52);
+  group.add(head);
+  const trail = createOrbitString(0x72edff, { opacity: 0, linewidth: 2.2 });
+  group.add(trail);
+  group.visible = false;
+  return {
+    group,
+    head,
+    trail,
+    activeAt: -Infinity,
+    bodyId: null,
+    color: 0x72edff,
+  };
+}
+
+function memoryCometPoint(orbitPoints, progress) {
+  const orbitProgress = Math.min(1, progress / 0.58);
+  const orbitIndex = Math.min(
+    orbitPoints.length - 1,
+    Math.floor(orbitProgress * (orbitPoints.length - 1)),
+  );
+  const orbitPoint = orbitPoints[orbitIndex] ?? orbitPoints[0];
+  const release = Math.max(0, (progress - 0.35) / 0.65);
+  const curve = release * release * (3 - 2 * release);
+  return {
+    x: THREE.MathUtils.lerp(orbitPoint.x, GALAXY_CENTER.x + 2.4, curve),
+    y: 0.14 + Math.sin(progress * Math.PI) * 0.8 + curve * 1.2,
+    z: THREE.MathUtils.lerp(orbitPoint.z, GALAXY_CENTER.z - 1.4, curve),
+  };
+}
+
+function updateMemoryComet(comet, bodyVisuals, now, resolution) {
+  if (!Number.isFinite(comet.activeAt)) {
+    comet.group.visible = false;
+    return;
+  }
+  const progress = (now - comet.activeAt) / MEMORY_COMET_DURATION;
+  const envelope = memoryCometEnvelope(progress);
+  const visual = bodyVisuals.get(comet.bodyId);
+  if (!envelope.visible || !visual || visual.orbitPoints.length < 2) {
+    comet.group.visible = false;
+    return;
+  }
+  comet.group.visible = true;
+  const head = memoryCometPoint(visual.orbitPoints, progress);
+  comet.head.position.set(head.x, head.y, head.z);
+  comet.head.material.color.setHex(comet.color);
+  comet.head.material.opacity = envelope.opacity * 0.95;
+  comet.head.scale.setScalar(0.32 + envelope.opacity * 0.52);
+  const trailPositions = [];
+  for (let index = 0; index < 24; index += 1) {
+    const localProgress = Math.max(0, progress - ((23 - index) / 23) * 0.16);
+    const point = memoryCometPoint(visual.orbitPoints, localProgress);
+    trailPositions.push(point.x, point.y, point.z);
+  }
+  comet.trail.geometry.setPositions(trailPositions);
+  comet.trail.computeLineDistances();
+  comet.trail.material.color.setHex(comet.color);
+  comet.trail.material.opacity = envelope.opacity * 0.52;
+  comet.trail.material.linewidth = 1.2 + envelope.opacity * 1.8;
+  comet.trail.material.resolution.set(resolution.width, resolution.height);
+}
+
+function createResonanceCathedral() {
+  const group = new THREE.Group();
+  const arches = Array.from({ length: 7 }, (_, index) => {
+    const arch = createOrbitString(index % 2 === 0 ? 0xe7bd72 : 0x72edff, {
+      opacity: 0,
+      linewidth: 1.2,
+    });
+    group.add(arch);
+    return arch;
+  });
+  group.visible = false;
+  return { group, arches, intensity: 0 };
+}
+
+function updateResonanceCathedral(
+  cathedral,
+  resonance,
+  stageBodies,
+  bodiesById,
+  bodyCount,
+  resolution,
+) {
+  const targetIntensity = cathedralIntensity(resonance, bodyCount);
+  cathedral.intensity += (targetIntensity - cathedral.intensity) * 0.08;
+  if (cathedral.intensity < 0.015 || !resonance?.bodyIds) {
+    cathedral.group.visible = false;
+    return cathedral.intensity;
+  }
+  const first = stageBodies.get(resonance.bodyIds[0]);
+  const second = stageBodies.get(resonance.bodyIds[1]);
+  if (!first || !second) {
+    cathedral.group.visible = false;
+    return 0;
+  }
+  cathedral.group.visible = true;
+  const firstColor = new THREE.Color(
+    voiceVisual(bodiesById.get(resonance.bodyIds[0])?.voice).color,
+  );
+  const secondColor = new THREE.Color(
+    voiceVisual(bodiesById.get(resonance.bodyIds[1])?.voice).color,
+  );
+  for (let archIndex = 0; archIndex < cathedral.arches.length; archIndex += 1) {
+    const arch = cathedral.arches[archIndex];
+    const positions = [];
+    for (let index = 0; index <= 56; index += 1) {
+      const progress = index / 56;
+      const lateral = Math.sin(progress * Math.PI * 2 + archIndex * 0.72)
+        * 0.08
+        * cathedral.intensity;
+      positions.push(
+        THREE.MathUtils.lerp(first.x, second.x, progress) + lateral * archIndex,
+        0.08 + Math.sin(progress * Math.PI) * (0.7 + archIndex * 0.38),
+        THREE.MathUtils.lerp(first.z, second.z, progress)
+          + Math.cos(progress * Math.PI) * (archIndex - 3) * 0.22,
+      );
+    }
+    arch.geometry.setPositions(positions);
+    arch.computeLineDistances();
+    arch.material.color.copy(firstColor).lerp(secondColor, archIndex / 6);
+    arch.material.opacity = cathedral.intensity * (0.18 + archIndex * 0.038);
+    arch.material.linewidth = 0.75 + cathedral.intensity * 1.25;
+    arch.material.resolution.set(resolution.width, resolution.height);
+  }
+  return cathedral.intensity;
+}
+
+function createThereminField(radialTexture) {
+  const group = new THREE.Group();
+  const guide = createOrbitString(0x72edff, { opacity: 0, linewidth: 1.4 });
+  group.add(guide);
+  const rings = [0.32, 0.52, 0.74].map((radius, index) => {
+    const ring = createOrbitString(index === 1 ? 0xe7bd72 : 0x72edff, {
+      opacity: 0,
+      linewidth: 1.1,
+    });
+    ring.userData.baseRadius = radius;
+    group.add(ring);
+    return ring;
+  });
+  const light = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: radialTexture,
+    color: 0x72edff,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  }));
+  group.add(light);
+  group.visible = false;
+  return { group, guide, rings, light };
+}
+
+function updateThereminField(field, stagePoint, starPoint, parameters, resolution) {
+  field.group.visible = true;
+  const energy = clamp(parameters.gain / 0.065, 0, 1);
+  const color = new THREE.Color(0x72edff).lerp(new THREE.Color(0xe7bd72), energy * 0.34);
+  field.light.position.set(stagePoint.x, 0.32, stagePoint.z);
+  field.light.material.color.copy(color);
+  field.light.material.opacity = 0.24 + energy * 0.66;
+  field.light.scale.setScalar(0.42 + energy * 0.72);
+  field.guide.geometry.setPositions([
+    starPoint.x, 0.08, starPoint.z,
+    stagePoint.x, 0.18, stagePoint.z,
+  ]);
+  field.guide.computeLineDistances();
+  field.guide.material.color.copy(color);
+  field.guide.material.opacity = 0.1 + energy * 0.32;
+  field.guide.material.linewidth = 0.8 + energy * 1.2;
+  field.guide.material.resolution.set(resolution.width, resolution.height);
+  for (let index = 0; index < field.rings.length; index += 1) {
+    const ring = field.rings[index];
+    const radius = ring.userData.baseRadius * (0.8 + energy * 1.3);
+    ring.geometry.setPositions(
+      localCirclePoints(radius, 72)
+        .flatMap((point) => [
+          stagePoint.x + point.x,
+          0.12 + index * 0.025,
+          stagePoint.z + point.z,
+        ]),
+    );
+    ring.computeLineDistances();
+    ring.material.color.copy(index === 1 ? new THREE.Color(0xe7bd72) : color);
+    ring.material.opacity = (0.08 + energy * 0.24) * (1 - index * 0.16);
+    ring.material.linewidth = 0.7 + energy * 0.8;
+    ring.material.resolution.set(resolution.width, resolution.height);
+  }
+}
+
 const FinishingShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -1041,7 +1428,7 @@ export function SoundflightStage(props) {
     controls.panSpeed = 0.62;
     controls.zoomSpeed = 0.82;
     controls.minDistance = 3.2;
-    controls.maxDistance = 24;
+    controls.maxDistance = 72;
     controls.minPolarAngle = 0.24;
     controls.maxPolarAngle = Math.PI * 0.49;
     controls.screenSpacePanning = true;
@@ -1107,6 +1494,15 @@ export function SoundflightStage(props) {
     scene.add(ribbonTrail.group);
     const harmonicKnot = createHarmonicKnot();
     scene.add(harmonicKnot);
+    const livingGalaxy = createLivingGalaxy();
+    scene.add(livingGalaxy.group);
+    scene.add(livingGalaxy.universeGroup);
+    const memoryComet = createMemoryComet(sharedRadialTexture);
+    scene.add(memoryComet.group);
+    const resonanceCathedral = createResonanceCathedral();
+    scene.add(resonanceCathedral.group);
+    const thereminField = createThereminField(sharedRadialTexture);
+    scene.add(thereminField.group);
     const timeNeedle = document.createElement("div");
     timeNeedle.className = "soundflight-time-needle";
     timeNeedle.setAttribute("aria-hidden", "true");
@@ -1131,6 +1527,10 @@ export function SoundflightStage(props) {
       particleCloud,
       ribbonTrail,
       harmonicKnot,
+      livingGalaxy,
+      memoryComet,
+      resonanceCathedral,
+      thereminField,
       starfield: null,
       bodyVisuals: new Map(),
       pendingOrbitPulses: new Map(),
@@ -1157,6 +1557,9 @@ export function SoundflightStage(props) {
       birth: null,
       moonBirth: null,
       pluck: null,
+      theremin: null,
+      cosmicScale: cosmicScaleForDistance(camera.position.distanceTo(controls.target)),
+      lastCosmicScaleId: null,
       latestGesture: null,
       lastGestureEmit: 0,
     };
@@ -1190,6 +1593,17 @@ export function SoundflightStage(props) {
         reducedMotion: reducedMotionQuery.matches,
       });
       runtime.profile = profile;
+      livingGalaxy.points.geometry.setDrawRange(
+        0,
+        Math.min(1900, Math.max(1150, Math.floor(profile.starCount * 0.8))),
+      );
+      livingGalaxy.distant.geometry.setDrawRange(
+        0,
+        Math.min(
+          livingGalaxy.distant.geometry.getAttribute("position").count,
+          Math.max(210, Math.floor(profile.starCount * 0.2)),
+        ),
+      );
       renderer.setPixelRatio(profile.pixelRatio);
       renderer.setSize(rect.width, rect.height, false);
       composer.setPixelRatio(profile.pixelRatio);
@@ -1205,6 +1619,17 @@ export function SoundflightStage(props) {
       moonPreview.innerRing.material.resolution.set(rect.width, rect.height);
       moonPreview.outerRing.material.resolution.set(rect.width, rect.height);
       harmonicKnot.material.resolution.set(rect.width, rect.height);
+      for (const groove of livingGalaxy.grooves) {
+        groove.material.resolution.set(rect.width, rect.height);
+      }
+      memoryComet.trail.material.resolution.set(rect.width, rect.height);
+      for (const arch of resonanceCathedral.arches) {
+        arch.material.resolution.set(rect.width, rect.height);
+      }
+      thereminField.guide.material.resolution.set(rect.width, rect.height);
+      for (const ring of thereminField.rings) {
+        ring.material.resolution.set(rect.width, rect.height);
+      }
       if (!runtime.starfield
         || runtime.starfield.userData.starCount !== profile.starCount
         || runtime.starfield.userData.twinkle !== profile.twinkle) {
@@ -1270,7 +1695,7 @@ export function SoundflightStage(props) {
       try {
         renderer.domElement.setPointerCapture(pointerId);
       } catch {
-        // The pointer may already be released (stylus lift, synthetic ids) — the gesture continues without capture.
+        // The pointer may already be released (stylus lift, synthetic ids), so the gesture continues without capture.
       }
     };
 
@@ -1304,6 +1729,9 @@ export function SoundflightStage(props) {
       }
       propsRef.current.onBodySelect(body.id);
       triggerOrbitPulse(body.id);
+      runtime.memoryComet.activeAt = performance.now() / 1000;
+      runtime.memoryComet.bodyId = body.id;
+      runtime.memoryComet.color = voiceVisual(body.voice).color;
       propsRef.current.onPluckBloom({ ...body }, pluck);
     };
 
@@ -1469,14 +1897,60 @@ export function SoundflightStage(props) {
       }
     };
 
+    const endThereminGesture = () => {
+      const gesture = runtime.theremin;
+      if (!gesture) return;
+      window.clearTimeout(gesture.holdTimer);
+      runtime.theremin = null;
+      thereminField.group.visible = false;
+      propsRef.current.onTheremin({ phase: "end" });
+    };
+
+    const armTheremin = (event) => {
+      const worldPoint = intersectPlane(event);
+      if (!worldPoint) return;
+      const screen = eventPoint(event, renderer.domElement);
+      capturePointer(event.pointerId);
+      controls.enabled = false;
+      propsRef.current.onTheremin({ phase: "prepare" });
+      const gesture = {
+        pointerId: event.pointerId,
+        startScreen: screen,
+        lastScreen: screen,
+        worldPoint,
+        active: false,
+        holdTimer: null,
+      };
+      gesture.holdTimer = window.setTimeout(() => {
+        if (runtime.theremin !== gesture) return;
+        gesture.active = true;
+        const parameters = thereminParameters(screen);
+        const star = engineRef.current.getBody("star");
+        if (!star) return;
+        updateThereminField(
+          thereminField,
+          bodyToStage(stageToWorld(worldPoint), STAGE_SCALE),
+          bodyToStage(star, STAGE_SCALE),
+          parameters,
+          {
+            width: renderer.domElement.clientWidth,
+            height: renderer.domElement.clientHeight,
+          },
+        );
+        propsRef.current.onTheremin({ phase: "update", parameters });
+      }, THEREMIN_HOLD_MS);
+      runtime.theremin = gesture;
+    };
+
     const onPointerDown = (event) => {
+      if (propsRef.current.interactionMode === "explore") return;
       const bodyId = hitBody(event);
       const engine = engineRef.current;
 
       if (bodyId === "star" && !propsRef.current.isListener) {
         event.stopImmediatePropagation();
         if (engine.state.bodies.filter((body) => body.kind !== "star").length >= MAX_WORLDS) {
-          propsRef.current.onBirthRefused("The sky is full — remove a world before adding another");
+          propsRef.current.onBirthRefused("The sky is full. Remove a world before adding another.");
           return;
         }
         const point = intersectPlane(event);
@@ -1532,10 +2006,45 @@ export function SoundflightStage(props) {
         };
         controls.enabled = false;
         performPluck(stringHit, 0.62);
+        return;
       }
+      armTheremin(event);
     };
 
     const onPointerMove = (event) => {
+      if (runtime.theremin) {
+        event.stopImmediatePropagation();
+        const screen = eventPoint(event, renderer.domElement);
+        const traveled = Math.hypot(
+          screen.x - runtime.theremin.startScreen.x,
+          screen.y - runtime.theremin.startScreen.y,
+        );
+        if (!runtime.theremin.active && traveled > CREATION_DRAG_THRESHOLD) {
+          endThereminGesture();
+          controls.enabled = true;
+          return;
+        }
+        if (!runtime.theremin.active) return;
+        const point = intersectPlane(event);
+        if (!point) return;
+        runtime.theremin.lastScreen = screen;
+        runtime.theremin.worldPoint = point;
+        const parameters = thereminParameters(screen);
+        const star = engineRef.current.getBody("star");
+        if (!star) return;
+        updateThereminField(
+          thereminField,
+          bodyToStage(stageToWorld(point), STAGE_SCALE),
+          bodyToStage(star, STAGE_SCALE),
+          parameters,
+          {
+            width: renderer.domElement.clientWidth,
+            height: renderer.domElement.clientHeight,
+          },
+        );
+        propsRef.current.onTheremin({ phase: "update", parameters });
+        return;
+      }
       if (runtime.moonBirth) {
         event.stopImmediatePropagation();
         const screen = eventPoint(event, renderer.domElement);
@@ -1593,6 +2102,7 @@ export function SoundflightStage(props) {
     };
 
     const cancelPointer = (event) => {
+      endThereminGesture();
       if (runtime.moonBirth) {
         runtime.moonBirth = null;
         moonPreview.seed.visible = false;
@@ -1616,6 +2126,15 @@ export function SoundflightStage(props) {
     };
 
     const finishPointer = (event) => {
+      if (runtime.theremin) {
+        event.stopImmediatePropagation();
+        endThereminGesture();
+        controls.enabled = true;
+        if (renderer.domElement.hasPointerCapture(event.pointerId)) {
+          renderer.domElement.releasePointerCapture(event.pointerId);
+        }
+        return;
+      }
       if (runtime.moonBirth) {
         event.stopImmediatePropagation();
         const moonBirth = runtime.moonBirth;
@@ -1698,8 +2217,8 @@ export function SoundflightStage(props) {
       if (propsRef.current.interactionMode === "explore" || runtime.lastFitDistance <= 0) return;
       runtime.compositionZoom = clamp(
         camera.position.distanceTo(controls.target) / runtime.lastFitDistance,
-        0.72,
-        1.65,
+        0.58,
+        7.2,
       );
     };
     controls.addEventListener("start", handleControlStart);
@@ -1816,6 +2335,7 @@ export function SoundflightStage(props) {
 
       const selectedId = propsRef.current.selectedBodyId;
       const moonMode = Boolean(runtime.moonBirth?.active);
+      const systemMix = runtime.cosmicScale?.systemMix ?? 1;
       runtime.selectedBodyId = selectedId;
       const stageBodies = new Map();
       const bodiesById = new Map(snapshot.bodies.map((body) => [body.id, body]));
@@ -1934,7 +2454,11 @@ export function SoundflightStage(props) {
           visual.orbitString,
           visual.orbitPoints,
           voiceColor,
-          moonMode && !inMoonFamily ? stringStyle.opacity * 0.08 : stringStyle.opacity,
+          (
+            moonMode && !inMoonFamily
+              ? stringStyle.opacity * 0.08
+              : stringStyle.opacity
+          ) * (0.05 + systemMix * 0.95),
           stringStyle.linewidth,
           { width: renderer.domElement.clientWidth, height: renderer.domElement.clientHeight },
         );
@@ -1976,6 +2500,34 @@ export function SoundflightStage(props) {
         { width: renderer.domElement.clientWidth, height: renderer.domElement.clientHeight },
       );
       if (moonMode) harmonicKnot.visible = false;
+      const resolution = {
+        width: renderer.domElement.clientWidth,
+        height: renderer.domElement.clientHeight,
+      };
+      const cathedralLevel = updateResonanceCathedral(
+        resonanceCathedral,
+        snapshot.resonance,
+        stageBodies,
+        bodiesById,
+        snapshot.bodies.filter((body) => body.kind === "planet").length,
+        resolution,
+      );
+      updateLivingGalaxy(
+        livingGalaxy,
+        runtime.cosmicScale,
+        resolution,
+        delta,
+        reducedMotionQuery.matches,
+        cathedralLevel,
+      );
+      updateMemoryComet(memoryComet, runtime.bodyVisuals, now, resolution);
+      if (runtime.starfield) {
+        runtime.starfield.material.uniforms.uOpacity.value = (
+          0.66
+          - runtime.cosmicScale.galaxyMix * 0.18
+          + runtime.cosmicScale.universeMix * 0.08
+        ) * (1 - cathedralLevel * 0.42);
+      }
       updateMoonBand();
 
       const projectedStar = starStage.clone().project(camera);
@@ -1989,10 +2541,10 @@ export function SoundflightStage(props) {
       const delta = Math.min(MAX_FRAME_DELTA, Math.max(0, (milliseconds - previousFrameRef.current) / 1000));
       previousFrameRef.current = milliseconds;
       const currentProps = propsRef.current;
-      const exploring = false;
-      controls.enabled = !runtime.birth && !runtime.moonBirth;
-      controls.enableRotate = false;
-      controls.enablePan = false;
+      const exploring = currentProps.interactionMode === "explore";
+      controls.enabled = !runtime.birth && !runtime.moonBirth && !runtime.theremin;
+      controls.enableRotate = exploring;
+      controls.enablePan = exploring;
       controls.enableZoom = true;
 
       if (shouldAdvancePhysics({
@@ -2033,7 +2585,7 @@ export function SoundflightStage(props) {
           runtime.resettingCamera = true;
         } else if (!exploring) {
           const zoomFactor = cameraCommand.direction < 0 ? 0.86 : 1.16;
-          runtime.compositionZoom = clamp(runtime.compositionZoom * zoomFactor, 0.72, 1.65);
+          runtime.compositionZoom = clamp(runtime.compositionZoom * zoomFactor, 0.58, 7.2);
         } else {
           const offset = camera.position.clone().sub(controls.target);
           if (offset.lengthSq() < 0.001) offset.set(-3.7, 3, 6.4);
@@ -2072,9 +2624,12 @@ export function SoundflightStage(props) {
       controls.autoRotate = false;
       controls.update(delta);
 
+      const cameraDistance = camera.position.distanceTo(controls.target);
+      runtime.cosmicScale = cosmicScaleForDistance(cameraDistance);
       if (now - runtime.lastCameraReport > 0.12) {
         runtime.lastCameraReport = now;
-        currentProps.onCameraScale(cameraScaleLabel(camera.position.distanceTo(controls.target)));
+        currentProps.onCameraScale(cameraScaleLabel(cameraDistance));
+        currentProps.onCosmicScale(runtime.cosmicScale);
       }
       composer.render(delta);
     };
@@ -2082,6 +2637,7 @@ export function SoundflightStage(props) {
 
     return () => {
       renderer.setAnimationLoop(null);
+      window.clearTimeout(runtime.theremin?.holdTimer);
       renderer.domElement.removeEventListener("pointerdown", onPointerDown, { capture: true });
       renderer.domElement.removeEventListener("pointermove", onPointerMove, { capture: true });
       renderer.domElement.removeEventListener("pointerup", finishPointer, { capture: true });
@@ -2113,7 +2669,7 @@ export function SoundflightStage(props) {
       className="soundflight-stage"
       data-interaction-mode={props.interactionMode}
       role="application"
-      aria-label="Three-dimensional orbit harp. Drag from the star to make a planet. Drag from a planet to make a moon. Touch an orbit to play it, and pinch or scroll to zoom."
+      aria-label="Three-dimensional orbit harp. Drag from the star to make a planet. Drag from a planet to make a moon. Touch an orbit to play it. Hold empty space for the gravitational theremin. Pinch or scroll to cross from a star system into the Milky Way."
       tabIndex={0}
     />
   );

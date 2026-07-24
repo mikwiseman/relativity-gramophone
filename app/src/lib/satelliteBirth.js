@@ -66,7 +66,7 @@ export function birthSatelliteFromRadialLaunch({
 }) {
   if (!Array.isArray(existingBodies)) throw new Error("Moon birth requires the live system");
   if (existingBodies.filter((body) => body.kind !== "star").length >= MAX_WORLDS) {
-    throw new Error("The sky is full — remove a world before adding a moon");
+    throw new Error("The sky is full. Remove a world before adding a moon.");
   }
   requireFinite([
     release?.x,

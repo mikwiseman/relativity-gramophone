@@ -41,11 +41,18 @@ export class AudioEngine {
   reverb = null;
   reverbReturn = null;
   drone = null;
+  cosmicChoir = null;
   gestation = null;
+  theremin = null;
   voices = new Map();
   voiceWaves = null;
   noiseBuffer = null;
   latestFrame = null;
+  cosmicPerspective = Object.freeze({
+    systemMix: 1,
+    galaxyMix: 0,
+    universeMix: 0,
+  });
 
   async resume(activateField = true) {
     if (!AudioContextClass) throw new Error("Web Audio API is not available in this browser");
@@ -98,6 +105,7 @@ export class AudioEngine {
     this.voiceWaves = this.createVoiceWaves();
     this.noiseBuffer = this.createNoiseBuffer();
     this.createDrone();
+    this.createCosmicChoir();
   }
 
   createSaturationCurve() {
@@ -198,6 +206,32 @@ export class AudioEngine {
     shimmer.start(now);
     fifth.start(now);
     this.drone = { fundamental, shimmer, shimmerGain, fifth, fifthGain, filter, gain, reverbSend };
+  }
+
+  createCosmicChoir() {
+    const now = this.context.currentTime;
+    const filter = this.context.createBiquadFilter();
+    const gain = this.context.createGain();
+    const reverbSend = this.context.createGain();
+    const voices = [1, 5 / 4, 3 / 2, 2.002].map((ratio, index) => {
+      const oscillator = this.context.createOscillator();
+      const voiceGain = this.context.createGain();
+      oscillator.type = index === 1 ? "triangle" : "sine";
+      oscillator.frequency.value = 55 * ratio;
+      oscillator.detune.value = index % 2 === 0 ? -3 : 3;
+      voiceGain.gain.value = [0.5, 0.16, 0.24, 0.08][index];
+      oscillator.connect(voiceGain).connect(filter);
+      oscillator.start(now);
+      return { oscillator, gain: voiceGain, ratio };
+    });
+    filter.type = "lowpass";
+    filter.frequency.value = 520;
+    filter.Q.value = 0.84;
+    gain.gain.value = 0.0001;
+    reverbSend.gain.value = 0.72;
+    filter.connect(gain).connect(this.fieldBus);
+    gain.connect(reverbSend).connect(this.reverb);
+    this.cosmicChoir = { voices, filter, gain, reverbSend };
   }
 
   createVoice(bodyId) {
@@ -303,6 +337,17 @@ export class AudioEngine {
     ramp(this.fieldBus.gain, active ? 0.72 : 0.0001, this.context.currentTime, active ? 0.34 : 0.12);
   }
 
+  setCosmicPerspective(scale) {
+    if (![scale?.systemMix, scale?.galaxyMix, scale?.universeMix].every(Number.isFinite)) {
+      throw new Error("Cosmic perspective requires finite scale mixes");
+    }
+    this.cosmicPerspective = {
+      systemMix: Math.min(1, Math.max(0, scale.systemMix)),
+      galaxyMix: Math.min(1, Math.max(0, scale.galaxyMix)),
+      universeMix: Math.min(1, Math.max(0, scale.universeMix)),
+    };
+  }
+
   audibleBody(body, parentOverride = null) {
     if (body.kind !== "moon") return body;
     const parent = parentOverride
@@ -326,6 +371,11 @@ export class AudioEngine {
     const resonanceStrength = Math.max(
       frame.resonance?.strength ?? 0,
       (frame.challengeProximity ?? 0) * 0.62,
+    );
+    const perspective = this.cosmicPerspective;
+    const detailGain = Math.max(
+      0.22,
+      perspective.systemMix * (1 - perspective.universeMix * 0.28),
     );
 
     const aliveIds = new Set(frame.bodies.map((body) => body.id));
@@ -357,7 +407,7 @@ export class AudioEngine {
       voice.subGain.gain.setTargetAtTime(parameters.subGain, now, 0.12);
       voice.filter.frequency.setTargetAtTime(parameters.cutoff, now, 0.12);
       voice.filter.Q.setTargetAtTime(parameters.q, now, 0.12);
-      voice.gain.gain.setTargetAtTime(parameters.gain * 0.23, now, 0.1);
+      voice.gain.gain.setTargetAtTime(parameters.gain * 0.23 * detailGain, now, 0.1);
       voice.panner.pan.setTargetAtTime(parameters.pan, now, 0.08);
       voice.tremolo.frequency.setTargetAtTime(parameters.tremoloRate, now, 0.12);
       voice.tremoloDepth.gain.setTargetAtTime(parameters.tremoloDepth * parameters.gain, now, 0.12);
@@ -384,10 +434,30 @@ export class AudioEngine {
         0.18,
       );
       this.drone.gain.gain.setTargetAtTime(
-        0.015 + breath * 0.008 + resonanceStrength * 0.018,
+        0.015
+          + breath * 0.008
+          + resonanceStrength * 0.018
+          + perspective.galaxyMix * 0.006,
         now,
         0.14,
       );
+    }
+
+    if (this.cosmicChoir) {
+      const bodyEnergy = Math.min(1, frame.bodies.filter((body) => body.kind === "planet").length / 5);
+      const choirGain = 0.0001
+        + perspective.galaxyMix * (0.012 + bodyEnergy * 0.018)
+        + perspective.universeMix * 0.008;
+      this.cosmicChoir.gain.gain.setTargetAtTime(choirGain, now, 0.42);
+      this.cosmicChoir.filter.frequency.setTargetAtTime(
+        360 + resonanceStrength * 520 + perspective.universeMix * 180,
+        now,
+        0.36,
+      );
+      const harmonicBend = 1 + resonanceStrength * 0.006;
+      for (const voice of this.cosmicChoir.voices) {
+        voice.oscillator.frequency.setTargetAtTime(55 * voice.ratio * harmonicBend, now, 0.5);
+      }
     }
   }
 
@@ -524,6 +594,98 @@ export class AudioEngine {
       oscillator.start(now);
       oscillator.stop(now + duration + 0.1);
     }
+  }
+
+  updateTheremin({
+    frequency,
+    gain: targetGain,
+    pan,
+    cutoff,
+    vibratoDepth,
+  }) {
+    if (!this.context || this.context.state !== "running") return;
+    if (![frequency, targetGain, pan, cutoff, vibratoDepth].every(Number.isFinite)) {
+      throw new Error("Theremin requires finite musical parameters");
+    }
+    const now = this.context.currentTime;
+    if (!this.theremin) {
+      const oscillator = this.context.createOscillator();
+      const overtone = this.context.createOscillator();
+      const overtoneGain = this.context.createGain();
+      const vibrato = this.context.createOscillator();
+      const vibratoGain = this.context.createGain();
+      const filter = this.context.createBiquadFilter();
+      const gain = this.context.createGain();
+      const panner = this.context.createStereoPanner();
+      const reverbSend = this.context.createGain();
+
+      this.applyVoiceWave(oscillator, "theremin", "sine");
+      overtone.type = "sine";
+      overtoneGain.gain.value = 0.14;
+      vibrato.type = "sine";
+      vibrato.frequency.value = COSMIC_VOICES.theremin.vibratoRate;
+      vibratoGain.gain.value = vibratoDepth;
+      filter.type = "lowpass";
+      filter.Q.value = 2.4;
+      gain.gain.value = 0.0001;
+      reverbSend.gain.value = 0.46;
+
+      vibrato.connect(vibratoGain);
+      vibratoGain.connect(oscillator.detune);
+      vibratoGain.connect(overtone.detune);
+      oscillator.connect(filter);
+      overtone.connect(overtoneGain).connect(filter);
+      filter.connect(gain).connect(panner).connect(this.master);
+      panner.connect(this.delay);
+      panner.connect(reverbSend).connect(this.reverb);
+      oscillator.start(now);
+      overtone.start(now);
+      vibrato.start(now);
+      this.theremin = {
+        oscillator,
+        overtone,
+        overtoneGain,
+        vibrato,
+        vibratoGain,
+        filter,
+        gain,
+        panner,
+        reverbSend,
+      };
+    }
+
+    this.theremin.oscillator.frequency.setTargetAtTime(frequency, now, 0.045);
+    this.theremin.overtone.frequency.setTargetAtTime(frequency * 2.01, now, 0.05);
+    this.theremin.vibratoGain.gain.setTargetAtTime(vibratoDepth, now, 0.08);
+    this.theremin.filter.frequency.setTargetAtTime(cutoff, now, 0.07);
+    this.theremin.panner.pan.setTargetAtTime(Math.min(1, Math.max(-1, pan)), now, 0.05);
+    this.theremin.gain.gain.setTargetAtTime(
+      Math.min(0.065, Math.max(0.0001, targetGain)),
+      now,
+      0.035,
+    );
+  }
+
+  endTheremin() {
+    if (!this.theremin || !this.context) return;
+    const voice = this.theremin;
+    this.theremin = null;
+    const now = this.context.currentTime;
+    voice.gain.gain.cancelScheduledValues(now);
+    voice.gain.gain.setTargetAtTime(0.0001, now, 0.065);
+    voice.oscillator.stop(now + 0.48);
+    voice.overtone.stop(now + 0.48);
+    voice.vibrato.stop(now + 0.48);
+    setTimeout(() => {
+      for (const node of [
+        voice.overtoneGain,
+        voice.vibratoGain,
+        voice.filter,
+        voice.gain,
+        voice.panner,
+        voice.reverbSend,
+      ]) node.disconnect();
+    }, 560);
   }
 
   updateGestation({ frequency, pan, voice, kind = "planet" }) {
@@ -770,6 +932,7 @@ export class AudioEngine {
   async suspend() {
     if (this.context?.state === "running") {
       this.endGestation();
+      this.endTheremin();
       this.setFieldActive(false);
       await this.context.suspend();
     }

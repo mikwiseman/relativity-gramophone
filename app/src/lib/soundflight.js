@@ -329,13 +329,15 @@ export function orbitStringStyle({ kind, selected, isPlaying, impulse }) {
 
 export function cameraScaleLabel(distance) {
   if (!Number.isFinite(distance) || distance <= 0) throw new Error("Camera distance must be positive");
+  if (distance >= 46) return `${Math.max(1, Math.round((distance - 46) * 4.5))} MLY`;
+  if (distance >= 19) return `${Math.round((distance - 16) * 2.5)} KLY`;
   return `${(distance * 0.12).toFixed(1)} AU`;
 }
 
 export function nextCameraDistance(distance, direction) {
   if (!Number.isFinite(distance) || distance <= 0) throw new Error("Camera distance must be positive");
   if (direction !== -1 && direction !== 1) throw new Error("Camera zoom direction must be -1 or 1");
-  return clamp(distance + direction * 1.6, 3.2, 24);
+  return clamp(distance + direction * 1.6, 3.2, 72);
 }
 
 export function editorialCameraDistance(systemRadius, aspect) {

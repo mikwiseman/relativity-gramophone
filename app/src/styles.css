@@ -1,4 +1,4 @@
-/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · scope: page · genre: atmospheric · tone: celestial instrument · anchor: amber · macrostructure: workbench · theme: studied-DNA (source: existing Relativity Gramophone) · contrast: pass (40–41) · nav: N/A (full-screen instrument) · footer: N/A (full-screen instrument) · slop: pass (42–45) · honest: pass (46) · chrome: pass (47) · tokens: pass (48) · responsive: pass (49) · icons: pass (30) · mobile: pass (34, 49, 50–57) */
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · scope: page · genre: atmospheric · tone: celestial instrument · anchor: amber · macrostructure: workbench · theme: studied-DNA (source: existing Relativity Gramophone) · contrast: pass (40-41) · nav: N/A (full-screen instrument) · footer: N/A (full-screen instrument) · slop: pass (42-45) · honest: pass (46) · chrome: pass (47) · tokens: pass (48) · responsive: pass (49) · icons: pass (30) · mobile: pass (34, 49, 50-57) */
 @import "./tokens.css";
 :root {
   font-family: "Avenir Next", Avenir, "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -938,7 +938,7 @@ input:focus-visible {
   }
 }
 
-/* Soundflight — selected luminous Three.js direction */
+/* Soundflight: selected luminous Three.js direction */
 
 .soundflight-stage {
   position: absolute;
@@ -2115,7 +2115,7 @@ input:focus-visible {
   }
 }
 
-/* First-run overture — a quiet invitation, never a tutorial */
+/* First-run overture: a quiet invitation, never a tutorial */
 
 .soundflight-overture {
   position: absolute;
@@ -2386,6 +2386,95 @@ input:focus-visible {
   height: 21px;
 }
 
+.instrument-flight[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--rg-cyan) 62%, transparent);
+  color: var(--rg-cyan);
+}
+
+.cosmic-scale-state {
+  position: absolute;
+  z-index: 5;
+  top: clamp(var(--rg-space-5), 5vh, 48px);
+  right: clamp(var(--rg-space-5), 4vw, 56px);
+  display: grid;
+  max-width: 260px;
+  justify-items: end;
+  gap: 6px;
+  pointer-events: none;
+  text-align: right;
+  text-shadow: 0 0 24px var(--rg-shadow-strong);
+}
+
+.cosmic-scale-state strong {
+  color: var(--rg-gold-bright);
+  font-family: var(--rg-font-display);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+}
+
+.cosmic-scale-state span {
+  color: var(--rg-muted);
+  font-size: 8px;
+  letter-spacing: 0.15em;
+  line-height: 1.5;
+}
+
+.cosmic-scale-state small {
+  color: color-mix(in srgb, var(--rg-cyan) 62%, transparent);
+  font-family: var(--rg-font-mono);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+}
+
+.cosmic-zoom {
+  position: absolute;
+  z-index: 6;
+  top: 50%;
+  right: clamp(var(--rg-space-4), 2vw, var(--rg-space-5));
+  display: grid;
+  gap: var(--rg-space-2);
+  transform: translateY(-50%);
+}
+
+.cosmic-zoom button {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--rg-line);
+  border-radius: 999px;
+  color: var(--rg-gold);
+  background: var(--rg-panel);
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+  transition:
+    color 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    transform 180ms ease;
+}
+
+.cosmic-zoom button:hover,
+.cosmic-zoom button:focus-visible {
+  border-color: color-mix(in srgb, var(--rg-cyan) 58%, transparent);
+  color: var(--rg-cyan);
+  background: var(--rg-panel-hover);
+  outline: 1px solid var(--rg-focus);
+  outline-offset: 4px;
+}
+
+.cosmic-zoom button:active {
+  transform: scale(0.94);
+}
+
+.cosmic-zoom svg {
+  width: 17px;
+  height: 17px;
+}
+
 .instrument-selection {
   position: absolute;
   z-index: 6;
@@ -2547,6 +2636,25 @@ input:focus-visible {
     gap: var(--rg-space-2);
   }
 
+  .cosmic-scale-state {
+    top: 20px;
+    right: 16px;
+    max-width: 124px;
+  }
+
+  .cosmic-scale-state strong {
+    font-size: 10px;
+    letter-spacing: 0.13em;
+  }
+
+  .cosmic-scale-state span {
+    display: none;
+  }
+
+  .cosmic-zoom {
+    right: 12px;
+  }
+
   .instrument-selection > span {
     min-width: 67px;
   }
@@ -2587,6 +2695,20 @@ input:focus-visible {
   .simple-voice-breath {
     display: none;
   }
+
+  .instrument-flight span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .instrument-flight {
+    min-width: 48px !important;
+    width: 48px;
+    padding: 0 !important;
+  }
 }
 
 @media (max-height: 520px) and (orientation: landscape) {
@@ -2596,7 +2718,8 @@ input:focus-visible {
   }
 
   .simple-title p,
-  .simple-voice-breath {
+  .simple-voice-breath,
+  .cosmic-scale-state span {
     display: none;
   }
 
@@ -2626,5 +2749,13 @@ input:focus-visible {
   .instrument-selection {
     right: 16px;
     bottom: 12px;
+  }
+
+  .cosmic-scale-state {
+    top: 14px;
+  }
+
+  .cosmic-zoom {
+    right: 10px;
   }
 }

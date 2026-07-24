@@ -30,7 +30,7 @@ function allocateWorldId(existingIds) {
     const candidate = `nova-${index}`;
     if (!taken.has(candidate)) return candidate;
   }
-  throw new Error("The sky is full — feed a world to the star");
+  throw new Error("The sky is full. Feed a world to the star.");
 }
 
 export function previewOrbit(spec, star, sampleCount = 72) {
@@ -61,7 +61,7 @@ export function previewOrbit(spec, star, sampleCount = 72) {
 }
 
 export function birthBodyFromGesture({ press, aim, holdSeconds, star, existingIds, birthIndex }) {
-  if (existingIds.length >= MAX_WORLDS) throw new Error("The sky is full — feed a world to the star");
+  if (existingIds.length >= MAX_WORLDS) throw new Error("The sky is full. Feed a world to the star.");
 
   const pressDx = press.x - star.x;
   const pressDy = press.y - star.y;
@@ -143,7 +143,7 @@ export function resolvePlanetOrbitRadius(draggedRadius, existingBodies = [], sta
       Math.abs(first - desired) - Math.abs(second - desired)
       || first - second
     ));
-  if (!candidates.length) throw new Error("The sky is full — remove a planet to make a safe orbit");
+  if (!candidates.length) throw new Error("The sky is full. Remove a planet to make a safe orbit.");
   return candidates[0];
 }
 
@@ -154,7 +154,7 @@ export function birthBodyFromRadialLaunch({
   existingBodies = [],
   birthIndex,
 }) {
-  if (existingIds.length >= MAX_WORLDS) throw new Error("The sky is full — feed a world to the star");
+  if (existingIds.length >= MAX_WORLDS) throw new Error("The sky is full. Feed a world to the star.");
   if (![release?.x, release?.y, star?.x, star?.y, star?.vx, star?.vy, star?.mass].every(Number.isFinite)) {
     throw new Error("A radial launch requires finite star and release coordinates");
   }

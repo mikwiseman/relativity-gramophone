@@ -115,7 +115,7 @@ export function CosmicSoundAtlas({
               : isBornWorld(selectedBody.id)
                 ? "AUDITION ONLY · A BORN WORLD KEEPS ITS BIRTH VOICE"
                 : "TAP TO AUDITION + IMPRINT"}
-            <span>SONIFICATION — NOT AIRBORNE SOUND IN VACUUM.</span>
+            <span>SONIFICATION. NOT AIRBORNE SOUND IN VACUUM.</span>
           </p>
 
           <section className="orbit-game" aria-labelledby="orbit-game-title">

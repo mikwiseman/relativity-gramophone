@@ -56,7 +56,7 @@ export function RelativityLens({ frame, open, onClose, onToggle, showTrigger = t
 
           <div className="lens-resonance">
             <span>RESONANCE</span>
-            <strong>{frame?.resonance?.label ?? "—"}</strong>
+            <strong>{frame?.resonance?.label ?? "NONE"}</strong>
             <span>{frame?.resonance ? `${Math.round(frame.resonance.strength * 100)}% LOCK` : "DRIFTING"}</span>
           </div>
 
