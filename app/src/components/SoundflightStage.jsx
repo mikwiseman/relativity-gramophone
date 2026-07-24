@@ -945,6 +945,63 @@ function createMiniGalaxy(landmark) {
   return points;
 }
 
+function createNearbySystem(landmark, radialTexture) {
+  if (!landmark.system) return null;
+  const group = new THREE.Group();
+  const rings = [];
+  const worlds = [];
+  const isBinary = landmark.system.kind === "binary";
+  const worldCount = landmark.system.worlds;
+  for (let index = 0; index < worldCount; index += 1) {
+    const progress = worldCount === 1 ? 0.5 : index / (worldCount - 1);
+    const radius = isBinary ? 0.74 : 0.38 + progress * 0.88;
+    const geometry = new THREE.RingGeometry(
+      Math.max(0.02, radius - 0.008),
+      radius + 0.008,
+      72,
+    );
+    const material = new THREE.MeshBasicMaterial({
+      color: index % 3 === 1 ? 0xf0c97d : landmark.color,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+    });
+    const ring = new THREE.Mesh(geometry, material);
+    ring.rotation.x = -Math.PI / 2;
+    group.add(ring);
+    rings.push(ring);
+
+    const body = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: radialTexture,
+      color: isBinary ? 0xf4e5c2 : index % 2 === 0 ? landmark.color : 0xf0c97d,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    }));
+    body.scale.setScalar(isBinary ? 0.3 : 0.105 + index * 0.006);
+    group.add(body);
+    worlds.push({
+      body,
+      phase: index * 2.39996 + (isBinary ? Math.PI : 0),
+      radius,
+      speed: (isBinary ? 0.14 : 0.38) / Math.sqrt(index + 1),
+    });
+  }
+  group.position.y = 0.035;
+  group.visible = false;
+  return {
+    group,
+    rings,
+    worlds,
+    elapsed: 0,
+  };
+}
+
 function createCosmicLandmarkVisual(landmark, radialTexture) {
   const group = new THREE.Group();
   group.position.fromArray(landmark.position);
@@ -1027,6 +1084,10 @@ function createCosmicLandmarkVisual(landmark, radialTexture) {
     ? createMiniGalaxy(landmark)
     : null;
   if (cluster) group.add(cluster);
+  const nearbySystem = landmark.scale === "neighborhood"
+    ? createNearbySystem(landmark, radialTexture)
+    : null;
+  if (nearbySystem) group.add(nearbySystem.group);
 
   return {
     landmark,
@@ -1037,6 +1098,7 @@ function createCosmicLandmarkVisual(landmark, radialTexture) {
     label,
     labelTexture,
     cluster,
+    nearbySystem,
     coreScale,
     impulse: 0,
   };
@@ -1135,6 +1197,24 @@ function updateCosmicLandmarkField(field, scale, delta, reducedMotion) {
     if (visual.cluster) {
       visual.cluster.material.opacity = opacity * (0.72 + visual.impulse * 0.28);
       if (!reducedMotion) visual.cluster.rotation.y += delta * 0.035;
+    }
+    if (visual.nearbySystem) {
+      const systemOpacity = opacity * (focused ? 1 : 0.06);
+      visual.nearbySystem.group.visible = systemOpacity > 0.03;
+      if (!reducedMotion) visual.nearbySystem.elapsed += delta;
+      for (const ring of visual.nearbySystem.rings) {
+        ring.material.opacity = systemOpacity * (0.18 + visual.impulse * 0.26);
+      }
+      for (const world of visual.nearbySystem.worlds) {
+        const angle = world.phase + visual.nearbySystem.elapsed * world.speed;
+        world.body.position.set(
+          Math.cos(angle) * world.radius,
+          0.075,
+          Math.sin(angle) * world.radius,
+        );
+        world.body.material.opacity = systemOpacity * (0.64 + visual.impulse * 0.32);
+      }
+      visual.nearbySystem.group.scale.setScalar(1 + visual.impulse * 0.12);
     }
     visual.impulse *= Math.exp(-delta * 2.4);
   }
@@ -1957,7 +2037,7 @@ export function SoundflightStage(props) {
       lastGestureEmit: 0,
     };
     visualRuntimeRef.current = runtime;
-    if (import.meta.env.DEV) {
+    if (import.meta.env.DEV || window.__relativityE2E === true) {
       mount.__rgDebugState = () => {
         const rect = mount.getBoundingClientRect();
         return {
@@ -1988,6 +2068,7 @@ export function SoundflightStage(props) {
                 x: rect.left + (projected.x * 0.5 + 0.5) * rect.width,
                 y: rect.top + (-projected.y * 0.5 + 0.5) * rect.height,
                 interactive: visual.hitArea.visible,
+                systemWorlds: visual.landmark.system?.worlds ?? 0,
               };
             }),
         };
@@ -2592,6 +2673,16 @@ export function SoundflightStage(props) {
 
       if (propsRef.current.interactionMode === "moon") return;
       const point = eventPoint(event, renderer.domElement);
+      if (propsRef.current.thereminBeaconVisible) {
+        const beacon = {
+          x: point.width * (point.width <= 680 ? 0.74 : 0.7),
+          y: point.height * (point.width <= 680 ? 0.38 : 0.4),
+        };
+        if (Math.hypot(point.x - beacon.x, point.y - beacon.y) <= 74) {
+          armTheremin(event);
+          return;
+        }
+      }
       const stringHit = nearestStringPoint(point, trailPaths(), STRING_TOUCH_DISTANCE);
       if (stringHit) {
         const deferred = shouldDeferStringPluck(event.pointerType);

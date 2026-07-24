@@ -517,6 +517,41 @@ export function shouldCelebrateThereminEnd({ sounded }) {
   return sounded;
 }
 
+export function instrumentLesson({
+  planetCount,
+  hasPluckedOrbit = false,
+  thereminPhase = "idle",
+  hasPlayedTheremin = false,
+}) {
+  if (!Number.isInteger(planetCount) || planetCount < 0) {
+    throw new Error("Instrument lesson requires a planet count");
+  }
+  if (!["idle", "arming", "active"].includes(thereminPhase)) {
+    throw new Error(`Unknown theremin lesson phase: ${thereminPhase}`);
+  }
+  if (planetCount === 0 || hasPlayedTheremin) return null;
+  if (!hasPluckedOrbit) {
+    return {
+      step: 1,
+      total: 2,
+      label: "ORBIT STRING",
+      instruction: "SWIPE THE GLOWING LINE",
+      showBeacon: false,
+    };
+  }
+  return {
+    step: 2,
+    total: 2,
+    label: "LIGHT THEREMIN",
+    instruction: thereminPhase === "active"
+      ? "MOVE TO BEND THE NOTE"
+      : thereminPhase === "arming"
+        ? "KEEP HOLDING"
+        : "HOLD THE PULSING LIGHT",
+    showBeacon: thereminPhase !== "active",
+  };
+}
+
 export function instrumentHint({
   planetCount,
   selectedMoonCount = 0,
@@ -538,9 +573,9 @@ export function instrumentHint({
   if (planetCount === 0) return "DRAG FROM THE STAR TO MAKE A PLANET";
   if (thereminPhase === "arming") return "KEEP HOLDING";
   if (thereminPhase === "active") return "BEND THE NOTE";
-  if (!hasPluckedOrbit) return "TOUCH A GLOWING ORBIT";
-  if (!hasPlayedTheremin) return "PLAY THE LIGHT THEREMIN";
-  return "FLY TO THE MILKY WAY";
+  if (!hasPluckedOrbit) return "PLAY YOUR NEW WORLD";
+  if (!hasPlayedTheremin) return "FIND THE LIGHT THEREMIN";
+  return "FLY TO NEARBY STARS";
 }
 
 export function instrumentGuidanceDetail({
@@ -564,7 +599,7 @@ export function instrumentGuidanceDetail({
   if (planetCount === 0) return "PULL OUTWARD · RELEASE TO HEAR A WORLD";
   if (thereminPhase === "arming") return "A LIGHT IS FORMING";
   if (thereminPhase === "active") return "LEFT–RIGHT = PITCH · UP–DOWN = POWER";
-  if (!hasPluckedOrbit) return "SWIPE ACROSS MORE ORBITS TO PLAY A CHORD";
-  if (!hasPlayedTheremin) return "HOLD EMPTY SPACE · THEN MOVE";
-  return "TAP MILKY WAY TO FLY";
+  if (!hasPluckedOrbit) return "SWIPE ITS GLOWING ORBIT LIKE A STRING";
+  if (!hasPlayedTheremin) return "HOLD THE PULSING LIGHT · THEN MOVE";
+  return "TAP NEXT FLIGHT TO LEAVE YOUR SYSTEM";
 }

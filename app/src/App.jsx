@@ -35,6 +35,7 @@ import { copyOrbitLink, shareOrbit } from "./lib/sharing.js";
 import {
   COSMIC_DESTINATIONS,
   cosmicDestination,
+  cosmicJourneyForScale,
   cosmicLandmarkById,
   cosmicScaleForDistance,
 } from "./lib/cosmicInstrument.js";
@@ -46,6 +47,7 @@ import {
   INSTRUMENT_TITLE,
   instrumentGuidanceDetail,
   instrumentHint,
+  instrumentLesson,
   playbackControl,
   shouldApplyGestationUpdate,
   shouldApplyThereminRelease,
@@ -225,6 +227,11 @@ export function App() {
     && (cosmicScale.id === "orbit" || cosmicScale.id === "system")
     && !journeyTarget;
   const cosmicDestinations = Object.values(COSMIC_DESTINATIONS);
+  const currentDestinationIndex = cosmicDestinations.findIndex(
+    (destination) => destination.id === currentDestination.id,
+  );
+  const cosmicJourney = cosmicJourneyForScale(currentDestination.id);
+  const nextDestination = cosmicJourney.outward;
   const guidance = instrumentHint({
     planetCount: planets.length,
     selectedBody,
@@ -243,6 +250,19 @@ export function App() {
     thereminPhase,
     hasPlayedTheremin,
   });
+  const lesson = instrumentLesson({
+    planetCount: planets.length,
+    hasPluckedOrbit,
+    thereminPhase,
+    hasPlayedTheremin,
+  });
+  const showInstrumentLesson = Boolean(
+    lesson
+    && !isListener
+    && currentDestination.id === "system"
+    && interactionMode === "compose"
+    && !journeyTarget,
+  );
   const activeGuidance = journeyTarget
     ? `FLYING TO ${cosmicDestination(journeyTarget).label}`
     : arrivalTarget
@@ -1075,6 +1095,9 @@ export function App() {
         interactionMode={interactionMode}
         isPlaying={isPlaying}
         isListener={isListener}
+        thereminBeaconVisible={
+          showInstrumentLesson && lesson.showBeacon && lesson.step === 2
+        }
         playbackEvents={composition.events}
         removeCommand={removeCommand}
         resetToken={resetToken}
@@ -1151,9 +1174,26 @@ export function App() {
       {!dialogOpen && storedScoreState === "idle" && (
         <>
           <section className="instrument-guidance" aria-live="polite">
+            {showInstrumentLesson && (
+              <small>
+                PLAY LESSON {lesson.step} OF {lesson.total} · {lesson.label}
+              </small>
+            )}
             <strong>{activeGuidance}</strong>
             <span>{activeGuidanceDetail}</span>
           </section>
+
+          {showInstrumentLesson && lesson.showBeacon && lesson.step === 2 && (
+            <div className="theremin-beacon" aria-hidden="true">
+              <i />
+              <span>
+                <small>LIGHT THEREMIN</small>
+                <strong>HOLD HERE</strong>
+              </span>
+              <b>POWER ↑</b>
+              <em>PITCH →</em>
+            </div>
+          )}
 
           {selectedBody && !isListener && interactionMode !== "explore" && (
             <aside
@@ -1232,17 +1272,38 @@ export function App() {
             aria-busy={Boolean(journeyTarget)}
           >
             <header>
-              <span>{journeyTarget ? "FLYING TO" : "TAP A WORLD TO FLY"}</span>
-              <strong>{journeyTarget
-                ? cosmicDestination(journeyTarget).label
-                : currentDestination.label}</strong>
+              <span>UNIVERSE MAP · {currentDestinationIndex + 1} OF {cosmicDestinations.length}</span>
+              <strong>{journeyTarget ? "IN FLIGHT" : currentDestination.label}</strong>
             </header>
+            {(journeyTarget || nextDestination || cosmicJourney.home) && (
+              <button
+                type="button"
+                className="cosmic-lens__next"
+                aria-label={`Travel to ${
+                  journeyTarget
+                    ? cosmicDestination(journeyTarget).label
+                    : (nextDestination ?? cosmicJourney.home).label
+                }`}
+                disabled={Boolean(journeyTarget)}
+                onClick={() => handleCosmicTravel((nextDestination ?? cosmicJourney.home).id)}
+              >
+                <span>{journeyTarget
+                  ? "FLYING TO"
+                  : nextDestination
+                    ? "NEXT FLIGHT"
+                    : "RETURN HOME"}</span>
+                <strong>{journeyTarget
+                  ? cosmicDestination(journeyTarget).label
+                  : (nextDestination ?? cosmicJourney.home).label}</strong>
+                {nextDestination
+                  ? <ArrowRight aria-hidden="true" weight="thin" />
+                  : <House aria-hidden="true" weight="thin" />}
+              </button>
+            )}
             <nav className="cosmic-lens__stops" aria-label="Choose a cosmic scale">
               {cosmicDestinations.map((destination, index) => {
                 const active = !journeyTarget && currentDestination.id === destination.id;
-                const invited = hasPlayedTheremin
-                  && currentDestination.id === "system"
-                  && destination.id === "galaxy";
+                const invited = destination.id === nextDestination?.id;
                 const isJourneyTarget = journeyTarget === destination.id;
                 return (
                   <button
@@ -1290,7 +1351,32 @@ export function App() {
             </footer>
           </aside>
 
-          <div className="soundflight-voice-breath simple-voice-breath" aria-live="polite">
+          <nav
+            className="cosmic-zoom cosmic-zoom--mobile"
+            aria-label="Fine cosmic zoom"
+          >
+            <button
+              type="button"
+              onClick={() => handleZoom(-1)}
+              aria-label="Zoom closer"
+              disabled={Boolean(journeyTarget)}
+            >
+              <Plus aria-hidden="true" weight="thin" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleZoom(1)}
+              aria-label="Zoom farther"
+              disabled={Boolean(journeyTarget)}
+            >
+              <Minus aria-hidden="true" weight="thin" />
+            </button>
+          </nav>
+
+          <div
+            className={`soundflight-voice-breath simple-voice-breath${sonicCue ? " is-cue" : ""}`}
+            aria-live="polite"
+          >
             <span>{sonicCue || (audioState !== "running"
               ? "SOUND OFF · TAP START SOUND"
               : isPlaying
@@ -1329,7 +1415,7 @@ export function App() {
               ×
             </button>
             <small>HOW TO PLAY</small>
-            <h2 id="playing-guide-title">THREE GESTURES. ONE UNIVERSE.</h2>
+            <h2 id="playing-guide-title">FOUR MOVES. ONE UNIVERSE.</h2>
             <ol>
               <li>
                 <span>01</span>
@@ -1341,15 +1427,22 @@ export function App() {
               <li>
                 <span>02</span>
                 <div>
-                  <strong>PLAY THE LIGHT</strong>
-                  <p>Swipe a glowing orbit like a string. Hold empty space, then move to bend the Light Theremin.</p>
+                  <strong>PLAY AN ORBIT</strong>
+                  <p>Swipe across a glowing orbit. It is a string, and every planet gives it a different voice.</p>
                 </div>
               </li>
               <li>
                 <span>03</span>
                 <div>
+                  <strong>PLAY THE LIGHT THEREMIN</strong>
+                  <p>Hold the pulsing light. Keep holding, then move: left and right change pitch, up and down change power.</p>
+                </div>
+              </li>
+              <li>
+                <span>04</span>
+                <div>
                   <strong>FLY</strong>
-                  <p>Tap a world in the map. MY SYSTEM always brings you home.</p>
+                  <p>Tap NEXT FLIGHT to move outward one world at a time. MY SYSTEM always brings you home.</p>
                 </div>
               </li>
             </ol>

@@ -30,6 +30,7 @@ import {
   moonGuidance,
   reduceSoundflightState,
   createSoundflightState,
+  instrumentLesson,
   instrumentGuidanceDetail,
   instrumentHint,
   shouldAdvancePhysics,
@@ -301,20 +302,20 @@ test("one contextual sentence teaches the next literal gesture", () => {
     planetCount: 2,
     selectedBody: { kind: "planet" },
     selectedMoonCount: 0,
-  }), "TOUCH A GLOWING ORBIT");
+  }), "PLAY YOUR NEW WORLD");
   assert.equal(instrumentGuidanceDetail({
     planetCount: 2,
     selectedBody: { kind: "planet" },
     selectedMoonCount: 0,
-  }), "SWIPE ACROSS MORE ORBITS TO PLAY A CHORD");
+  }), "SWIPE ITS GLOWING ORBIT LIKE A STRING");
   assert.equal(instrumentHint({
     planetCount: 2,
     hasPluckedOrbit: true,
-  }), "PLAY THE LIGHT THEREMIN");
+  }), "FIND THE LIGHT THEREMIN");
   assert.equal(instrumentGuidanceDetail({
     planetCount: 2,
     hasPluckedOrbit: true,
-  }), "HOLD EMPTY SPACE · THEN MOVE");
+  }), "HOLD THE PULSING LIGHT · THEN MOVE");
   assert.equal(instrumentHint({
     planetCount: 2,
     hasPluckedOrbit: true,
@@ -339,12 +340,12 @@ test("one contextual sentence teaches the next literal gesture", () => {
     planetCount: 2,
     hasPluckedOrbit: true,
     hasPlayedTheremin: true,
-  }), "FLY TO THE MILKY WAY");
+  }), "FLY TO NEARBY STARS");
   assert.equal(instrumentGuidanceDetail({
     planetCount: 2,
     hasPluckedOrbit: true,
     hasPlayedTheremin: true,
-  }), "TAP MILKY WAY TO FLY");
+  }), "TAP NEXT FLIGHT TO LEAVE YOUR SYSTEM");
   assert.equal(instrumentHint({
     planetCount: 2,
     selectedBody: { kind: "moon" },
@@ -356,6 +357,54 @@ test("one contextual sentence teaches the next literal gesture", () => {
     selectedBody: { kind: "moon" },
     isListener: true,
   }), "SWIPE ACROSS ORBITS TO PLAY THE COMPOSITION");
+});
+
+test("the child instrument lesson exposes one concrete gesture at a time", () => {
+  assert.equal(instrumentLesson({ planetCount: 0 }), null);
+  assert.deepEqual(instrumentLesson({ planetCount: 1 }), {
+    step: 1,
+    total: 2,
+    label: "ORBIT STRING",
+    instruction: "SWIPE THE GLOWING LINE",
+    showBeacon: false,
+  });
+  assert.deepEqual(instrumentLesson({
+    planetCount: 1,
+    hasPluckedOrbit: true,
+  }), {
+    step: 2,
+    total: 2,
+    label: "LIGHT THEREMIN",
+    instruction: "HOLD THE PULSING LIGHT",
+    showBeacon: true,
+  });
+  assert.deepEqual(instrumentLesson({
+    planetCount: 1,
+    hasPluckedOrbit: true,
+    thereminPhase: "arming",
+  }), {
+    step: 2,
+    total: 2,
+    label: "LIGHT THEREMIN",
+    instruction: "KEEP HOLDING",
+    showBeacon: true,
+  });
+  assert.deepEqual(instrumentLesson({
+    planetCount: 1,
+    hasPluckedOrbit: true,
+    thereminPhase: "active",
+  }), {
+    step: 2,
+    total: 2,
+    label: "LIGHT THEREMIN",
+    instruction: "MOVE TO BEND THE NOTE",
+    showBeacon: false,
+  });
+  assert.equal(instrumentLesson({
+    planetCount: 1,
+    hasPluckedOrbit: true,
+    hasPlayedTheremin: true,
+  }), null);
 });
 
 test("a moon birth survives the share format and listener replay contract", () => {

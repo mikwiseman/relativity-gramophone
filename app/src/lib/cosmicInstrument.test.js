@@ -131,6 +131,37 @@ test("real cosmic landmarks are sparse, playable, and bound to one semantic worl
   assert.throws(() => cosmicLandmarkById("imaginary-galaxy"), /unknown cosmic landmark/i);
 });
 
+test("every nearby star opens as a small real system instead of a decorative dot", () => {
+  const neighborhood = cosmicLandmarksForScale("neighborhood");
+  const proxima = cosmicLandmarkById("proxima-centauri");
+  const sirius = cosmicLandmarkById("sirius");
+  const trappist = cosmicLandmarkById("trappist-1");
+
+  assert.ok(neighborhood.every((landmark) => (
+    landmark.system
+    && ["planetary", "binary"].includes(landmark.system.kind)
+    && Number.isInteger(landmark.system.worlds)
+    && landmark.system.worlds >= 1
+    && landmark.system.worlds <= 7
+    && landmark.system.label.length > 0
+  )));
+  assert.deepEqual(proxima.system, {
+    kind: "planetary",
+    worlds: 1,
+    label: "PROXIMA b · 11.2 DAY YEAR",
+  });
+  assert.deepEqual(sirius.system, {
+    kind: "binary",
+    worlds: 1,
+    label: "SIRIUS A + B · 50 YEAR ORBIT",
+  });
+  assert.deepEqual(trappist.system, {
+    kind: "planetary",
+    worlds: 7,
+    label: "7 ROCKY WORLDS · 1.5–19 DAY YEARS",
+  });
+});
+
 test("the gravitational theremin is continuous, monophonic, and safely bounded", () => {
   const low = thereminParameters({ x: 0, y: 600, width: 1000, height: 600 });
   const middle = thereminParameters({ x: 500, y: 300, width: 1000, height: 600 });
