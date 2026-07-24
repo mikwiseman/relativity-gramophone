@@ -37,4 +37,17 @@ Verified:
 
 The Codex Computer Use runtime refused to control `com.openai.codex`, so it could not enlarge the host window for a trustworthy new 1280 × 720 Browser Use screenshot. The desktop DOM/interaction path was exercised, but only the correctly sized 390 × 844 capture is treated as current visual evidence. Production desktop verification is performed separately after deployment.
 
-final result: passed locally
+## Production verification
+
+Surface: `https://waiwai.is/relativity`
+
+- WaiWeb production commit: `e5a058bfcdc9028bf28aaeebb2cc90c61eb2c8f7`
+- Loaded asset: `/relativity/assets/index-BjQCRk2m.js`
+- Initial state: `WAI GRAMOPHONE`, `PAUSE`, `STAR SYSTEM`, playback active.
+- Production planet birth: one live planet, zero moons.
+- Production share: `WORLDS 1`, `MOONS 0`, copied link reports `LINK COPIED`.
+- A fresh production tab opens the received record and births the recorded planet at its preserved event timestamp.
+- Production browser console errors: none.
+- Production HTTP response: `200 text/html`.
+
+final result: passed locally and in production
