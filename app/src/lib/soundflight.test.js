@@ -10,11 +10,13 @@ import {
   dopplerTintedColor,
   frequencyToNoteName,
   INITIAL_PLAYBACK,
+  INSTRUMENT_TITLE,
   launchGuidance,
   nextCameraDistance,
   reduceSoundflightState,
   selectRenderProfile,
   shouldApplyGestationUpdate,
+  shouldShowMoonPlacementGuide,
   shouldRefreshMusicalConnection,
   sonicIntensity,
   voiceVisual,
@@ -22,6 +24,13 @@ import {
 
 test("the instrument opens already moving instead of presenting a dormant play state", () => {
   assert.equal(INITIAL_PLAYBACK, true);
+  assert.equal(INSTRUMENT_TITLE, "WAI GRAMOPHONE");
+});
+
+test("moon placement geometry stays hidden until the player actually drags", () => {
+  assert.equal(shouldShowMoonPlacementGuide({ activeDrag: false }), false);
+  assert.equal(shouldShowMoonPlacementGuide({ activeDrag: true }), true);
+  assert.throws(() => shouldShowMoonPlacementGuide({}), /explicit drag state/i);
 });
 
 test("launch guidance turns one unfamiliar gesture into three explicit moments", () => {

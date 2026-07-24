@@ -31,6 +31,7 @@ import {
   nextCameraDistance,
   selectRenderProfile,
   shouldAdvancePhysics,
+  shouldShowMoonPlacementGuide,
   sonicIntensity,
   voiceVisual,
 } from "../lib/soundflight.js";
@@ -1019,6 +1020,7 @@ export function SoundflightStage(props) {
     renderer.shadowMap.enabled = false;
     renderer.domElement.className = "soundflight-canvas";
     renderer.domElement.setAttribute("aria-hidden", "true");
+    renderer.domElement.dataset.moonPlacementGuide = "hidden";
     mount.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -1351,8 +1353,17 @@ export function SoundflightStage(props) {
     };
 
     const updateMoonBand = () => {
-      const activeBirth = runtime.moonBirth?.active ? runtime.moonBirth : null;
-      const parentId = activeBirth?.parentId ?? propsRef.current.selectedBodyId;
+      const activeBirth = shouldShowMoonPlacementGuide({
+        activeDrag: Boolean(runtime.moonBirth?.active),
+      })
+        ? runtime.moonBirth
+        : null;
+      if (!activeBirth) {
+        renderer.domElement.dataset.moonPlacementGuide = "hidden";
+        moonPreview.group.visible = false;
+        return null;
+      }
+      const parentId = activeBirth.parentId;
       const parent = engineRef.current.getBody(parentId);
       const star = engineRef.current.getBody("star");
       const siblingCount = engineRef.current.state.bodies
@@ -1363,6 +1374,7 @@ export function SoundflightStage(props) {
         && siblingCount < 2
         && engineRef.current.state.bodies.filter((body) => body.kind !== "star").length < MAX_WORLDS;
       if (!canAddMoon || !star) {
+        renderer.domElement.dataset.moonPlacementGuide = "hidden";
         moonPreview.group.visible = false;
         return null;
       }
@@ -1372,44 +1384,29 @@ export function SoundflightStage(props) {
       const displayOuterRadius = band.outerRadius * STAGE_SCALE * MOON_DISPLAY_MAGNIFICATION;
       moonPreview.group.position.set(parentStage.x, 0, parentStage.z);
       moonPreview.group.visible = true;
+      renderer.domElement.dataset.moonPlacementGuide = "visible";
       moonPreview.parentId = parent.id;
       moonPreview.band = band;
-      const voice = voiceVisual(parent.voice);
       const resolution = {
         width: renderer.domElement.clientWidth,
         height: renderer.domElement.clientHeight,
       };
-      if (activeBirth) {
-        writeOrbitString(
-          moonPreview.innerRing,
-          localCirclePoints(displayInnerRadius),
-          0xff765f,
-          0.58,
-          1.45,
-          resolution,
-        );
-        writeOrbitString(
-          moonPreview.outerRing,
-          localCirclePoints(displayOuterRadius),
-          0xd7aa5f,
-          0.92,
-          2.15,
-          resolution,
-        );
-      } else {
-        moonPreview.innerRing.visible = false;
-        writeOrbitString(
-          moonPreview.outerRing,
-          localCirclePoints(displayOuterRadius),
-          voice.color,
-          0.38,
-          1.65,
-          resolution,
-        );
-        moonPreview.seed.visible = false;
-        moonPreview.guideLine.visible = false;
-        moonPreview.orbitLine.visible = false;
-      }
+      writeOrbitString(
+        moonPreview.innerRing,
+        localCirclePoints(displayInnerRadius),
+        0xff765f,
+        0.58,
+        1.45,
+        resolution,
+      );
+      writeOrbitString(
+        moonPreview.outerRing,
+        localCirclePoints(displayOuterRadius),
+        0xd7aa5f,
+        0.92,
+        2.15,
+        resolution,
+      );
       return { parent, star, band, parentStage };
     };
 

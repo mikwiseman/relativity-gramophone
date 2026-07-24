@@ -2,6 +2,7 @@ import { spectralMix } from "./sonification.js";
 
 const DEFAULT_STATE = Object.freeze({ mode: "compose", followingBodyId: null });
 export const INITIAL_PLAYBACK = true;
+export const INSTRUMENT_TITLE = "WAI GRAMOPHONE";
 
 const VOICE_VISUALS = Object.freeze({
   earth: Object.freeze({ label: "EARTH", colorName: "CYAN", color: 0x72edff }),
@@ -84,6 +85,13 @@ export function canBeginRadialLaunchFromHit(bodyId) {
 
 export function shouldApplyGestationUpdate({ requestId, currentRequestId, engaged }) {
   return engaged && requestId === currentRequestId;
+}
+
+export function shouldShowMoonPlacementGuide({ activeDrag }) {
+  if (typeof activeDrag !== "boolean") {
+    throw new Error("Moon placement guide requires an explicit drag state");
+  }
+  return activeDrag;
 }
 
 export function shouldRefreshMusicalConnection({

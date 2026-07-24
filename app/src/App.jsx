@@ -24,6 +24,7 @@ import { COSMIC_VOICES, hapticPattern, voiceParameters } from "./lib/sonificatio
 import {
   frequencyToNoteName,
   INITIAL_PLAYBACK,
+  INSTRUMENT_TITLE,
   instrumentHint,
   shouldApplyGestationUpdate,
   voiceVisual,
@@ -96,7 +97,7 @@ export function App() {
     : selectedBody?.kind === "planet" && selectedMoonCount < 2 && !isListener
       ? selectedMoonCount === 1
         ? "DRAG AGAIN TO ADD ONE MORE MOON"
-        : "THE THIN RING MARKS A STABLE MOON ORBIT"
+        : "HOLD THE PLANET · PULL OUTWARD · RELEASE"
       : "TAP A PLANET TO HEAR IT · SWIPE ACROSS ITS ORBIT";
 
   useEffect(() => {
@@ -335,7 +336,7 @@ export function App() {
       .filter(Boolean)
       .join(" · ");
     const result = await shareOrbit({
-      title: "Relativity Gramophone",
+      title: INSTRUMENT_TITLE,
       text: [shareScore.message, voices && `A planetary composition: ${voices}.`].filter(Boolean).join("\n"),
       url: shareLink,
     });
@@ -428,7 +429,7 @@ export function App() {
       />
 
       <header className="soundflight-title simple-title">
-        <h1>RELATIVITY<br />GRAMOPHONE</h1>
+        <h1>WAI<br />GRAMOPHONE</h1>
         <p>DRAW ORBITS · HEAR GRAVITY</p>
       </header>
 
