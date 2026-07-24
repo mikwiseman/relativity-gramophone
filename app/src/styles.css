@@ -753,6 +753,14 @@ input:focus-visible {
   white-space: nowrap;
 }
 
+.listen-action {
+  padding-inline: 14px;
+  border: 1px solid color-mix(in srgb, var(--rg-cyan) 58%, transparent);
+  border-radius: 999px;
+  color: var(--rg-cyan);
+  background: color-mix(in srgb, var(--rg-cyan) 8%, transparent);
+}
+
 @media (hover: hover) and (pointer: fine) {
   .text-action:hover {
     border-bottom-color: currentColor;
@@ -1935,13 +1943,13 @@ input:focus-visible {
   }
 
   .soundflight-selected-orbit > small {
-    font-size: 7px;
+    font-size: 8px;
   }
 
   .soundflight-add-moon {
     min-height: 44px;
     padding: 0 12px;
-    font-size: 7px;
+    font-size: 8px;
   }
 
   .soundflight-voice-key > span,
@@ -2263,6 +2271,181 @@ input:focus-visible {
   letter-spacing: 0.34em;
 }
 
+.playing-guide-trigger {
+  position: absolute;
+  z-index: 9;
+  top: clamp(var(--rg-space-5), 5vh, 48px);
+  right: clamp(var(--rg-space-5), 4vw, 56px);
+  display: inline-flex;
+  min-height: 44px;
+  padding: 0 15px 0 10px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid color-mix(in srgb, var(--rg-gold) 36%, transparent);
+  border-radius: 999px;
+  color: var(--rg-gold);
+  background: var(--rg-panel);
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  backdrop-filter: blur(14px);
+}
+
+.playing-guide-trigger i {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--rg-cyan) 58%, transparent);
+  border-radius: 50%;
+  color: var(--rg-cyan);
+  font-family: var(--rg-font-display);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.playing-guide-trigger:hover,
+.playing-guide-trigger:focus-visible {
+  border-color: color-mix(in srgb, var(--rg-cyan) 68%, transparent);
+  color: var(--rg-gold-bright);
+  background: var(--rg-panel-hover);
+  outline: 1px solid var(--rg-focus);
+  outline-offset: 4px;
+}
+
+.playing-guide-backdrop {
+  position: absolute;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  padding: 16px;
+  place-items: center;
+  background: rgb(0 0 0 / 64%);
+  backdrop-filter: blur(12px);
+}
+
+.playing-guide {
+  position: relative;
+  display: grid;
+  width: min(580px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  gap: 16px;
+  padding: 30px;
+  overflow-y: auto;
+  border-block: 1px solid color-mix(in srgb, var(--rg-gold) 44%, transparent);
+  color: var(--rg-gold);
+  background:
+    radial-gradient(circle at 80% 12%, color-mix(in srgb, var(--rg-cyan) 8%, transparent), transparent 34%),
+    color-mix(in srgb, #050505 96%, transparent);
+  box-shadow: 0 26px 80px rgb(0 0 0 / 58%);
+  overscroll-behavior: contain;
+}
+
+.playing-guide > small {
+  color: var(--rg-cyan);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.28em;
+}
+
+.playing-guide h2 {
+  max-width: 20ch;
+  margin: 0;
+  color: var(--rg-gold-bright);
+  font-family: var(--rg-font-display);
+  font-size: clamp(22px, 3.1vw, 34px);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  line-height: 1.16;
+}
+
+.playing-guide ol {
+  display: grid;
+  margin: 2px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--rg-line);
+  list-style: none;
+}
+
+.playing-guide li {
+  display: grid;
+  min-height: 76px;
+  padding: 14px 0;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  border-bottom: 1px solid var(--rg-line);
+}
+
+.playing-guide li > span {
+  padding-top: 2px;
+  color: var(--rg-cyan);
+  font-family: var(--rg-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+
+.playing-guide li div {
+  display: grid;
+  gap: 6px;
+}
+
+.playing-guide li strong {
+  color: var(--rg-gold-bright);
+  font-size: 9px;
+  letter-spacing: 0.2em;
+}
+
+.playing-guide li p {
+  margin: 0;
+  color: color-mix(in srgb, var(--rg-gold) 72%, transparent);
+  font-family: var(--rg-font-display);
+  font-size: 15px;
+  letter-spacing: 0.025em;
+  line-height: 1.45;
+}
+
+.playing-guide__close {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  color: var(--rg-gold);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--rg-font-display);
+  font-size: 24px;
+}
+
+.playing-guide__start {
+  min-height: 48px;
+  padding: 0 20px;
+  border: 1px solid color-mix(in srgb, var(--rg-cyan) 56%, transparent);
+  border-radius: 999px;
+  color: var(--rg-cyan);
+  background: color-mix(in srgb, var(--rg-cyan) 6%, transparent);
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+}
+
+.playing-guide__close:hover,
+.playing-guide__close:focus-visible,
+.playing-guide__start:hover,
+.playing-guide__start:focus-visible {
+  color: var(--rg-gold-bright);
+  outline: 1px solid var(--rg-focus);
+  outline-offset: 3px;
+}
+
 .instrument-guidance {
   position: absolute;
   z-index: 5;
@@ -2294,6 +2477,61 @@ input:focus-visible {
   font-weight: 600;
   letter-spacing: 0.28em;
   line-height: 1.7;
+}
+
+.stored-score-state {
+  position: absolute;
+  z-index: 8;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: min(430px, calc(100vw - 40px));
+  gap: 13px;
+  justify-items: center;
+  padding: 28px;
+  border-block: 1px solid color-mix(in srgb, var(--rg-gold) 36%, transparent);
+  color: var(--rg-gold);
+  background: color-mix(in srgb, var(--rg-panel) 88%, transparent);
+  text-align: center;
+  backdrop-filter: blur(18px);
+  transform: translate(-50%, -50%);
+}
+
+.stored-score-state small,
+.stored-score-state span,
+.stored-score-state button {
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  line-height: 1.6;
+}
+
+.stored-score-state small,
+.stored-score-state span {
+  color: var(--rg-muted);
+}
+
+.stored-score-state strong {
+  font-family: var(--rg-font-display);
+  font-size: clamp(20px, 3vw, 30px);
+  font-weight: 400;
+  letter-spacing: 0.1em;
+}
+
+.stored-score-state > div {
+  display: flex;
+  gap: 10px;
+  margin-top: 7px;
+}
+
+.stored-score-state button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--rg-line);
+  border-radius: 999px;
+  color: var(--rg-gold);
+  background: transparent;
+  cursor: pointer;
 }
 
 .instrument-controls {
@@ -2381,6 +2619,22 @@ input:focus-visible {
   gap: var(--rg-space-1) !important;
 }
 
+.instrument-play span {
+  max-width: 9ch;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal;
+}
+
+.app-shell[data-audio-state="locked"] .instrument-play {
+  width: 104px;
+  border-color: color-mix(in srgb, var(--rg-cyan) 72%, transparent);
+  color: var(--rg-cyan);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--rg-cyan) 12%, transparent),
+    0 0 32px color-mix(in srgb, var(--rg-cyan) 13%, transparent);
+}
+
 .instrument-play svg {
   width: 21px;
   height: 21px;
@@ -2391,50 +2645,206 @@ input:focus-visible {
   color: var(--rg-cyan);
 }
 
-.cosmic-scale-state {
+.cosmic-lens {
   position: absolute;
-  z-index: 5;
-  top: clamp(var(--rg-space-5), 5vh, 48px);
+  z-index: 7;
+  top: clamp(112px, 17vh, 164px);
   right: clamp(var(--rg-space-5), 4vw, 56px);
   display: grid;
-  max-width: 260px;
-  justify-items: end;
-  gap: 6px;
-  pointer-events: none;
-  text-align: right;
+  width: min(218px, calc(100vw - 32px));
+  gap: 9px;
+  padding: 10px 0;
+  color: var(--rg-gold);
+  background:
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--rg-panel) 88%, transparent) 24%);
+  backdrop-filter: blur(10px);
   text-shadow: 0 0 24px var(--rg-shadow-strong);
 }
 
-.cosmic-scale-state strong {
+.cosmic-lens > header {
+  display: flex;
+  min-height: 32px;
+  padding: 0 10px 0 16px;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cosmic-lens > header span {
+  color: var(--rg-muted);
+  font-family: var(--rg-font-mono);
+  font-size: 8px;
+  letter-spacing: 0.16em;
+}
+
+.cosmic-lens > header strong {
   color: var(--rg-gold-bright);
   font-family: var(--rg-font-display);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 400;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.13em;
+  text-align: right;
 }
 
-.cosmic-scale-state span {
-  color: var(--rg-muted);
+.cosmic-lens__stops {
+  position: relative;
+  display: grid;
+}
+
+.cosmic-lens__stops::before {
+  position: absolute;
+  top: 22px;
+  bottom: 22px;
+  left: 27px;
+  width: 1px;
+  background: linear-gradient(
+    var(--rg-line),
+    color-mix(in srgb, var(--rg-cyan) 38%, transparent),
+    var(--rg-line)
+  );
+  content: "";
+  pointer-events: none;
+}
+
+.cosmic-lens__stops button {
+  position: relative;
+  display: grid;
+  min-height: 44px;
+  padding: 0 8px 0 16px;
+  grid-template-columns: 24px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-left: 1px solid transparent;
+  color: color-mix(in srgb, var(--rg-gold) 54%, transparent);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    color 220ms ease,
+    border-color 220ms ease,
+    background-color 220ms ease,
+    opacity 220ms ease,
+    transform 220ms var(--rg-ease);
+}
+
+.cosmic-lens__stops button::before {
+  position: absolute;
+  left: 23px;
+  width: 9px;
+  height: 9px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: #030303;
+  box-shadow: 0 0 0 transparent;
+  content: "";
+  transform: translateX(-50%);
+  transition:
+    background-color 220ms ease,
+    border-color 220ms ease,
+    box-shadow 220ms ease,
+    transform 220ms var(--rg-ease);
+}
+
+.cosmic-lens__stops button i {
+  color: color-mix(in srgb, currentColor 48%, transparent);
+  font-family: var(--rg-font-mono);
   font-size: 8px;
-  letter-spacing: 0.15em;
-  line-height: 1.5;
+  font-style: normal;
+  letter-spacing: 0.08em;
 }
 
-.cosmic-scale-state small {
+.cosmic-lens__stops button span {
+  overflow: hidden;
+  font-family: var(--rg-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cosmic-lens__stops button svg {
+  width: 15px;
+  height: 15px;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition:
+    opacity 180ms ease,
+    transform 180ms var(--rg-ease);
+}
+
+.cosmic-lens__stops button:hover,
+.cosmic-lens__stops button:focus-visible {
+  color: var(--rg-gold-bright);
+  background: linear-gradient(90deg, transparent, var(--rg-panel-hover));
+  outline: none;
+}
+
+.cosmic-lens__stops button:hover svg,
+.cosmic-lens__stops button:focus-visible svg,
+.cosmic-lens__stops button.is-active svg {
+  opacity: 0.8;
+  transform: translateX(0);
+}
+
+.cosmic-lens__stops button:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--rg-focus);
+}
+
+.cosmic-lens__stops button.is-active {
+  border-left-color: color-mix(in srgb, var(--rg-cyan) 58%, transparent);
+  color: var(--rg-cyan);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--rg-cyan) 7%, transparent));
+}
+
+.cosmic-lens__stops button.is-active::before {
+  border-color: var(--rg-cyan);
+  background: var(--rg-cyan);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--rg-cyan) 72%, transparent);
+  transform: translateX(-50%) scale(1.12);
+}
+
+.cosmic-lens__stops button[data-invited="true"]:not(.is-active) {
+  animation: cosmic-lens-invitation 2.4s var(--rg-ease) 2;
+}
+
+.cosmic-lens__stops button:disabled {
+  cursor: wait;
+  opacity: 0.28;
+}
+
+.cosmic-lens__stops button.is-journey-target:disabled {
+  color: var(--rg-cyan);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--rg-cyan) 9%, transparent));
+  opacity: 1;
+}
+
+.cosmic-lens__stops button.is-journey-target::before {
+  border-color: var(--rg-cyan);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--rg-cyan) 76%, transparent);
+  animation: cosmic-journey-pulse 1.2s ease-in-out infinite;
+}
+
+.cosmic-lens > footer {
+  display: grid;
+  min-height: 44px;
+  padding: 0 4px 0 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.cosmic-lens > footer > span {
   color: color-mix(in srgb, var(--rg-cyan) 62%, transparent);
   font-family: var(--rg-font-mono);
   font-size: 8px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.1em;
+  line-height: 1.45;
 }
 
 .cosmic-zoom {
-  position: absolute;
-  z-index: 6;
-  top: 50%;
-  right: clamp(var(--rg-space-4), 2vw, var(--rg-space-5));
-  display: grid;
-  gap: var(--rg-space-2);
-  transform: translateY(-50%);
+  display: flex;
+  gap: 4px;
 }
 
 .cosmic-zoom button {
@@ -2475,6 +2885,30 @@ input:focus-visible {
   height: 17px;
 }
 
+@keyframes cosmic-lens-invitation {
+  0%,
+  100% {
+    color: color-mix(in srgb, var(--rg-gold) 54%, transparent);
+    transform: translateX(0);
+  }
+
+  48% {
+    color: var(--rg-gold-bright);
+    transform: translateX(-3px);
+  }
+}
+
+@keyframes cosmic-journey-pulse {
+  0%,
+  100% {
+    transform: translateX(-50%) scale(1);
+  }
+
+  50% {
+    transform: translateX(-50%) scale(1.45);
+  }
+}
+
 .instrument-selection {
   position: absolute;
   z-index: 6;
@@ -2510,7 +2944,7 @@ input:focus-visible {
 
 .instrument-selection small {
   color: var(--rg-muted);
-  font-size: 7px;
+  font-size: 8px;
   letter-spacing: 0.2em;
 }
 
@@ -2536,6 +2970,29 @@ input:focus-visible {
   clip-path: inset(50%);
 }
 
+.instrument-selection .instrument-selection__moon {
+  min-width: 96px;
+  gap: 7px;
+  border-color: color-mix(in srgb, var(--selected-voice) 34%, transparent);
+  color: var(--selected-voice);
+}
+
+.instrument-selection .instrument-selection__moon[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--rg-coral) 52%, transparent);
+  color: var(--rg-coral);
+}
+
+.instrument-selection .instrument-selection__moon span {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip-path: none;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+}
+
 .simple-voice-breath {
   bottom: clamp(17px, 2.6vh, 25px);
   color: var(--rg-muted);
@@ -2543,7 +3000,7 @@ input:focus-visible {
 
 .simple-voice-breath span {
   position: static;
-  font-size: 7px;
+  font-size: 8px;
   letter-spacing: 0.24em;
   transform: none;
 }
@@ -2582,7 +3039,36 @@ input:focus-visible {
 
   .simple-title p {
     max-width: 220px;
-    font-size: 7px;
+    font-size: 8px;
+  }
+
+  .playing-guide-trigger {
+    top: 20px;
+    right: 16px;
+    min-height: 44px;
+    padding: 0 12px 0 8px;
+  }
+
+  .playing-guide {
+    width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+    gap: 13px;
+    padding: 22px 18px 18px;
+  }
+
+  .playing-guide h2 {
+    max-width: 17ch;
+    padding-right: 34px;
+    font-size: 22px;
+  }
+
+  .playing-guide li {
+    min-height: 68px;
+    padding: 11px 0;
+  }
+
+  .playing-guide li p {
+    font-size: 14px;
   }
 
   .instrument-guidance {
@@ -2599,8 +3085,18 @@ input:focus-visible {
 
   .instrument-guidance span {
     max-width: 32ch;
-    font-size: 7px;
-    letter-spacing: 0.2em;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+  }
+
+  .stored-score-state {
+    width: calc(100vw - 32px);
+    padding: 24px 18px;
+  }
+
+  .stored-score-state > div {
+    flex-direction: column;
+    width: min(230px, 100%);
   }
 
   .instrument-controls {
@@ -2612,6 +3108,15 @@ input:focus-visible {
   .instrument-play {
     width: 68px;
     height: 68px;
+  }
+
+  .app-shell[data-audio-state="locked"] .instrument-play {
+    width: 92px;
+  }
+
+  .app-shell[data-audio-state="locked"] .instrument-play span {
+    font-size: 8px;
+    letter-spacing: 0.14em;
   }
 
   .instrument-controls .instrument-share {
@@ -2630,29 +3135,83 @@ input:focus-visible {
 
   .instrument-selection {
     right: 16px;
-    bottom: 20px;
+    bottom: 252px;
     min-height: 54px;
     padding-left: var(--rg-space-3);
     gap: var(--rg-space-2);
   }
 
-  .cosmic-scale-state {
-    top: 20px;
-    right: 16px;
-    max-width: 124px;
+  .cosmic-lens {
+    top: auto;
+    right: 12px;
+    bottom: 98px;
+    left: 12px;
+    width: auto;
+    gap: 5px;
+    padding: 7px 0;
+    background: linear-gradient(
+      180deg,
+      transparent,
+      color-mix(in srgb, var(--rg-panel) 92%, transparent) 24%
+    );
   }
 
-  .cosmic-scale-state strong {
+  .cosmic-lens > header {
+    min-height: 25px;
+    padding-inline: 10px;
+  }
+
+  .cosmic-lens > header strong {
     font-size: 10px;
-    letter-spacing: 0.13em;
   }
 
-  .cosmic-scale-state span {
+  .cosmic-lens__stops {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    overflow: visible;
+  }
+
+  .cosmic-lens__stops::before {
     display: none;
   }
 
-  .cosmic-zoom {
-    right: 12px;
+  .cosmic-lens__stops button {
+    min-width: 0;
+    min-height: 58px;
+    padding: 20px 3px 5px;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    border-top: 1px solid transparent;
+    border-left: 0;
+    text-align: center;
+  }
+
+  .cosmic-lens__stops button::before {
+    top: 8px;
+    left: 50%;
+  }
+
+  .cosmic-lens__stops button i,
+  .cosmic-lens__stops button svg {
+    display: none;
+  }
+
+  .cosmic-lens__stops button span {
+    overflow: visible;
+    font-size: 8px;
+    line-height: 1.35;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .cosmic-lens__stops button.is-active {
+    border-top-color: color-mix(in srgb, var(--rg-cyan) 58%, transparent);
+    border-left-color: transparent;
+  }
+
+  .cosmic-lens > footer {
+    min-height: 44px;
+    padding-left: 10px;
   }
 
   .instrument-selection > span {
@@ -2665,12 +3224,17 @@ input:focus-visible {
     padding: 0 var(--rg-space-3);
   }
 
+  .instrument-selection .instrument-selection__moon {
+    min-width: 94px;
+  }
+
   .simple-voice-breath {
     right: var(--rg-space-4);
-    bottom: 96px;
-    left: auto;
-    max-width: 46vw;
-    text-align: right;
+    bottom: calc(252px + 60px + var(--rg-space-3));
+    left: var(--rg-space-4);
+    max-width: none;
+    justify-content: center;
+    text-align: center;
     transform: none;
   }
 
@@ -2689,25 +3253,12 @@ input:focus-visible {
 @media (max-width: 340px) {
   .instrument-selection {
     right: var(--rg-space-4);
-    bottom: 96px;
-  }
-
-  .simple-voice-breath {
-    display: none;
-  }
-
-  .instrument-flight span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
+    bottom: 252px;
   }
 
   .instrument-flight {
-    min-width: 48px !important;
-    width: 48px;
-    padding: 0 !important;
+    min-width: 104px !important;
+    padding-inline: var(--rg-space-3) !important;
   }
 }
 
@@ -2718,9 +3269,24 @@ input:focus-visible {
   }
 
   .simple-title p,
-  .simple-voice-breath,
-  .cosmic-scale-state span {
+  .simple-voice-breath {
     display: none;
+  }
+
+  .playing-guide-trigger {
+    top: 8px;
+    right: auto;
+    left: 146px;
+    width: 44px;
+    padding: 0;
+  }
+
+  .playing-guide-trigger span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
   }
 
   .instrument-guidance {
@@ -2746,16 +3312,50 @@ input:focus-visible {
     height: 60px;
   }
 
+  .app-shell[data-audio-state="locked"] .instrument-play {
+    width: 90px;
+  }
+
   .instrument-selection {
     right: 16px;
     bottom: 12px;
   }
 
-  .cosmic-scale-state {
-    top: 14px;
+  .cosmic-lens {
+    top: 8px;
+    right: 10px;
+    bottom: auto;
+    left: auto;
+    width: 208px;
+    gap: 4px;
+    padding-block: 5px;
   }
 
-  .cosmic-zoom {
-    right: 10px;
+  .cosmic-lens > header {
+    min-height: 25px;
+  }
+
+  .cosmic-lens__stops button {
+    min-height: 44px;
+  }
+
+  .cosmic-lens > footer {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 680px) and (max-height: 520px) and (orientation: landscape) {
+  .instrument-guidance {
+    top: 82px;
+    left: 16px;
+    width: 185px;
+    justify-items: start;
+    text-align: left;
+    transform: none;
+    animation: none;
+  }
+
+  .cosmic-lens {
+    width: min(440px, calc(100vw - 210px));
   }
 }

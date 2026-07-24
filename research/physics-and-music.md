@@ -102,6 +102,19 @@
 
 Панорама следует видимому азимуту тела. Расстояние меняет ранние отражения, фильтрацию и ощущение глубины, но не должно просто глушить далёкие тела до исчезновения. Центральная масса даёт общий низкий резонатор; каждый спутник — отдельный голос.
 
+## Космический масштаб как фрактальный инструмент
+
+Один непрерывный линейный зум от планеты до скопления галактик был бы научно нечитаем и практически неуправляем: между уровнями лежат многие порядки величины. Поэтому инструмент использует пять честно подписанных семантических карт. Одно нажатие открывает систему, ближайшие звёзды, Млечный Путь, Местную группу или глубокую Вселенную; внутри карты остаются тонкий зум и свободная камера.
+
+Фактическая опора:
+
+- Солнце находится примерно в 26 600 световых годах от центра Млечного Пути, в области Orion Spur;
+- видимый диск Млечного Пути имеет порядок 100 000 световых лет в диаметре;
+- Andromeda находится примерно в 2,5 млн световых лет;
+- Местная группа простирается примерно на 10 млн световых лет и включает более 50 галактик.
+
+Экранные позиции и размеры переаранжированы для чтения ребёнком, но названия, вложенность и подписанные расстояния сохраняются. На каждом уровне есть не больше четырёх светящихся ориентиров. Касание ориентира запускает его тембровый аккорд и короткий световой импульс: анимация подтверждает именно действие игрока, а не превращает фон в постоянный шум. На глубоком уровне скопления соединяет медленно текущая сеть — художественная сонфикация крупномасштабной структуры, сформированной гравитацией.
+
 ## Честность модели
 
 На экране всегда должно быть понятно:
@@ -121,5 +134,9 @@
 - NASA: [Moonquakes](https://science.nasa.gov/moon/moonquakes/)
 - NASA: [Visible Light](https://science.nasa.gov/ems/09_visiblelight/)
 - NASA: [Alpha Centauri: A Triple Star System about 4 Light Years from Earth](https://www.nasa.gov/image-article/alpha-centauri-triple-star-system-about-4-light-years-from-earth/)
+- ESA Gaia: [Guide to our galaxy](https://www.esa.int/Science_Exploration/Space_Science/Gaia/Guide_to_our_galaxy)
+- ESA Gaia: [Top-down view of the Milky Way](https://www.esa.int/ESA_Multimedia/Images/2023/12/Top-down_view_of_the_Milky_Way_annotated)
+- NASA: [Our Neighbor Andromeda](https://science.nasa.gov/photojournal/our-neighbor-andromeda/)
+- NASA: [The Local Group is about 10 million light-years across](https://science.nasa.gov/earth/earth-observatory/the-galaxy-next-door/)
 - LIGO Scientific Collaboration: [Gravitational-Wave Science](https://ligo.org/gravitational-wave-science/)
 - Journal of New Music Research: [Concordia: A musical XR instrument for playing the solar system](https://doi.org/10.1080/09298215.2020.1714666)

@@ -4,6 +4,34 @@ const DEFAULT_STATE = Object.freeze({ mode: "compose", followingBodyId: null });
 export const INITIAL_PLAYBACK = true;
 export const INSTRUMENT_TITLE = "WAI GRAMOPHONE";
 
+export function playbackControl({ audioState, isPlaying }) {
+  if (!["locked", "paused", "running"].includes(audioState)) {
+    throw new Error(`Unknown audio state: ${audioState ?? "missing"}`);
+  }
+  if (audioState === "locked") {
+    return {
+      icon: "play",
+      label: "START SOUND",
+      ariaLabel: "Start sound",
+      pressed: false,
+    };
+  }
+  if (audioState === "running" && isPlaying) {
+    return {
+      icon: "pause",
+      label: "PAUSE",
+      ariaLabel: "Pause music",
+      pressed: true,
+    };
+  }
+  return {
+    icon: "play",
+    label: "PLAY",
+    ariaLabel: "Play music",
+    pressed: false,
+  };
+}
+
 const VOICE_VISUALS = Object.freeze({
   earth: Object.freeze({ label: "EARTH", colorName: "CYAN", color: 0x72edff }),
   moon: Object.freeze({ label: "MOON", colorName: "AMBER", color: 0xffc66d }),
@@ -87,11 +115,86 @@ export function shouldApplyGestationUpdate({ requestId, currentRequestId, engage
   return engaged && requestId === currentRequestId;
 }
 
+export function shouldApplyThereminRelease({ requestId, currentRequestId }) {
+  if (!Number.isInteger(requestId) || !Number.isInteger(currentRequestId)) {
+    throw new Error("Theremin release requires integer request ids");
+  }
+  return requestId === currentRequestId;
+}
+
 export function shouldShowMoonPlacementGuide({ activeDrag }) {
   if (typeof activeDrag !== "boolean") {
     throw new Error("Moon placement guide requires an explicit drag state");
   }
   return activeDrag;
+}
+
+export function audioUnlockPhase(pointerType) {
+  if (typeof pointerType !== "string" || pointerType.length === 0) {
+    throw new Error("Audio unlock requires a pointer type");
+  }
+  return pointerType === "mouse" ? "pointerdown" : "pointerup";
+}
+
+export function shouldCancelDirectManipulation({ pointerType, activeTouchCount }) {
+  if (pointerType !== "touch") return false;
+  if (!Number.isInteger(activeTouchCount) || activeTouchCount < 1) {
+    throw new Error("Direct manipulation requires a positive touch count");
+  }
+  return activeTouchCount > 1;
+}
+
+export function shouldDeferStringPluck(pointerType) {
+  if (typeof pointerType !== "string" || pointerType.length === 0) {
+    throw new Error("String pluck requires a pointer type");
+  }
+  return pointerType !== "mouse";
+}
+
+export function shouldSoundThereminOnRelease({ pointerType, active }) {
+  if (typeof active !== "boolean") {
+    throw new Error("Theremin release requires an explicit active state");
+  }
+  return active && audioUnlockPhase(pointerType) === "pointerup";
+}
+
+export function thereminReleaseDisposition({
+  wasActive,
+  releaseFailed,
+  hasReleaseParameters,
+}) {
+  if (typeof wasActive !== "boolean"
+    || typeof releaseFailed !== "boolean"
+    || typeof hasReleaseParameters !== "boolean") {
+    throw new Error("Theremin completion requires an explicit release state");
+  }
+  const shouldSoundRelease = wasActive && !releaseFailed && hasReleaseParameters;
+  return {
+    activeDuringCompletion: wasActive && !shouldSoundRelease,
+    completionPhase: releaseFailed || !wasActive ? "cancel" : null,
+    shouldSoundRelease,
+  };
+}
+
+export function shouldBeginThereminHold({
+  pointerType,
+  activeTouchCount,
+  traveled,
+  dragThreshold = 8,
+}) {
+  if (!Number.isFinite(traveled) || traveled < 0) {
+    throw new Error("Theremin hold requires a finite travel distance");
+  }
+  if (!Number.isFinite(dragThreshold) || dragThreshold <= 0) {
+    throw new Error("Theremin hold requires a positive drag threshold");
+  }
+  if (pointerType === "touch") {
+    if (!Number.isInteger(activeTouchCount) || activeTouchCount < 0) {
+      throw new Error("Theremin hold requires a valid touch count");
+    }
+    return activeTouchCount === 1 && traveled <= dragThreshold;
+  }
+  return activeTouchCount === 0 && traveled <= dragThreshold;
 }
 
 export function shouldRefreshMusicalConnection({
@@ -329,9 +432,51 @@ export function orbitStringStyle({ kind, selected, isPlaying, impulse }) {
 
 export function cameraScaleLabel(distance) {
   if (!Number.isFinite(distance) || distance <= 0) throw new Error("Camera distance must be positive");
-  if (distance >= 46) return `${Math.max(1, Math.round((distance - 46) * 4.5))} MLY`;
-  if (distance >= 19) return `${Math.round((distance - 16) * 2.5)} KLY`;
+  if (distance >= 69) return "COSMIC WEB";
+  if (distance >= 59) return "≈10 MLY WIDE";
+  if (distance >= 38) return "≈100 KLY WIDE";
+  if (distance >= 21) return "WITHIN 50 LY";
   return `${(distance * 0.12).toFixed(1)} AU`;
+}
+
+const COSMIC_CAMERA_DIRECTIONS = Object.freeze({
+  system: Object.freeze({ x: 0, y: 0.37, z: 0.929 }),
+  neighborhood: Object.freeze({ x: -0.08, y: 0.31, z: 0.948 }),
+  galaxy: Object.freeze({ x: 0.06, y: 0.89, z: 0.45 }),
+  localGroup: Object.freeze({ x: -0.08, y: 0.42, z: 0.904 }),
+  universe: Object.freeze({ x: 0.04, y: 0.3, z: 0.953 }),
+});
+
+const COSMIC_CAMERA_TARGET_OFFSETS = Object.freeze({
+  system: Object.freeze({ x: 0, y: 0, z: 0 }),
+  neighborhood: Object.freeze({ x: 0, y: 0, z: 0 }),
+  galaxy: Object.freeze({ x: -5.2, y: -0.7, z: 0 }),
+  localGroup: Object.freeze({ x: -1, y: 0, z: -2.5 }),
+  universe: Object.freeze({ x: 0, y: 0, z: -10 }),
+});
+
+export function cosmicCameraDirection(scaleId) {
+  const direction = COSMIC_CAMERA_DIRECTIONS[scaleId];
+  if (!direction) throw new Error(`Unknown cosmic camera scale: ${scaleId}`);
+  const length = Math.hypot(direction.x, direction.y, direction.z);
+  return {
+    x: direction.x / length,
+    y: direction.y / length,
+    z: direction.z / length,
+  };
+}
+
+export function cosmicCameraTarget(scaleId, starPosition) {
+  const offset = COSMIC_CAMERA_TARGET_OFFSETS[scaleId];
+  if (!offset) throw new Error(`Unknown cosmic camera scale: ${scaleId}`);
+  if (!starPosition || ![starPosition.x, starPosition.y, starPosition.z].every(Number.isFinite)) {
+    throw new Error("Cosmic camera target requires a finite star position");
+  }
+  return {
+    x: starPosition.x + offset.x,
+    y: starPosition.y + offset.y,
+    z: starPosition.z + offset.z,
+  };
 }
 
 export function nextCameraDistance(distance, direction) {
@@ -365,11 +510,20 @@ export function shouldAdvancePhysics({ isPlaying, interactionMode, creationActiv
   return isPlaying && !creationActive && interactionMode !== "moon";
 }
 
+export function shouldCelebrateThereminEnd({ sounded }) {
+  if (typeof sounded !== "boolean") {
+    throw new Error("Theremin completion requires an explicit sounded state");
+  }
+  return sounded;
+}
+
 export function instrumentHint({
   planetCount,
-  selectedBody = null,
   selectedMoonCount = 0,
   isListener = false,
+  hasPluckedOrbit = false,
+  thereminPhase = "idle",
+  hasPlayedTheremin = false,
 }) {
   if (!Number.isInteger(planetCount) || planetCount < 0) {
     throw new Error("Instrument guidance requires a planet count");
@@ -377,10 +531,40 @@ export function instrumentHint({
   if (!Number.isInteger(selectedMoonCount) || selectedMoonCount < 0) {
     throw new Error("Instrument guidance requires a moon count");
   }
-  if (isListener) return "TOUCH AN ORBIT TO PLAY IT";
-  if (planetCount === 0) return "DRAG FROM THE STAR TO MAKE A PLANET";
-  if (selectedBody?.kind === "planet" && selectedMoonCount < 2) {
-    return "DRAG FROM THE PLANET TO MAKE A MOON";
+  if (!["idle", "arming", "active"].includes(thereminPhase)) {
+    throw new Error(`Unknown theremin guidance phase: ${thereminPhase}`);
   }
-  return "TOUCH AN ORBIT TO PLAY IT";
+  if (isListener) return "TOUCH A GLOWING ORBIT";
+  if (planetCount === 0) return "DRAG FROM THE STAR TO MAKE A PLANET";
+  if (thereminPhase === "arming") return "KEEP HOLDING";
+  if (thereminPhase === "active") return "BEND THE NOTE";
+  if (!hasPluckedOrbit) return "TOUCH A GLOWING ORBIT";
+  if (!hasPlayedTheremin) return "PLAY THE LIGHT THEREMIN";
+  return "FLY TO THE MILKY WAY";
+}
+
+export function instrumentGuidanceDetail({
+  planetCount,
+  selectedMoonCount = 0,
+  isListener = false,
+  hasPluckedOrbit = false,
+  thereminPhase = "idle",
+  hasPlayedTheremin = false,
+}) {
+  if (!Number.isInteger(planetCount) || planetCount < 0) {
+    throw new Error("Instrument detail requires a planet count");
+  }
+  if (!Number.isInteger(selectedMoonCount) || selectedMoonCount < 0) {
+    throw new Error("Instrument detail requires a moon count");
+  }
+  if (!["idle", "arming", "active"].includes(thereminPhase)) {
+    throw new Error(`Unknown theremin guidance phase: ${thereminPhase}`);
+  }
+  if (isListener) return "SWIPE ACROSS ORBITS TO PLAY THE COMPOSITION";
+  if (planetCount === 0) return "PULL OUTWARD · RELEASE TO HEAR A WORLD";
+  if (thereminPhase === "arming") return "A LIGHT IS FORMING";
+  if (thereminPhase === "active") return "LEFT–RIGHT = PITCH · UP–DOWN = POWER";
+  if (!hasPluckedOrbit) return "SWIPE ACROSS MORE ORBITS TO PLAY A CHORD";
+  if (!hasPlayedTheremin) return "HOLD EMPTY SPACE · THEN MOVE";
+  return "TAP MILKY WAY TO FLY";
 }

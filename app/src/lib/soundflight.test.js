@@ -6,6 +6,8 @@ import {
   cameraScaleLabel,
   buildMusicalConnections,
   canBeginRadialLaunchFromHit,
+  cosmicCameraDirection,
+  cosmicCameraTarget,
   createSoundflightState,
   dopplerTintedColor,
   frequencyToNoteName,
@@ -13,9 +15,18 @@ import {
   INSTRUMENT_TITLE,
   launchGuidance,
   nextCameraDistance,
+  playbackControl,
+  audioUnlockPhase,
   reduceSoundflightState,
   selectRenderProfile,
   shouldApplyGestationUpdate,
+  shouldApplyThereminRelease,
+  shouldBeginThereminHold,
+  shouldCelebrateThereminEnd,
+  shouldCancelDirectManipulation,
+  shouldDeferStringPluck,
+  thereminReleaseDisposition,
+  shouldSoundThereminOnRelease,
   shouldShowMoonPlacementGuide,
   shouldRefreshMusicalConnection,
   sonicIntensity,
@@ -25,6 +36,31 @@ import {
 test("the instrument opens already moving instead of presenting a dormant play state", () => {
   assert.equal(INITIAL_PLAYBACK, true);
   assert.equal(INSTRUMENT_TITLE, "WAI GRAMOPHONE");
+});
+
+test("the playback control never claims sound is playing before Web Audio is running", () => {
+  assert.deepEqual(playbackControl({ audioState: "locked", isPlaying: true }), {
+    icon: "play",
+    label: "START SOUND",
+    ariaLabel: "Start sound",
+    pressed: false,
+  });
+  assert.deepEqual(playbackControl({ audioState: "running", isPlaying: true }), {
+    icon: "pause",
+    label: "PAUSE",
+    ariaLabel: "Pause music",
+    pressed: true,
+  });
+  assert.deepEqual(playbackControl({ audioState: "paused", isPlaying: false }), {
+    icon: "play",
+    label: "PLAY",
+    ariaLabel: "Play music",
+    pressed: false,
+  });
+  assert.throws(
+    () => playbackControl({ audioState: "mystery", isPlaying: true }),
+    /unknown audio state/i,
+  );
 });
 
 test("moon placement geometry stays hidden until the player actually drags", () => {
@@ -97,6 +133,135 @@ test("a cancelled gestation request cannot restart its tone after audio resumes"
   assert.equal(shouldApplyGestationUpdate({ requestId: 4, currentRequestId: 4, engaged: true }), true);
   assert.equal(shouldApplyGestationUpdate({ requestId: 4, currentRequestId: 5, engaged: true }), false);
   assert.equal(shouldApplyGestationUpdate({ requestId: 4, currentRequestId: 4, engaged: false }), false);
+});
+
+test("a deferred theremin release cannot resurrect after cancellation", () => {
+  assert.equal(
+    shouldApplyThereminRelease({ requestId: 4, currentRequestId: 4 }),
+    true,
+  );
+  assert.equal(
+    shouldApplyThereminRelease({ requestId: 4, currentRequestId: 5 }),
+    false,
+  );
+  assert.throws(
+    () => shouldApplyThereminRelease({ requestId: 4 }),
+    /request ids/i,
+  );
+});
+
+test("a second touch belongs to camera navigation, never creation or theremin", () => {
+  assert.equal(shouldCancelDirectManipulation({ pointerType: "touch", activeTouchCount: 1 }), false);
+  assert.equal(shouldCancelDirectManipulation({ pointerType: "touch", activeTouchCount: 2 }), true);
+  assert.equal(shouldCancelDirectManipulation({ pointerType: "mouse", activeTouchCount: 2 }), false);
+  assert.throws(
+    () => shouldCancelDirectManipulation({ pointerType: "touch", activeTouchCount: 0 }),
+    /positive touch count/i,
+  );
+});
+
+test("touch strings wait for pointer release so a second finger can cancel the note", () => {
+  assert.equal(shouldDeferStringPluck("touch"), true);
+  assert.equal(shouldDeferStringPluck("mouse"), false);
+  assert.equal(shouldDeferStringPluck("pen"), true);
+  assert.throws(() => shouldDeferStringPluck(), /pointer type/i);
+});
+
+test("mouse unlocks on press while touch and pen unlock on their valid release", () => {
+  assert.equal(audioUnlockPhase("mouse"), "pointerdown");
+  assert.equal(audioUnlockPhase("touch"), "pointerup");
+  assert.equal(audioUnlockPhase("pen"), "pointerup");
+  assert.throws(() => audioUnlockPhase(), /pointer type/i);
+});
+
+test("a first locked touch or pen theremin gesture sounds once on release", () => {
+  assert.equal(shouldSoundThereminOnRelease({ pointerType: "touch", active: true }), true);
+  assert.equal(shouldSoundThereminOnRelease({ pointerType: "pen", active: true }), true);
+  assert.equal(shouldSoundThereminOnRelease({ pointerType: "mouse", active: true }), false);
+  assert.equal(shouldSoundThereminOnRelease({ pointerType: "touch", active: false }), false);
+  assert.throws(
+    () => shouldSoundThereminOnRelease({ pointerType: "touch" }),
+    /active state/i,
+  );
+});
+
+test("a failed theremin release can never be reported as a successful note", () => {
+  assert.deepEqual(
+    thereminReleaseDisposition({
+      wasActive: true,
+      releaseFailed: true,
+      hasReleaseParameters: false,
+    }),
+    {
+      activeDuringCompletion: true,
+      completionPhase: "cancel",
+      shouldSoundRelease: false,
+    },
+  );
+  assert.deepEqual(
+    thereminReleaseDisposition({
+      wasActive: true,
+      releaseFailed: false,
+      hasReleaseParameters: true,
+    }),
+    {
+      activeDuringCompletion: false,
+      completionPhase: null,
+      shouldSoundRelease: true,
+    },
+  );
+  assert.deepEqual(
+    thereminReleaseDisposition({
+      wasActive: true,
+      releaseFailed: false,
+      hasReleaseParameters: false,
+    }),
+    {
+      activeDuringCompletion: true,
+      completionPhase: null,
+      shouldSoundRelease: false,
+    },
+  );
+  assert.deepEqual(
+    thereminReleaseDisposition({
+      wasActive: false,
+      releaseFailed: false,
+      hasReleaseParameters: false,
+    }),
+    {
+      activeDuringCompletion: false,
+      completionPhase: "cancel",
+      shouldSoundRelease: false,
+    },
+  );
+  assert.throws(
+    () => thereminReleaseDisposition({
+      wasActive: true,
+      releaseFailed: "yes",
+      hasReleaseParameters: false,
+    }),
+    /explicit release state/i,
+  );
+});
+
+test("theremin onboarding advances only after the instrument really sounded", () => {
+  assert.equal(shouldCelebrateThereminEnd({ sounded: true }), true);
+  assert.equal(shouldCelebrateThereminEnd({ sounded: false }), false);
+  assert.throws(
+    () => shouldCelebrateThereminEnd({ sounded: "maybe" }),
+    /explicit sounded state/i,
+  );
+});
+
+test("the theremin starts only after a single-finger hold survives navigation gestures", () => {
+  assert.equal(shouldBeginThereminHold({ pointerType: "touch", activeTouchCount: 1, traveled: 3 }), true);
+  assert.equal(shouldBeginThereminHold({ pointerType: "touch", activeTouchCount: 2, traveled: 3 }), false);
+  assert.equal(shouldBeginThereminHold({ pointerType: "touch", activeTouchCount: 1, traveled: 14 }), false);
+  assert.equal(shouldBeginThereminHold({ pointerType: "mouse", activeTouchCount: 0, traveled: 3 }), true);
+  assert.throws(
+    () => shouldBeginThereminHold({ pointerType: "touch", activeTouchCount: 1, traveled: Number.NaN }),
+    /finite travel distance/i,
+  );
 });
 
 test("musical connection geometry refreshes only after a visible move and frame budget", () => {
@@ -264,12 +429,54 @@ test("sonic brightness stays event-driven and bounded", () => {
   }), /finite physical values/i);
 });
 
-test("camera distance produces calm editorial scale labels", () => {
+test("camera distance uses honest semantic scale labels instead of fake continuous units", () => {
   assert.equal(cameraScaleLabel(5), "0.6 AU");
   assert.equal(cameraScaleLabel(10), "1.2 AU");
-  assert.equal(cameraScaleLabel(24), "20 KLY");
-  assert.equal(cameraScaleLabel(46), "1 MLY");
-  assert.equal(cameraScaleLabel(54), "36 MLY");
+  assert.equal(cameraScaleLabel(27), "WITHIN 50 LY");
+  assert.equal(cameraScaleLabel(50), "≈100 KLY WIDE");
+  assert.equal(cameraScaleLabel(63), "≈10 MLY WIDE");
+  assert.equal(cameraScaleLabel(72), "COSMIC WEB");
+});
+
+test("semantic camera directions reveal the form of each world without twisting the player", () => {
+  const system = cosmicCameraDirection("system");
+  const galaxy = cosmicCameraDirection("galaxy");
+  const localGroup = cosmicCameraDirection("localGroup");
+
+  assert.ok(system.z > system.y, "the orbit harp stays in its familiar editorial angle");
+  assert.ok(galaxy.y > galaxy.z, "the Milky Way opens toward a legible face-on spiral");
+  assert.ok(localGroup.z > localGroup.y, "the Local Group regains spatial depth");
+  assert.ok(["system", "neighborhood", "galaxy", "localGroup", "universe"].every((id) => {
+    const direction = cosmicCameraDirection(id);
+    return Math.abs(Math.hypot(direction.x, direction.y, direction.z) - 1) < 1e-9;
+  }));
+  assert.throws(() => cosmicCameraDirection("nowhere"), /unknown cosmic camera scale/i);
+});
+
+test("each cosmic world has an authored centre instead of drifting off a small screen", () => {
+  const star = { x: 2, y: 0, z: -1 };
+  assert.deepEqual(cosmicCameraTarget("system", star), star);
+  assert.deepEqual(cosmicCameraTarget("neighborhood", star), star);
+  assert.deepEqual(cosmicCameraTarget("galaxy", star), {
+    x: -3.2,
+    y: -0.7,
+    z: -1,
+  });
+  assert.deepEqual(cosmicCameraTarget("localGroup", star), {
+    x: 1,
+    y: 0,
+    z: -3.5,
+  });
+  assert.deepEqual(cosmicCameraTarget("universe", star), {
+    x: 2,
+    y: 0,
+    z: -11,
+  });
+  assert.throws(() => cosmicCameraTarget("nowhere", star), /unknown cosmic camera scale/i);
+  assert.throws(
+    () => cosmicCameraTarget("galaxy", { x: Number.NaN, y: 0, z: 0 }),
+    /finite star position/i,
+  );
 });
 
 test("explicit camera zoom stays inside the same safe flight envelope as gestures", () => {

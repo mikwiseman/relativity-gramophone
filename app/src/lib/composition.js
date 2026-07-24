@@ -1,5 +1,6 @@
 import { MAX_WORLDS, PHYSICS_MODEL } from "./physicsEngine.js";
 import { assertResonanceSeals } from "./gameProgress.js";
+import { cosmicLandmarkById } from "./cosmicInstrument.js";
 import { defaultVoiceForBody, isCosmicVoice, SONIFICATION_MODEL } from "./sonification.js";
 
 const FORMAT = "tau-record/6";
@@ -187,6 +188,12 @@ function assertEvent(event, previousTime, aliveIds, kindsById, parentById) {
     return;
   }
 
+  if (event.kind === "cosmic-landmark") {
+    if (typeof event.landmarkId !== "string") throw new Error("Invalid cosmic landmark event");
+    cosmicLandmarkById(event.landmarkId);
+    return;
+  }
+
   if (event.kind === "legacy-orbit") {
     if (!VALID_BODY_IDS.has(event.bodyId)) throw new Error("Invalid score event");
     for (const key of ["semiMajor", "phase"]) {
@@ -325,6 +332,21 @@ export function createBlankComposition() {
     seed: "one-star",
     bodies: [],
   };
+}
+
+export function recordingDuration(elapsed, events) {
+  if (!Number.isFinite(elapsed) || elapsed < 0) {
+    throw new Error("Recording duration requires a finite elapsed time");
+  }
+  if (!Array.isArray(events)) throw new Error("Recording duration requires score events");
+  let lastSoundAt = elapsed;
+  for (const event of events) {
+    if (!Number.isFinite(event?.at) || event.at < 0 || event.at > 3_600) {
+      throw new Error("Recording duration requires finite score event times");
+    }
+    lastSoundAt = Math.max(lastSoundAt, event.at);
+  }
+  return Math.max(12, Math.min(3_600, Math.ceil(lastSoundAt + 1)));
 }
 
 export function resolveScoreRoster(composition) {

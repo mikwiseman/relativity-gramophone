@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  COSMIC_DESTINATIONS,
+  cosmicDestination,
+  cosmicLandmarkById,
+  cosmicJourneyForScale,
+  cosmicLandmarksForScale,
   cathedralIntensity,
+  cosmicScaleForView,
   cosmicScaleForDistance,
   memoryCometEnvelope,
   thereminParameters,
@@ -11,24 +17,118 @@ import {
 test("semantic zoom reveals a named musical scale instead of only a distance", () => {
   const orbit = cosmicScaleForDistance(4);
   const system = cosmicScaleForDistance(12);
-  const galaxy = cosmicScaleForDistance(30);
-  const universe = cosmicScaleForDistance(58);
+  const neighborhood = cosmicScaleForDistance(27);
+  const galaxy = cosmicScaleForDistance(50);
+  const localGroup = cosmicScaleForDistance(63);
+  const universe = cosmicScaleForDistance(72);
 
   assert.equal(orbit.id, "orbit");
   assert.equal(system.id, "system");
+  assert.equal(neighborhood.id, "neighborhood");
   assert.equal(galaxy.id, "galaxy");
+  assert.equal(localGroup.id, "localGroup");
   assert.equal(universe.id, "universe");
   assert.ok(orbit.systemMix > galaxy.systemMix);
-  assert.ok(galaxy.galaxyMix > system.galaxyMix);
-  assert.ok(universe.universeMix > galaxy.universeMix);
-  assert.ok([orbit, system, galaxy, universe].every((scale) => (
+  assert.ok(neighborhood.neighborhoodMix > system.neighborhoodMix);
+  assert.ok(galaxy.galaxyMix > neighborhood.galaxyMix);
+  assert.ok(localGroup.localGroupMix > galaxy.localGroupMix);
+  assert.ok(universe.universeMix > localGroup.universeMix);
+  assert.ok([orbit, system, neighborhood, galaxy, localGroup, universe].every((scale) => (
     scale.systemMix >= 0
     && scale.systemMix <= 1
+    && scale.neighborhoodMix >= 0
+    && scale.neighborhoodMix <= 1
     && scale.galaxyMix >= 0
     && scale.galaxyMix <= 1
+    && scale.localGroupMix >= 0
+    && scale.localGroupMix <= 1
     && scale.universeMix >= 0
     && scale.universeMix <= 1
   )));
+});
+
+test("authored cosmic destinations make every world reachable in one action", () => {
+  const ids = ["system", "neighborhood", "galaxy", "localGroup", "universe"];
+  assert.deepEqual(Object.keys(COSMIC_DESTINATIONS), ids);
+
+  for (const id of ids) {
+    const destination = cosmicDestination(id);
+    assert.equal(destination.id, id);
+    assert.equal(cosmicScaleForDistance(destination.distance).id, id);
+    assert.ok(destination.distance >= 3.2 && destination.distance <= 72);
+    assert.ok(destination.measure.length > 0);
+  }
+
+  assert.throws(() => cosmicDestination("nowhere"), /unknown cosmic destination/i);
+});
+
+test("an authored return stays in the system even when a large composition needs more camera room", () => {
+  assert.equal(cosmicScaleForDistance(22.55).id, "neighborhood");
+  assert.equal(cosmicScaleForView(22.55, "system").id, "system");
+  assert.equal(cosmicScaleForView(22.55, null).id, "neighborhood");
+  assert.throws(() => cosmicScaleForView(22.55, "unknown"), /unknown authored cosmic destination/i);
+});
+
+test("the child-facing journey always exposes one next world and one way home", () => {
+  assert.deepEqual(cosmicJourneyForScale("orbit"), {
+    outward: COSMIC_DESTINATIONS.neighborhood,
+    home: null,
+  });
+  assert.deepEqual(cosmicJourneyForScale("system"), {
+    outward: COSMIC_DESTINATIONS.neighborhood,
+    home: null,
+  });
+  assert.deepEqual(cosmicJourneyForScale("neighborhood"), {
+    outward: COSMIC_DESTINATIONS.galaxy,
+    home: COSMIC_DESTINATIONS.system,
+  });
+  assert.deepEqual(cosmicJourneyForScale("galaxy"), {
+    outward: COSMIC_DESTINATIONS.localGroup,
+    home: COSMIC_DESTINATIONS.system,
+  });
+  assert.deepEqual(cosmicJourneyForScale("localGroup"), {
+    outward: COSMIC_DESTINATIONS.universe,
+    home: COSMIC_DESTINATIONS.system,
+  });
+  assert.deepEqual(cosmicJourneyForScale("universe"), {
+    outward: null,
+    home: COSMIC_DESTINATIONS.system,
+  });
+  assert.throws(() => cosmicJourneyForScale("nowhere"), /unknown cosmic scale/i);
+});
+
+test("real cosmic landmarks are sparse, playable, and bound to one semantic world", () => {
+  const neighborhood = cosmicLandmarksForScale("neighborhood");
+  const galaxy = cosmicLandmarksForScale("galaxy");
+  const localGroup = cosmicLandmarksForScale("localGroup");
+  const universe = cosmicLandmarksForScale("universe");
+  const all = [...neighborhood, ...galaxy, ...localGroup, ...universe];
+
+  assert.ok(neighborhood.some((landmark) => landmark.id === "proxima-centauri"));
+  assert.ok(galaxy.some((landmark) => landmark.id === "galactic-centre"));
+  assert.ok(localGroup.some((landmark) => landmark.id === "milky-way"));
+  assert.ok(localGroup.some((landmark) => landmark.id === "andromeda"));
+  assert.ok(universe.some((landmark) => landmark.id === "cosmic-web"));
+  assert.ok([neighborhood, galaxy, localGroup, universe].every((landmarks) => landmarks.length <= 4));
+  assert.ok(
+    neighborhood.every((landmark) => Math.hypot(landmark.position[0], landmark.position[2]) <= 6.2),
+    "nearby stars must remain playable in a narrow portrait viewport",
+  );
+  assert.equal(new Set(all.map((landmark) => landmark.id)).size, all.length);
+  assert.ok(all.every((landmark) => (
+    landmark.scale
+    && landmark.name
+    && landmark.detail
+    && landmark.voice
+    && Number.isFinite(landmark.frequency)
+    && landmark.frequency > 0
+    && Array.isArray(landmark.position)
+    && landmark.position.length === 3
+    && landmark.position.every(Number.isFinite)
+  )));
+  assert.throws(() => cosmicLandmarksForScale("system"), /does not have cosmic landmarks/i);
+  assert.equal(cosmicLandmarkById("andromeda").scale, "localGroup");
+  assert.throws(() => cosmicLandmarkById("imaginary-galaxy"), /unknown cosmic landmark/i);
 });
 
 test("the gravitational theremin is continuous, monophonic, and safely bounded", () => {

@@ -30,6 +30,7 @@ import {
   moonGuidance,
   reduceSoundflightState,
   createSoundflightState,
+  instrumentGuidanceDetail,
   instrumentHint,
   shouldAdvancePhysics,
 } from "./soundflight.js";
@@ -292,16 +293,69 @@ test("an active direct creation gesture freezes the system and uses a bounded lo
 
 test("one contextual sentence teaches the next literal gesture", () => {
   assert.equal(instrumentHint({ planetCount: 0 }), "DRAG FROM THE STAR TO MAKE A PLANET");
+  assert.equal(
+    instrumentGuidanceDetail({ planetCount: 0 }),
+    "PULL OUTWARD · RELEASE TO HEAR A WORLD",
+  );
   assert.equal(instrumentHint({
     planetCount: 2,
     selectedBody: { kind: "planet" },
     selectedMoonCount: 0,
-  }), "DRAG FROM THE PLANET TO MAKE A MOON");
+  }), "TOUCH A GLOWING ORBIT");
+  assert.equal(instrumentGuidanceDetail({
+    planetCount: 2,
+    selectedBody: { kind: "planet" },
+    selectedMoonCount: 0,
+  }), "SWIPE ACROSS MORE ORBITS TO PLAY A CHORD");
+  assert.equal(instrumentHint({
+    planetCount: 2,
+    hasPluckedOrbit: true,
+  }), "PLAY THE LIGHT THEREMIN");
+  assert.equal(instrumentGuidanceDetail({
+    planetCount: 2,
+    hasPluckedOrbit: true,
+  }), "HOLD EMPTY SPACE · THEN MOVE");
+  assert.equal(instrumentHint({
+    planetCount: 2,
+    hasPluckedOrbit: true,
+    thereminPhase: "arming",
+  }), "KEEP HOLDING");
+  assert.equal(instrumentGuidanceDetail({
+    planetCount: 2,
+    hasPluckedOrbit: true,
+    thereminPhase: "arming",
+  }), "A LIGHT IS FORMING");
+  assert.equal(instrumentHint({
+    planetCount: 2,
+    hasPluckedOrbit: true,
+    thereminPhase: "active",
+  }), "BEND THE NOTE");
+  assert.equal(instrumentGuidanceDetail({
+    planetCount: 2,
+    hasPluckedOrbit: true,
+    thereminPhase: "active",
+  }), "LEFT–RIGHT = PITCH · UP–DOWN = POWER");
+  assert.equal(instrumentHint({
+    planetCount: 2,
+    hasPluckedOrbit: true,
+    hasPlayedTheremin: true,
+  }), "FLY TO THE MILKY WAY");
+  assert.equal(instrumentGuidanceDetail({
+    planetCount: 2,
+    hasPluckedOrbit: true,
+    hasPlayedTheremin: true,
+  }), "TAP MILKY WAY TO FLY");
   assert.equal(instrumentHint({
     planetCount: 2,
     selectedBody: { kind: "moon" },
     selectedMoonCount: 0,
-  }), "TOUCH AN ORBIT TO PLAY IT");
+    isListener: true,
+  }), "TOUCH A GLOWING ORBIT");
+  assert.equal(instrumentGuidanceDetail({
+    planetCount: 2,
+    selectedBody: { kind: "moon" },
+    isListener: true,
+  }), "SWIPE ACROSS ORBITS TO PLAY THE COMPOSITION");
 });
 
 test("a moon birth survives the share format and listener replay contract", () => {

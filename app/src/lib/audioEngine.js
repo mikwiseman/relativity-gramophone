@@ -10,6 +10,12 @@ const AudioContextClass = globalThis.AudioContext ?? globalThis.webkitAudioConte
 
 const REVERB_SECONDS = 3.1;
 
+export function assertAudioContextRunning(state) {
+  if (state === "running") return state;
+  if (state === "closed") throw new Error("The audio context is closed");
+  throw new Error("Sound is ready; the browser is waiting for a tap to start it");
+}
+
 function ramp(parameter, value, now, duration = 0.08) {
   parameter.cancelScheduledValues(now);
   parameter.setValueAtTime(Math.max(0.0001, parameter.value), now);
@@ -45,12 +51,15 @@ export class AudioEngine {
   gestation = null;
   theremin = null;
   voices = new Map();
+  stateListeners = new Set();
   voiceWaves = null;
   noiseBuffer = null;
   latestFrame = null;
   cosmicPerspective = Object.freeze({
     systemMix: 1,
+    neighborhoodMix: 0,
     galaxyMix: 0,
+    localGroupMix: 0,
     universeMix: 0,
   });
 
@@ -58,13 +67,17 @@ export class AudioEngine {
     if (!AudioContextClass) throw new Error("Web Audio API is not available in this browser");
 
     if (!this.context) this.createGraph();
-    if (this.context.state === "suspended") await this.context.resume();
+    if (this.context.state !== "running") await this.context.resume();
+    const state = assertAudioContextRunning(this.context.state);
     this.setFieldActive(activateField);
     if (this.latestFrame) this.updateField(this.latestFrame);
+    this.notifyState();
+    return state;
   }
 
   createGraph() {
     this.context = new AudioContextClass({ latencyHint: "interactive" });
+    this.context.addEventListener?.("statechange", () => this.notifyState());
     this.master = this.context.createGain();
     this.sumBus = this.context.createGain();
     this.shelf = this.context.createBiquadFilter();
@@ -106,6 +119,23 @@ export class AudioEngine {
     this.noiseBuffer = this.createNoiseBuffer();
     this.createDrone();
     this.createCosmicChoir();
+    this.notifyState();
+  }
+
+  getState() {
+    return this.context?.state ?? "uninitialized";
+  }
+
+  subscribeState(listener) {
+    if (typeof listener !== "function") throw new Error("Audio state listener must be a function");
+    this.stateListeners.add(listener);
+    listener(this.getState());
+    return () => this.stateListeners.delete(listener);
+  }
+
+  notifyState() {
+    const state = this.getState();
+    for (const listener of this.stateListeners) listener(state);
   }
 
   createSaturationCurve() {
@@ -338,12 +368,20 @@ export class AudioEngine {
   }
 
   setCosmicPerspective(scale) {
-    if (![scale?.systemMix, scale?.galaxyMix, scale?.universeMix].every(Number.isFinite)) {
+    if (![
+      scale?.systemMix,
+      scale?.neighborhoodMix,
+      scale?.galaxyMix,
+      scale?.localGroupMix,
+      scale?.universeMix,
+    ].every(Number.isFinite)) {
       throw new Error("Cosmic perspective requires finite scale mixes");
     }
     this.cosmicPerspective = {
       systemMix: Math.min(1, Math.max(0, scale.systemMix)),
+      neighborhoodMix: Math.min(1, Math.max(0, scale.neighborhoodMix)),
       galaxyMix: Math.min(1, Math.max(0, scale.galaxyMix)),
+      localGroupMix: Math.min(1, Math.max(0, scale.localGroupMix)),
       universeMix: Math.min(1, Math.max(0, scale.universeMix)),
     };
   }
@@ -374,8 +412,11 @@ export class AudioEngine {
     );
     const perspective = this.cosmicPerspective;
     const detailGain = Math.max(
-      0.22,
-      perspective.systemMix * (1 - perspective.universeMix * 0.28),
+      0.18,
+      (
+        perspective.systemMix
+        + perspective.neighborhoodMix * 0.28
+      ) * (1 - perspective.universeMix * 0.34),
     );
 
     const aliveIds = new Set(frame.bodies.map((body) => body.id));
@@ -447,10 +488,14 @@ export class AudioEngine {
       const bodyEnergy = Math.min(1, frame.bodies.filter((body) => body.kind === "planet").length / 5);
       const choirGain = 0.0001
         + perspective.galaxyMix * (0.012 + bodyEnergy * 0.018)
+        + perspective.localGroupMix * 0.011
         + perspective.universeMix * 0.008;
       this.cosmicChoir.gain.gain.setTargetAtTime(choirGain, now, 0.42);
       this.cosmicChoir.filter.frequency.setTargetAtTime(
-        360 + resonanceStrength * 520 + perspective.universeMix * 180,
+        360
+          + resonanceStrength * 520
+          + perspective.localGroupMix * 110
+          + perspective.universeMix * 180,
         now,
         0.36,
       );
@@ -912,6 +957,63 @@ export class AudioEngine {
     });
   }
 
+  playCosmicLandmark(landmark) {
+    if (!this.context || this.context.state !== "running") return;
+    if (!landmark
+      || typeof landmark.name !== "string"
+      || !Number.isFinite(landmark.frequency)
+      || landmark.frequency <= 0
+      || !COSMIC_VOICES[landmark.voice]) {
+      throw new Error("A cosmic landmark requires a named playable voice");
+    }
+
+    const ratiosByScale = {
+      neighborhood: [1, 3 / 2],
+      galaxy: [1, 5 / 4, 3 / 2],
+      localGroup: [1, 4 / 3, 3 / 2],
+      universe: [1, 5 / 4, 3 / 2, 2],
+    };
+    const ratios = ratiosByScale[landmark.scale];
+    if (!ratios) throw new Error(`Unknown cosmic landmark scale: ${landmark.scale}`);
+
+    const now = this.context.currentTime;
+    const duration = 1.7 + ratios.length * 0.26;
+    ratios.forEach((ratio, index) => {
+      const oscillator = this.context.createOscillator();
+      const filter = this.context.createBiquadFilter();
+      const gain = this.context.createGain();
+      const panner = this.context.createStereoPanner();
+      const reverbSend = this.context.createGain();
+      const onset = now + index * 0.055;
+      const peak = 0.024 / (1 + index * 0.2);
+
+      this.applyVoiceWave(oscillator, landmark.voice, COSMIC_VOICES[landmark.voice].waveform);
+      oscillator.frequency.setValueAtTime(landmark.frequency * ratio * 0.988, onset);
+      oscillator.frequency.exponentialRampToValueAtTime(
+        landmark.frequency * ratio,
+        onset + 0.12,
+      );
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(980 + index * 720, onset);
+      filter.frequency.exponentialRampToValueAtTime(420 + index * 260, onset + duration);
+      filter.Q.value = 1.1 + index * 0.34;
+      panner.pan.value = ratios.length === 1
+        ? 0
+        : -0.62 + (index / (ratios.length - 1)) * 1.24;
+      reverbSend.gain.value = 0.34 + index * 0.05;
+
+      gain.gain.setValueAtTime(0.0001, onset);
+      gain.gain.exponentialRampToValueAtTime(peak, onset + 0.055 + index * 0.018);
+      gain.gain.exponentialRampToValueAtTime(peak * 0.38, onset + 0.52);
+      gain.gain.exponentialRampToValueAtTime(0.0001, onset + duration);
+
+      oscillator.connect(filter).connect(gain).connect(panner).connect(this.master);
+      panner.connect(reverbSend).connect(this.reverb);
+      oscillator.start(onset);
+      oscillator.stop(onset + duration + 0.08);
+    });
+  }
+
   playChallengeSuccess() {
     if (!this.context || this.context.state !== "running") return;
     const now = this.context.currentTime;
@@ -936,5 +1038,7 @@ export class AudioEngine {
       this.setFieldActive(false);
       await this.context.suspend();
     }
+    this.notifyState();
+    return this.getState();
   }
 }

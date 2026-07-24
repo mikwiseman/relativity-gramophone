@@ -24,8 +24,11 @@ import {
 } from "../lib/starBirth.js";
 import {
   bodyToStage,
+  audioUnlockPhase,
   buildResonanceBridge,
   cameraScaleLabel,
+  cosmicCameraDirection,
+  cosmicCameraTarget,
   dopplerTintedColor,
   editorialCameraDistance,
   nextCameraDistance,
@@ -33,9 +36,14 @@ import {
   selectRenderProfile,
   shouldAutoSoundBody,
   shouldAdvancePhysics,
+  shouldBeginThereminHold,
+  shouldCancelDirectManipulation,
+  shouldDeferStringPluck,
+  shouldSoundThereminOnRelease,
   shouldOrbitAffectCameraFit,
   shouldShowMoonPlacementGuide,
   sonicIntensity,
+  thereminReleaseDisposition,
   voiceVisual,
 } from "../lib/soundflight.js";
 import { nearestStringPoint } from "../lib/harpStrings.js";
@@ -44,8 +52,13 @@ import {
   satelliteStabilityBand,
 } from "../lib/satelliteBirth.js";
 import {
+  COSMIC_DESTINATIONS,
   cathedralIntensity,
+  cosmicDestination,
+  cosmicLandmarkById,
+  cosmicLandmarksForScale,
   cosmicScaleForDistance,
+  cosmicScaleForView,
   memoryCometEnvelope,
   thereminParameters,
 } from "../lib/cosmicInstrument.js";
@@ -64,7 +77,7 @@ const MOON_DISPLAY_MAGNIFICATION = 54;
 const CREATION_DRAG_THRESHOLD = 8;
 const THEREMIN_HOLD_MS = 360;
 const MEMORY_COMET_DURATION = 5.8;
-const GALAXY_CENTER = Object.freeze({ x: -13, y: -2.4, z: 1.5 });
+const GALAXY_CENTER = Object.freeze({ x: -5.2, y: -0.7, z: 0 });
 
 const trailVertexShader = `
   attribute float aAlpha;
@@ -214,14 +227,17 @@ const starfieldVertexShader = `
   attribute float aSize;
   attribute float aPhase;
   attribute float aTwinkleSpeed;
+  attribute float aDust;
   attribute vec3 aColor;
   uniform float uTime;
   uniform float uTwinkle;
   uniform float uPixelRatio;
   varying vec3 vColor;
   varying float vGlow;
+  varying float vDust;
   void main() {
     vColor = aColor;
+    vDust = aDust;
     float twinkle = 1.0 - uTwinkle * (0.32 + 0.18 * sin(aPhase * 3.7)) * (0.5 + 0.5 * sin(uTime * aTwinkleSpeed + aPhase));
     vGlow = twinkle;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
@@ -232,12 +248,15 @@ const starfieldVertexShader = `
 
 const starfieldFragmentShader = `
   uniform float uOpacity;
+  uniform float uDustOpacity;
   varying vec3 vColor;
   varying float vGlow;
+  varying float vDust;
   void main() {
     vec2 offset = gl_PointCoord - vec2(0.5);
     float falloff = smoothstep(0.5, 0.04, length(offset));
-    gl_FragColor = vec4(vColor, falloff * uOpacity * vGlow);
+    float layerOpacity = mix(1.0, uDustOpacity, vDust);
+    gl_FragColor = vec4(vColor, falloff * uOpacity * vGlow * layerOpacity);
   }
 `;
 
@@ -249,6 +268,7 @@ function createStarfield({ starCount, dustCount, twinkle }) {
   const sizes = new Float32Array(total);
   const phases = new Float32Array(total);
   const speeds = new Float32Array(total);
+  const dust = new Float32Array(total);
 
   for (let index = 0; index < starCount; index += 1) {
     const radius = 34 + random() * 34;
@@ -267,6 +287,7 @@ function createStarfield({ starCount, dustCount, twinkle }) {
     sizes[index] = accent ? 2 + random() * 1.1 : 0.3 + magnitude * magnitude * 1;
     phases[index] = random() * Math.PI * 2;
     speeds[index] = 0.24 + random() * 1.1;
+    dust[index] = 0;
   }
 
   for (let index = starCount; index < total; index += 1) {
@@ -282,6 +303,7 @@ function createStarfield({ starCount, dustCount, twinkle }) {
     sizes[index] = 0.26 + random() * 0.5;
     phases[index] = random() * Math.PI * 2;
     speeds[index] = 0.12 + random() * 0.5;
+    dust[index] = 1;
   }
 
   const geometry = new THREE.BufferGeometry();
@@ -290,12 +312,14 @@ function createStarfield({ starCount, dustCount, twinkle }) {
   geometry.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
   geometry.setAttribute("aPhase", new THREE.BufferAttribute(phases, 1));
   geometry.setAttribute("aTwinkleSpeed", new THREE.BufferAttribute(speeds, 1));
+  geometry.setAttribute("aDust", new THREE.BufferAttribute(dust, 1));
   const material = new THREE.ShaderMaterial({
     uniforms: {
       uTime: { value: 0 },
       uTwinkle: { value: twinkle ? 1 : 0 },
       uPixelRatio: { value: 1 },
       uOpacity: { value: 0.66 },
+      uDustOpacity: { value: 0 },
     },
     vertexShader: starfieldVertexShader,
     fragmentShader: starfieldFragmentShader,
@@ -849,6 +873,302 @@ function createHarmonicKnot() {
   return line;
 }
 
+function stringSeed(value) {
+  let seed = 2166136261;
+  for (const character of value) {
+    seed ^= character.codePointAt(0);
+    seed = Math.imul(seed, 16777619);
+  }
+  return seed >>> 0;
+}
+
+function createLandmarkLabelTexture(landmark) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 768;
+  canvas.height = 160;
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.shadowBlur = 18;
+  context.shadowColor = "rgba(0, 0, 0, 0.95)";
+  context.fillStyle = "#f5d596";
+  context.font = "34px Georgia, serif";
+  context.fillText(landmark.name, canvas.width / 2, 58);
+  context.shadowBlur = 12;
+  context.fillStyle = "rgba(188, 236, 255, 0.78)";
+  context.font = "20px ui-monospace, SFMono-Regular, Menlo, monospace";
+  context.fillText(landmark.detail, canvas.width / 2, 112);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  return texture;
+}
+
+function createMiniGalaxy(landmark) {
+  const random = seededRandom(stringSeed(landmark.id));
+  const count = landmark.scale === "universe" ? 54 : 84;
+  const positions = new Float32Array(count * 3);
+  const colors = new Float32Array(count * 3);
+  const color = new THREE.Color(landmark.color);
+  for (let index = 0; index < count; index += 1) {
+    const arm = index % 2;
+    const radius = 0.12 + Math.pow(random(), 0.72) * (landmark.scale === "universe" ? 1.25 : 1.7);
+    const angle = arm * Math.PI + radius * 3.2 + (random() - 0.5) * 0.5;
+    positions[index * 3] = Math.cos(angle) * radius;
+    positions[index * 3 + 1] = (random() - 0.5) * 0.12;
+    positions[index * 3 + 2] = Math.sin(angle) * radius * 0.42;
+    const brightness = 0.42 + random() * 0.58;
+    colors[index * 3] = color.r * brightness;
+    colors[index * 3 + 1] = color.g * brightness;
+    colors[index * 3 + 2] = color.b * brightness;
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  const material = new THREE.PointsMaterial({
+    size: landmark.scale === "universe" ? 1.75 : 2.15,
+    sizeAttenuation: false,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.rotation.x = -0.42 + random() * 0.84;
+  points.rotation.z = random() * Math.PI;
+  points.scale.setScalar(landmark.scale === "universe" ? 2.55 : 2.15);
+  return points;
+}
+
+function createCosmicLandmarkVisual(landmark, radialTexture) {
+  const group = new THREE.Group();
+  group.position.fromArray(landmark.position);
+  group.visible = false;
+
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: radialTexture,
+    color: landmark.color,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  }));
+  const coreScale = {
+    neighborhood: 1.05,
+    galaxy: 1.35,
+    localGroup: 2.2,
+    universe: 2.45,
+  }[landmark.scale];
+  glow.scale.set(coreScale, coreScale, 1);
+  glow.userData.cosmicLandmarkId = landmark.id;
+  group.add(glow);
+
+  const pulse = glow.clone();
+  pulse.material = glow.material.clone();
+  pulse.material.opacity = 0;
+  pulse.scale.setScalar(coreScale);
+  pulse.userData.cosmicLandmarkId = null;
+  group.add(pulse);
+
+  const hitArea = new THREE.Sprite(new THREE.SpriteMaterial({
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0.001,
+    depthWrite: false,
+    depthTest: false,
+  }));
+  const hitScale = {
+    neighborhood: 3.4,
+    galaxy: 4.2,
+    localGroup: 6.2,
+    universe: 6.8,
+  }[landmark.scale];
+  hitArea.scale.set(hitScale, hitScale, 1);
+  hitArea.userData.cosmicLandmarkId = landmark.id;
+  group.add(hitArea);
+
+  const labelTexture = createLandmarkLabelTexture(landmark);
+  const label = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: labelTexture,
+    color: 0xffffff,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    depthTest: false,
+    toneMapped: false,
+  }));
+  const labelHeight = {
+    neighborhood: 2.5,
+    galaxy: 3,
+    localGroup: 4.15,
+    universe: 4.45,
+  }[landmark.scale];
+  label.position.y = {
+    neighborhood: 1.75,
+    galaxy: 2.25,
+    localGroup: 4,
+    universe: 4.45,
+  }[landmark.scale];
+  label.scale.set(
+    labelHeight * 4.8,
+    labelHeight,
+    1,
+  );
+  group.add(label);
+
+  const cluster = !landmark.usesLivingGalaxy
+    && (landmark.scale === "localGroup" || landmark.scale === "universe")
+    ? createMiniGalaxy(landmark)
+    : null;
+  if (cluster) group.add(cluster);
+
+  return {
+    landmark,
+    group,
+    glow,
+    pulse,
+    hitArea,
+    label,
+    labelTexture,
+    cluster,
+    coreScale,
+    impulse: 0,
+  };
+}
+
+function createCosmicWeb(visuals, radialTexture) {
+  const group = new THREE.Group();
+  const byId = new Map(visuals.map((visual) => [visual.landmark.id, visual]));
+  const connections = [
+    ["virgo-cluster", "coma-cluster"],
+    ["coma-cluster", "fornax-cluster"],
+    ["fornax-cluster", "cosmic-web"],
+    ["cosmic-web", "virgo-cluster"],
+  ];
+  const paths = connections.map(([fromId, toId], index) => {
+    const from = byId.get(fromId)?.group.position.clone();
+    const to = byId.get(toId)?.group.position.clone();
+    const midpoint = from.clone().lerp(to, 0.5);
+    midpoint.y += index % 2 === 0 ? 3.2 : -2.6;
+    midpoint.z += index % 2 === 0 ? 1.8 : -1.4;
+    const curve = new THREE.QuadraticBezierCurve3(from, midpoint, to);
+    const geometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(48));
+    const material = new THREE.LineBasicMaterial({
+      color: index % 2 === 0 ? 0x72ddec : 0xc7a86d,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    });
+    const line = new THREE.Line(geometry, material);
+    group.add(line);
+
+    const mote = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: radialTexture,
+      color: index % 2 === 0 ? 0x72edff : 0xf0c97d,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    }));
+    mote.scale.setScalar(0.72);
+    group.add(mote);
+    return {
+      curve,
+      line,
+      mote,
+      phase: index * 0.23,
+      speed: 0.018 + index * 0.003,
+    };
+  });
+  group.visible = false;
+  return { group, paths, elapsed: 0 };
+}
+
+function createCosmicLandmarkField(radialTexture) {
+  const group = new THREE.Group();
+  group.renderOrder = -3;
+  const visuals = [
+    "neighborhood",
+    "galaxy",
+    "localGroup",
+    "universe",
+  ].flatMap((scaleId) => cosmicLandmarksForScale(scaleId))
+    .map((landmark) => createCosmicLandmarkVisual(landmark, radialTexture));
+  const web = createCosmicWeb(visuals, radialTexture);
+  group.add(web.group);
+  for (const visual of visuals) group.add(visual.group);
+  return {
+    group,
+    visuals,
+    byId: new Map(visuals.map((visual) => [visual.landmark.id, visual])),
+    web,
+  };
+}
+
+function updateCosmicLandmarkField(field, scale, delta, reducedMotion) {
+  const mixes = {
+    neighborhood: scale.neighborhoodMix,
+    galaxy: scale.galaxyMix,
+    localGroup: scale.localGroupMix,
+    universe: scale.universeMix,
+  };
+  for (const visual of field.visuals) {
+    const mix = mixes[visual.landmark.scale] ?? 0;
+    const focused = scale.id === visual.landmark.scale;
+    const opacity = mix * (focused ? 1 : 0.28);
+    visual.group.visible = opacity > 0.015;
+    visual.glow.material.opacity = opacity * (0.34 + visual.impulse * 0.56);
+    visual.label.material.opacity = opacity * (focused ? 0.82 : 0.12);
+    visual.hitArea.visible = focused && opacity > 0.45;
+    visual.pulse.material.opacity = opacity * visual.impulse * 0.62;
+    const pulseScale = 1 + (1 - visual.impulse) * 1.8;
+    visual.pulse.scale.setScalar(visual.coreScale * pulseScale);
+    if (visual.cluster) {
+      visual.cluster.material.opacity = opacity * (0.72 + visual.impulse * 0.28);
+      if (!reducedMotion) visual.cluster.rotation.y += delta * 0.035;
+    }
+    visual.impulse *= Math.exp(-delta * 2.4);
+  }
+  const webOpacity = scale.universeMix * (scale.id === "universe" ? 1 : 0.1);
+  field.web.group.visible = webOpacity > 0.02;
+  if (!reducedMotion) field.web.elapsed += delta;
+  for (const path of field.web.paths) {
+    path.line.material.opacity = webOpacity * 0.2;
+    path.mote.material.opacity = webOpacity * 0.52;
+    const progress = (field.web.elapsed * path.speed + path.phase) % 1;
+    path.mote.position.copy(path.curve.getPoint(progress));
+  }
+}
+
+function triggerCosmicLandmark(field, landmarkId) {
+  const visual = field.byId.get(landmarkId);
+  if (visual) visual.impulse = 1;
+}
+
+function galaxySpiralArmPoints(armIndex, samples = 220) {
+  const points = [];
+  for (let index = 0; index < samples; index += 1) {
+    const progress = index / (samples - 1);
+    const radius = 0.72 + progress * 9.2;
+    const angle = armIndex * ((Math.PI * 2) / 3) + radius * 0.28;
+    points.push(
+      Math.cos(angle) * radius,
+      -0.055 + Math.sin(progress * Math.PI) * 0.035,
+      Math.sin(angle) * radius,
+    );
+  }
+  return points;
+}
+
 function createLivingGalaxy() {
   const random = seededRandom(31415926);
   const group = new THREE.Group();
@@ -864,13 +1184,13 @@ function createLivingGalaxy() {
   const mixed = new THREE.Color();
   for (let index = 0; index < pointCount; index += 1) {
     const arm = index % 3;
-    const radius = 1.4 + Math.pow(random(), 0.72) * 29;
+    const radius = 0.72 + Math.pow(random(), 0.72) * 9.35;
     const angle = arm * ((Math.PI * 2) / 3)
-      + radius * 0.31
-      + (random() - 0.5) * (0.22 + radius * 0.018);
-    const armWidth = (random() - 0.5) * (0.28 + radius * 0.035);
+      + radius * 0.28
+      + (random() - 0.5) * (0.18 + radius * 0.026);
+    const armWidth = (random() - 0.5) * (0.18 + radius * 0.046);
     positions[index * 3] = Math.cos(angle) * (radius + armWidth);
-    positions[index * 3 + 1] = (random() - 0.5) * (0.18 + radius * 0.035);
+    positions[index * 3 + 1] = (random() - 0.5) * (0.12 + radius * 0.028);
     positions[index * 3 + 2] = Math.sin(angle) * (radius + armWidth);
     const memoryThread = arm === 1 && index % 5 === 1;
     const base = memoryThread ? cyan : random() < 0.15 ? opal : gold;
@@ -885,7 +1205,7 @@ function createLivingGalaxy() {
   geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
   const material = new THREE.PointsMaterial({
     color: 0xffffff,
-    size: 0.16,
+    size: 0.105,
     sizeAttenuation: true,
     vertexColors: true,
     transparent: true,
@@ -907,19 +1227,17 @@ function createLivingGalaxy() {
     blending: THREE.AdditiveBlending,
     toneMapped: false,
   }));
-  halo.scale.set(9.5, 9.5, 1);
+  halo.scale.set(5.6, 5.6, 1);
   halo.position.y = 0.32;
   halo.renderOrder = -9;
   group.add(halo);
 
-  const grooves = [4.2, 8.5, 13.5, 19.5, 26].map((radius, index) => {
-    const groove = createOrbitString(index === 2 ? 0x72edff : 0xd9ae64, {
+  const grooves = [0, 1, 2].map((armIndex) => {
+    const groove = createOrbitString(armIndex === 1 ? 0x72edff : 0xd9ae64, {
       opacity: 0,
-      linewidth: index === 2 ? 1.1 : 0.72,
+      linewidth: armIndex === 1 ? 1.05 : 0.68,
     });
-    groove.geometry.setPositions(
-      localCirclePoints(radius, 160).flatMap((point) => [point.x, -0.06, point.z]),
-    );
+    groove.geometry.setPositions(galaxySpiralArmPoints(armIndex));
     groove.computeLineDistances();
     group.add(groove);
     return groove;
@@ -939,24 +1257,39 @@ function createLivingGalaxy() {
   core.position.y = 0.03;
   group.add(core);
 
+  const bar = new THREE.Mesh(
+    new THREE.BoxGeometry(4.2, 0.045, 0.38),
+    new THREE.MeshBasicMaterial({
+      color: 0xe8a75f,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    }),
+  );
+  bar.rotation.y = -0.24;
+  bar.position.y = -0.015;
+  group.add(bar);
+
   const universeGroup = new THREE.Group();
   universeGroup.renderOrder = -9;
   const distantPositions = [];
   const distantColors = [];
   const centers = [
-    [-34, 5, -30],
-    [28, -4, -38],
-    [38, 9, 16],
-    [-42, -7, 24],
-    [4, 16, -48],
-    [48, -12, -8],
-    [-20, 13, 42],
+    [-15, 4, -14],
+    [13, -3, -15],
+    [15, 7, 7],
+    [-16, -5, 10],
+    [2, 10, -17],
+    [17, -8, -4],
+    [-8, 8, 16],
   ];
   for (let galaxyIndex = 0; galaxyIndex < centers.length; galaxyIndex += 1) {
     const center = centers[galaxyIndex];
     const tilt = random() * Math.PI;
     for (let index = 0; index < 86; index += 1) {
-      const radius = Math.pow(random(), 0.68) * (2.2 + galaxyIndex * 0.12);
+      const radius = Math.pow(random(), 0.68) * (0.9 + galaxyIndex * 0.06);
       const angle = radius * 2.3 + (index % 2) * Math.PI + (random() - 0.5) * 0.45;
       const localX = Math.cos(angle) * radius;
       const localZ = Math.sin(angle) * radius * 0.34;
@@ -980,7 +1313,7 @@ function createLivingGalaxy() {
   );
   const distantMaterial = new THREE.PointsMaterial({
     color: 0xffffff,
-    size: 0.12,
+    size: 0.075,
     sizeAttenuation: true,
     vertexColors: true,
     transparent: true,
@@ -999,6 +1332,7 @@ function createLivingGalaxy() {
     halo,
     grooves,
     core,
+    bar,
     universeGroup,
     distant,
   };
@@ -1006,17 +1340,38 @@ function createLivingGalaxy() {
 
 function updateLivingGalaxy(galaxy, scale, resolution, delta, reducedMotion, cathedral) {
   const quieting = 1 - cathedral * 0.68;
-  galaxy.points.material.opacity = (0.03 + scale.galaxyMix * 0.82) * quieting;
-  galaxy.halo.material.opacity = scale.galaxyMix * 0.42 * quieting;
-  galaxy.core.material.opacity = (0.04 + scale.galaxyMix * 0.9) * quieting;
+  galaxy.group.visible = scale.galaxyMix > 0.012;
+  galaxy.universeGroup.visible = scale.universeMix > 0.012;
+  const contextGain = scale.id === "galaxy"
+    ? 1
+    : scale.id === "localGroup"
+      ? 0.62
+      : scale.id === "universe"
+        ? 0.18
+        : 0.3;
+  const presentationScale = scale.id === "localGroup"
+    ? 0.46
+    : scale.id === "universe"
+      ? 0.22
+      : 1;
+  const easedScale = THREE.MathUtils.lerp(
+    galaxy.group.scale.x,
+    presentationScale,
+    1 - Math.exp(-delta * 3.4),
+  );
+  galaxy.group.scale.setScalar(easedScale);
+  galaxy.points.material.opacity = scale.galaxyMix * 0.84 * quieting * contextGain;
+  galaxy.halo.material.opacity = scale.galaxyMix * 0.42 * quieting * contextGain;
+  galaxy.core.material.opacity = scale.galaxyMix * 0.9 * quieting * contextGain;
+  galaxy.bar.material.opacity = scale.galaxyMix * 0.22 * quieting * contextGain;
   galaxy.distant.material.opacity = scale.universeMix * 0.58 * quieting;
   for (let index = 0; index < galaxy.grooves.length; index += 1) {
     const groove = galaxy.grooves[index];
     groove.material.resolution.set(resolution.width, resolution.height);
-    groove.material.opacity = (
-      0.008
-      + scale.galaxyMix * (index === 2 ? 0.19 : 0.07)
-    ) * quieting;
+    groove.material.opacity = scale.galaxyMix
+      * (index === 1 ? 0.14 : 0.055)
+      * quieting
+      * contextGain;
   }
   if (!reducedMotion) {
     galaxy.group.rotation.y += delta * (0.0022 + scale.galaxyMix * 0.0028);
@@ -1227,6 +1582,32 @@ function updateThereminField(field, stagePoint, starPoint, parameters, resolutio
   }
 }
 
+function armThereminField(field, stagePoint, resolution) {
+  field.group.visible = true;
+  field.light.position.set(stagePoint.x, 0.25, stagePoint.z);
+  field.light.material.color.setHex(0x72edff);
+  field.light.material.opacity = 0.18;
+  field.light.scale.setScalar(0.34);
+  field.guide.material.opacity = 0;
+  for (let index = 0; index < field.rings.length; index += 1) {
+    const ring = field.rings[index];
+    const radius = 0.22 + index * 0.12;
+    ring.geometry.setPositions(
+      localCirclePoints(radius, 72)
+        .flatMap((point) => [
+          stagePoint.x + point.x,
+          0.1 + index * 0.015,
+          stagePoint.z + point.z,
+        ]),
+    );
+    ring.computeLineDistances();
+    ring.material.color.setHex(0x72edff);
+    ring.material.opacity = index === 0 ? 0.26 : 0.08;
+    ring.material.linewidth = index === 0 ? 1.2 : 0.7;
+    ring.material.resolution.set(resolution.width, resolution.height);
+  }
+}
+
 const FinishingShader = {
   uniforms: {
     tDiffuse: { value: null },
@@ -1415,6 +1796,7 @@ export function SoundflightStage(props) {
     renderer.domElement.className = "soundflight-canvas";
     renderer.domElement.setAttribute("aria-hidden", "true");
     renderer.domElement.dataset.moonPlacementGuide = "hidden";
+    renderer.domElement.dataset.thereminPhase = "idle";
     mount.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -1480,6 +1862,8 @@ export function SoundflightStage(props) {
     const ambient = new THREE.HemisphereLight(0x5f6f88, 0x170b05, 0.42);
     scene.add(ambient);
     const sharedRadialTexture = createRadialTexture();
+    const cosmicLandmarkField = createCosmicLandmarkField(sharedRadialTexture);
+    scene.add(cosmicLandmarkField.group);
     const starVisual = createStarVisual(solarTexture, sharedRadialTexture);
     starVisual.mesh.userData.bodyId = "star";
     starVisual.hitArea.userData.bodyId = "star";
@@ -1521,6 +1905,7 @@ export function SoundflightStage(props) {
       opalTexture,
       solarTexture,
       sharedRadialTexture,
+      cosmicLandmarkField,
       starVisual,
       launchPreview,
       moonPreview,
@@ -1543,9 +1928,13 @@ export function SoundflightStage(props) {
       lastCameraCommandId: 0,
       lastRemoveCommandId: 0,
       lastInteractionMode: props.interactionMode,
+      lastInteractionCancelToken: props.interactionCancelToken,
       resettingCamera: false,
       userControllingCamera: false,
       compositionZoom: 1,
+      authoredCameraDistance: null,
+      authoredScaleId: null,
+      cameraJourneyTargetId: null,
       lastFitDistance: 10,
       editorialCameraPosition: new THREE.Vector3(-1.6, 4.6, 11.2),
       editorialCameraTarget: new THREE.Vector3(0.5, 0, 0),
@@ -1558,6 +1947,10 @@ export function SoundflightStage(props) {
       moonBirth: null,
       pluck: null,
       theremin: null,
+      pendingBodyTap: null,
+      pendingCosmicTap: null,
+      activeTouchPointers: new Set(),
+      cancelledPointerIds: new Set(),
       cosmicScale: cosmicScaleForDistance(camera.position.distanceTo(controls.target)),
       lastCosmicScaleId: null,
       latestGesture: null,
@@ -1565,21 +1958,40 @@ export function SoundflightStage(props) {
     };
     visualRuntimeRef.current = runtime;
     if (import.meta.env.DEV) {
-      mount.__rgDebugState = () => ({
-        bodies: engineRef.current.state.bodies.map((body) => ({
-          id: body.id,
-          kind: body.kind,
-          parentId: body.parentId,
-        })),
-        birth: runtime.birth ? { active: runtime.birth.active, phase: runtime.birth.phase } : null,
-        moonBirth: runtime.moonBirth
-          ? {
-              active: runtime.moonBirth.active,
-              phase: runtime.moonBirth.phase,
-              parentId: runtime.moonBirth.parentId,
-            }
-          : null,
-      });
+      mount.__rgDebugState = () => {
+        const rect = mount.getBoundingClientRect();
+        return {
+          bodies: engineRef.current.state.bodies.map((body) => ({
+            id: body.id,
+            kind: body.kind,
+            parentId: body.parentId,
+          })),
+          birth: runtime.birth ? { active: runtime.birth.active, phase: runtime.birth.phase } : null,
+          moonBirth: runtime.moonBirth
+            ? {
+                active: runtime.moonBirth.active,
+                phase: runtime.moonBirth.phase,
+                parentId: runtime.moonBirth.parentId,
+              }
+            : null,
+          cosmicScale: runtime.cosmicScale.id,
+          cameraDistance: camera.position.distanceTo(controls.target),
+          landmarks: cosmicLandmarkField.visuals
+            .filter((visual) => visual.group.visible)
+            .map((visual) => {
+              const projected = visual.group
+                .getWorldPosition(new THREE.Vector3())
+                .project(camera);
+              return {
+                id: visual.landmark.id,
+                scale: visual.landmark.scale,
+                x: rect.left + (projected.x * 0.5 + 0.5) * rect.width,
+                y: rect.top + (-projected.y * 0.5 + 0.5) * rect.height,
+                interactive: visual.hitArea.visible,
+              };
+            }),
+        };
+      };
     }
 
     const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -1674,28 +2086,61 @@ export function SoundflightStage(props) {
       return starHit?.object?.userData?.bodyId ?? null;
     };
 
+    const hitCosmicLandmark = (event) => {
+      if (runtime.cosmicScale.id === "orbit" || runtime.cosmicScale.id === "system") return null;
+      const point = eventPoint(event, renderer.domElement);
+      runtime.pointer.set((point.x / point.width) * 2 - 1, -(point.y / point.height) * 2 + 1);
+      runtime.raycaster.setFromCamera(runtime.pointer, camera);
+      const hitTargets = cosmicLandmarkField.visuals
+        .filter((visual) => visual.hitArea.visible)
+        .map((visual) => visual.hitArea);
+      const hit = runtime.raycaster.intersectObjects(hitTargets, false)[0];
+      const landmarkId = hit?.object?.userData?.cosmicLandmarkId;
+      return landmarkId ? cosmicLandmarkField.byId.get(landmarkId)?.landmark ?? null : null;
+    };
+
     const trailPaths = () => {
       const rect = renderer.domElement.getBoundingClientRect();
       return [...runtime.bodyVisuals.entries()]
         .filter(([, visual]) => visual.orbitPoints.length > 1)
-        .map(([bodyId, visual]) => ({
-          bodyId,
-          points: visual.orbitPoints.map((point) => {
-            const projected = new THREE.Vector3(point.x, point.y, point.z).project(camera);
-            return {
-              x: (projected.x * 0.5 + 0.5) * rect.width,
-              y: (-projected.y * 0.5 + 0.5) * rect.height,
-            };
-          }),
-        }));
+        .map(([bodyId, visual]) => {
+          const projectedBody = visual.group.position.clone().project(camera);
+          return {
+            bodyId,
+            bodyPoint: {
+              x: (projectedBody.x * 0.5 + 0.5) * rect.width,
+              y: (-projectedBody.y * 0.5 + 0.5) * rect.height,
+            },
+            points: visual.orbitPoints.map((point) => {
+              const projected = new THREE.Vector3(point.x, point.y, point.z).project(camera);
+              return {
+                x: (projected.x * 0.5 + 0.5) * rect.width,
+                y: (-projected.y * 0.5 + 0.5) * rect.height,
+              };
+            }),
+          };
+        });
     };
-    if (import.meta.env.DEV) mount.__rgTrailPaths = trailPaths;
+    if (import.meta.env.DEV || window.__relativityE2E === true) {
+      mount.__rgTrailPaths = trailPaths;
+    }
 
     const capturePointer = (pointerId) => {
       try {
         renderer.domElement.setPointerCapture(pointerId);
       } catch {
         // The pointer may already be released (stylus lift, synthetic ids), so the gesture continues without capture.
+      }
+    };
+
+    const releaseCapturedPointer = (pointerId) => {
+      if (pointerId == null) return;
+      try {
+        if (renderer.domElement.hasPointerCapture(pointerId)) {
+          renderer.domElement.releasePointerCapture(pointerId);
+        }
+      } catch {
+        // Pointer capture can disappear between a second touch and this cancellation.
       }
     };
 
@@ -1707,6 +2152,18 @@ export function SoundflightStage(props) {
       }
       visual.pulseAt = at;
       visual.pulseStartIndex = nearestOrbitPointIndex(visual.orbitPoints, visual.group.position);
+    };
+
+    const performCosmicAudition = (landmark) => {
+      triggerCosmicLandmark(cosmicLandmarkField, landmark.id);
+      if (!propsRef.current.isListener) {
+        propsRef.current.onBodyGesture({
+          kind: "cosmic-landmark",
+          at: Number(engineRef.current.state.time.toFixed(6)),
+          landmarkId: landmark.id,
+        });
+      }
+      propsRef.current.onCosmicAudition(landmark);
     };
 
     const performPluck = (hit, strength) => {
@@ -1765,7 +2222,10 @@ export function SoundflightStage(props) {
           0,
           0.36,
         );
-        propsRef.current.onGestationTone(candidate);
+        propsRef.current.onGestationTone({
+          ...candidate,
+          deferAudio: audioUnlockPhase(birth.pointerType) === "pointerup",
+        });
       } catch (error) {
         if (error instanceof Error && /drag outward/i.test(error.message)) {
           const starPosition = bodyToStage(star, STAGE_SCALE);
@@ -1888,7 +2348,10 @@ export function SoundflightStage(props) {
             };
           });
         updateTrailLine(moonPreview.orbitLine, localOrbit, 0, 0.52);
-        propsRef.current.onGestationTone(candidate);
+        propsRef.current.onGestationTone({
+          ...candidate,
+          deferAudio: audioUnlockPhase(moonBirth.pointerType) === "pointerup",
+        });
       } catch {
         moonPreview.seed.visible = false;
         moonPreview.orbitLine.visible = false;
@@ -1897,24 +2360,28 @@ export function SoundflightStage(props) {
       }
     };
 
-    const endThereminGesture = () => {
+    const endThereminGesture = (phase = null) => {
       const gesture = runtime.theremin;
       if (!gesture) return;
       window.clearTimeout(gesture.holdTimer);
       runtime.theremin = null;
       thereminField.group.visible = false;
-      propsRef.current.onTheremin({ phase: "end" });
+      renderer.domElement.dataset.thereminPhase = "idle";
+      releaseCapturedPointer(gesture.pointerId);
+      if (phase) {
+        propsRef.current.onTheremin({ phase });
+      } else if (gesture.active) {
+        propsRef.current.onTheremin({ phase: "end" });
+      }
     };
 
     const armTheremin = (event) => {
       const worldPoint = intersectPlane(event);
       if (!worldPoint) return;
       const screen = eventPoint(event, renderer.domElement);
-      capturePointer(event.pointerId);
-      controls.enabled = false;
-      propsRef.current.onTheremin({ phase: "prepare" });
       const gesture = {
         pointerId: event.pointerId,
+        pointerType: event.pointerType,
         startScreen: screen,
         lastScreen: screen,
         worldPoint,
@@ -1923,8 +2390,27 @@ export function SoundflightStage(props) {
       };
       gesture.holdTimer = window.setTimeout(() => {
         if (runtime.theremin !== gesture) return;
+        const traveled = Math.hypot(
+          gesture.lastScreen.x - gesture.startScreen.x,
+          gesture.lastScreen.y - gesture.startScreen.y,
+        );
+        if (!shouldBeginThereminHold({
+          pointerType: gesture.pointerType,
+          activeTouchCount: runtime.activeTouchPointers.size,
+          traveled,
+          dragThreshold: CREATION_DRAG_THRESHOLD,
+        })) {
+          endThereminGesture("cancel");
+          return;
+        }
         gesture.active = true;
-        const parameters = thereminParameters(screen);
+        renderer.domElement.dataset.thereminPhase = "active";
+        capturePointer(event.pointerId);
+        controls.enabled = false;
+        const parameters = {
+          ...thereminParameters(screen),
+          deferAudio: audioUnlockPhase(gesture.pointerType) === "pointerup",
+        };
         const star = engineRef.current.getBody("star");
         if (!star) return;
         updateThereminField(
@@ -1937,46 +2423,154 @@ export function SoundflightStage(props) {
             height: renderer.domElement.clientHeight,
           },
         );
-        propsRef.current.onTheremin({ phase: "update", parameters });
+        propsRef.current.onTheremin({ phase: "prepare", parameters });
       }, THEREMIN_HOLD_MS);
       runtime.theremin = gesture;
+      renderer.domElement.dataset.thereminPhase = "arming";
+      armThereminField(
+        thereminField,
+        bodyToStage(stageToWorld(worldPoint), STAGE_SCALE),
+        {
+          width: renderer.domElement.clientWidth,
+          height: renderer.domElement.clientHeight,
+        },
+      );
+      propsRef.current.onTheremin({ phase: "arming" });
+    };
+
+    const cancelDirectManipulation = ({ rememberPointers = false } = {}) => {
+      const directPointerIds = [
+        runtime.birth?.pointerId,
+        runtime.moonBirth?.pointerId,
+        runtime.theremin?.pointerId,
+        runtime.pluck?.pointerId,
+        runtime.pendingBodyTap?.pointerId,
+        runtime.pendingCosmicTap?.pointerId,
+      ].filter((pointerId) => Number.isInteger(pointerId));
+      if (rememberPointers) {
+        for (const pointerId of [
+          ...directPointerIds,
+          ...runtime.activeTouchPointers,
+        ]) {
+          runtime.cancelledPointerIds.add(pointerId);
+        }
+      }
+      endThereminGesture("cancel");
+      if (runtime.moonBirth) {
+        runtime.moonBirth = null;
+        moonPreview.seed.visible = false;
+        moonPreview.guideLine.visible = false;
+        moonPreview.orbitLine.visible = false;
+        propsRef.current.onGestationTone(null);
+        propsRef.current.onMoonPhase("armed");
+      }
+      if (runtime.birth) {
+        runtime.birth = null;
+        launchPreview.group.visible = false;
+        propsRef.current.onGestationTone(null);
+        propsRef.current.onLaunchPhase("armed");
+      }
+      runtime.pluck = null;
+      runtime.pendingBodyTap = null;
+      runtime.pendingCosmicTap = null;
+      directPointerIds.forEach(releaseCapturedPointer);
+      controls.enabled = true;
+    };
+
+    const applyPendingInteractionCancel = () => {
+      const nextToken = propsRef.current.interactionCancelToken;
+      if (nextToken === runtime.lastInteractionCancelToken) return false;
+      runtime.lastInteractionCancelToken = nextToken;
+      cancelDirectManipulation({ rememberPointers: true });
+      return true;
     };
 
     const onPointerDown = (event) => {
+      applyPendingInteractionCancel();
+      runtime.cancelledPointerIds.delete(event.pointerId);
+      const unlockPhase = audioUnlockPhase(event.pointerType);
+      const deferAudio = unlockPhase === "pointerup";
+      if (unlockPhase === "pointerdown") {
+        propsRef.current.onAudioUnlock();
+      }
+      if (event.pointerType === "touch") {
+        runtime.activeTouchPointers.add(event.pointerId);
+        if (shouldCancelDirectManipulation({
+          pointerType: event.pointerType,
+          activeTouchCount: runtime.activeTouchPointers.size,
+        })) {
+          cancelDirectManipulation({ rememberPointers: true });
+          return;
+        }
+      }
+      const cosmicLandmark = hitCosmicLandmark(event);
+      if (cosmicLandmark) {
+        if (deferAudio) {
+          runtime.pendingCosmicTap = {
+            pointerId: event.pointerId,
+            pointerType: event.pointerType,
+            landmark: cosmicLandmark,
+            startScreen: eventPoint(event, renderer.domElement),
+          };
+        } else {
+          event.stopImmediatePropagation();
+          performCosmicAudition(cosmicLandmark);
+        }
+        return;
+      }
       if (propsRef.current.interactionMode === "explore") return;
       const bodyId = hitBody(event);
       const engine = engineRef.current;
+      if (propsRef.current.interactionMode === "moon"
+        && bodyId !== propsRef.current.selectedBodyId) {
+        propsRef.current.onBirthRefused("Start from the selected planet to make its moon.");
+        return;
+      }
 
-      if (bodyId === "star" && !propsRef.current.isListener) {
-        event.stopImmediatePropagation();
+      if (bodyId === "star"
+        && propsRef.current.interactionMode === "compose"
+        && !propsRef.current.isListener) {
+        if (event.pointerType !== "touch") event.stopImmediatePropagation();
         if (engine.state.bodies.filter((body) => body.kind !== "star").length >= MAX_WORLDS) {
           propsRef.current.onBirthRefused("The sky is full. Remove a world before adding another.");
           return;
         }
         const point = intersectPlane(event);
         if (!point) return;
-        capturePointer(event.pointerId);
+        if (event.pointerType !== "touch") capturePointer(event.pointerId);
         runtime.birth = {
           release: stageToWorld(point),
           phase: "forming",
           pointerId: event.pointerId,
+          pointerType: event.pointerType,
           startScreen: eventPoint(event, renderer.domElement),
           active: false,
         };
-        controls.enabled = false;
+        if (event.pointerType !== "touch") controls.enabled = false;
         return;
       }
 
       if (bodyId && bodyId !== "star") {
-        event.stopImmediatePropagation();
-        capturePointer(event.pointerId);
-        propsRef.current.onBodySelect(bodyId);
-        propsRef.current.onBodyAudition(bodyId);
+        if (!deferAudio) {
+          event.stopImmediatePropagation();
+          capturePointer(event.pointerId);
+          propsRef.current.onBodySelect(bodyId);
+          propsRef.current.onBodyAudition(bodyId);
+        } else {
+          runtime.pendingBodyTap = {
+            pointerId: event.pointerId,
+            pointerType: event.pointerType,
+            bodyId,
+            startScreen: eventPoint(event, renderer.domElement),
+          };
+        }
         const parent = engine.getBody(bodyId);
         const siblingCount = engine.state.bodies
           .filter((body) => body.kind === "moon" && body.parentId === bodyId)
           .length;
         if (!propsRef.current.isListener
+          && propsRef.current.interactionMode === "moon"
+          && bodyId === propsRef.current.selectedBodyId
           && parent?.kind === "planet"
           && siblingCount < 2
           && engine.state.bodies.filter((body) => body.kind !== "star").length < MAX_WORLDS) {
@@ -1987,49 +2581,74 @@ export function SoundflightStage(props) {
             release: stageToWorld(point),
             phase: "forming",
             pointerId: event.pointerId,
+            pointerType: event.pointerType,
             startScreen: eventPoint(event, renderer.domElement),
             active: false,
           };
-          controls.enabled = false;
+          if (event.pointerType !== "touch") controls.enabled = false;
         }
         return;
       }
 
+      if (propsRef.current.interactionMode === "moon") return;
       const point = eventPoint(event, renderer.domElement);
       const stringHit = nearestStringPoint(point, trailPaths(), STRING_TOUCH_DISTANCE);
       if (stringHit) {
-        event.stopImmediatePropagation();
-        capturePointer(event.pointerId);
+        const deferred = shouldDeferStringPluck(event.pointerType);
+        if (event.pointerType !== "touch") {
+          event.stopImmediatePropagation();
+          capturePointer(event.pointerId);
+        }
         runtime.pluck = {
+          pointerId: event.pointerId,
+          pointerType: event.pointerType,
+          pendingPluck: deferred ? { hit: stringHit, strength: 0.62 } : null,
           lastPluckAt: new Map([[stringHit.bodyId, performance.now()]]),
           lastPoint: { x: point.x, y: point.y },
         };
-        controls.enabled = false;
-        performPluck(stringHit, 0.62);
+        if (event.pointerType !== "touch") controls.enabled = false;
+        if (!deferred) performPluck(stringHit, 0.62);
         return;
       }
       armTheremin(event);
     };
 
     const onPointerMove = (event) => {
-      if (runtime.theremin) {
-        event.stopImmediatePropagation();
+      if (applyPendingInteractionCancel()
+        || runtime.cancelledPointerIds.has(event.pointerId)) return;
+      for (const pendingKey of ["pendingBodyTap", "pendingCosmicTap"]) {
+        const pending = runtime[pendingKey];
+        if (!pending || pending.pointerId !== event.pointerId) continue;
         const screen = eventPoint(event, renderer.domElement);
+        const traveled = Math.hypot(
+          screen.x - pending.startScreen.x,
+          screen.y - pending.startScreen.y,
+        );
+        if (traveled > CREATION_DRAG_THRESHOLD) runtime[pendingKey] = null;
+      }
+      if (runtime.theremin) {
+        const screen = eventPoint(event, renderer.domElement);
+        runtime.theremin.lastScreen = screen;
         const traveled = Math.hypot(
           screen.x - runtime.theremin.startScreen.x,
           screen.y - runtime.theremin.startScreen.y,
         );
-        if (!runtime.theremin.active && traveled > CREATION_DRAG_THRESHOLD) {
-          endThereminGesture();
-          controls.enabled = true;
+        if (!runtime.theremin.active) {
+          if (runtime.activeTouchPointers.size > 1 || traveled > CREATION_DRAG_THRESHOLD) {
+            endThereminGesture("cancel");
+            controls.enabled = true;
+          }
           return;
         }
-        if (!runtime.theremin.active) return;
+        event.stopImmediatePropagation();
         const point = intersectPlane(event);
         if (!point) return;
         runtime.theremin.lastScreen = screen;
         runtime.theremin.worldPoint = point;
-        const parameters = thereminParameters(screen);
+        const parameters = {
+          ...thereminParameters(screen),
+          deferAudio: audioUnlockPhase(runtime.theremin.pointerType) === "pointerup",
+        };
         const star = engineRef.current.getBody("star");
         if (!star) return;
         updateThereminField(
@@ -2046,16 +2665,17 @@ export function SoundflightStage(props) {
         return;
       }
       if (runtime.moonBirth) {
-        event.stopImmediatePropagation();
         const screen = eventPoint(event, renderer.domElement);
         const traveled = Math.hypot(
           screen.x - runtime.moonBirth.startScreen.x,
           screen.y - runtime.moonBirth.startScreen.y,
         );
         if (!runtime.moonBirth.active && traveled < CREATION_DRAG_THRESHOLD) return;
+        event.stopImmediatePropagation();
         const point = intersectPlane(event);
         if (!point) return;
         if (!runtime.moonBirth.active) {
+          capturePointer(event.pointerId);
           runtime.moonBirth.active = true;
           runtime.moonBirth.phase = "aiming";
           propsRef.current.onMoonPhase("aiming");
@@ -2065,17 +2685,18 @@ export function SoundflightStage(props) {
         return;
       }
       if (runtime.birth) {
-        event.stopImmediatePropagation();
         const screen = eventPoint(event, renderer.domElement);
         const traveled = Math.hypot(
           screen.x - runtime.birth.startScreen.x,
           screen.y - runtime.birth.startScreen.y,
         );
         if (!runtime.birth.active && traveled < CREATION_DRAG_THRESHOLD) return;
+        event.stopImmediatePropagation();
         const point = intersectPlane(event);
         if (!point) return;
         const world = stageToWorld(point);
         if (!runtime.birth.active) {
+          capturePointer(event.pointerId);
           runtime.birth.active = true;
           runtime.birth.phase = "aiming";
           propsRef.current.onLaunchPhase("aiming");
@@ -2092,7 +2713,12 @@ export function SoundflightStage(props) {
         if (hit && traveled >= 6) {
           const lastAt = runtime.pluck.lastPluckAt.get(hit.bodyId) ?? -Infinity;
           if (performance.now() - lastAt > STRING_PLUCK_COOLDOWN) {
-            performPluck(hit, 0.4 + Math.min(0.6, traveled / 230));
+            const strength = 0.4 + Math.min(0.6, traveled / 230);
+            if (shouldDeferStringPluck(runtime.pluck.pointerType)) {
+              runtime.pluck.pendingPluck = { hit, strength };
+            } else {
+              performPluck(hit, strength);
+            }
             runtime.pluck.lastPluckAt.set(hit.bodyId, performance.now());
             runtime.pluck.lastPoint = { x: point.x, y: point.y };
           }
@@ -2102,41 +2728,88 @@ export function SoundflightStage(props) {
     };
 
     const cancelPointer = (event) => {
-      endThereminGesture();
-      if (runtime.moonBirth) {
-        runtime.moonBirth = null;
-        moonPreview.seed.visible = false;
-        moonPreview.guideLine.visible = false;
-        moonPreview.orbitLine.visible = false;
-        propsRef.current.onGestationTone(null);
-        propsRef.current.onMoonPhase("armed");
-      }
-      if (runtime.birth) {
-        runtime.birth = null;
-        launchPreview.group.visible = false;
-        propsRef.current.onGestationTone(null);
-        propsRef.current.onLaunchPhase("armed");
+      const interactionWasCancelled = applyPendingInteractionCancel()
+        || runtime.cancelledPointerIds.has(event.pointerId);
+      runtime.activeTouchPointers.delete(event.pointerId);
+      runtime.cancelledPointerIds.delete(event.pointerId);
+      if (!interactionWasCancelled) {
+        cancelDirectManipulation({ rememberPointers: true });
+        runtime.cancelledPointerIds.delete(event.pointerId);
       }
       runtime.latestGesture = null;
-      runtime.pluck = null;
       controls.enabled = true;
-      if (renderer.domElement.hasPointerCapture(event.pointerId)) {
-        renderer.domElement.releasePointerCapture(event.pointerId);
-      }
+      releaseCapturedPointer(event.pointerId);
     };
 
     const finishPointer = (event) => {
-      if (runtime.theremin) {
-        event.stopImmediatePropagation();
-        endThereminGesture();
+      const interactionWasCancelled = applyPendingInteractionCancel()
+        || runtime.cancelledPointerIds.has(event.pointerId);
+      runtime.activeTouchPointers.delete(event.pointerId);
+      runtime.cancelledPointerIds.delete(event.pointerId);
+      if (interactionWasCancelled) {
+        runtime.latestGesture = null;
         controls.enabled = true;
-        if (renderer.domElement.hasPointerCapture(event.pointerId)) {
-          renderer.domElement.releasePointerCapture(event.pointerId);
+        releaseCapturedPointer(event.pointerId);
+        return;
+      }
+      if (audioUnlockPhase(event.pointerType) === "pointerup") {
+        propsRef.current.onAudioUnlock();
+      }
+      if (runtime.theremin) {
+        if (event.pointerType !== "touch") event.stopImmediatePropagation();
+        const gesture = runtime.theremin;
+        const wasActive = gesture.active;
+        let releaseParameters = null;
+        let releaseFailed = false;
+        try {
+          if (shouldSoundThereminOnRelease({
+            pointerType: gesture.pointerType,
+            active: gesture.active,
+          })) {
+            releaseParameters = {
+              ...thereminParameters(gesture.lastScreen),
+              deferAudio: false,
+            };
+          }
+        } catch (error) {
+          releaseFailed = true;
+          propsRef.current.onBirthRefused(
+            error instanceof Error ? error.message : "The theremin could not be released",
+          );
+        } finally {
+          const disposition = thereminReleaseDisposition({
+            wasActive,
+            releaseFailed,
+            hasReleaseParameters: Boolean(releaseParameters),
+          });
+          gesture.active = disposition.activeDuringCompletion;
+          endThereminGesture(disposition.completionPhase);
+          controls.enabled = true;
+          releaseCapturedPointer(event.pointerId);
+        }
+        if (releaseParameters) {
+          propsRef.current.onTheremin({
+            phase: "release",
+            parameters: releaseParameters,
+          });
         }
         return;
       }
+      if (runtime.pendingCosmicTap?.pointerId === event.pointerId) {
+        const { landmark } = runtime.pendingCosmicTap;
+        runtime.pendingCosmicTap = null;
+        performCosmicAudition(landmark);
+        releaseCapturedPointer(event.pointerId);
+        return;
+      }
+      if (runtime.pendingBodyTap?.pointerId === event.pointerId) {
+        const { bodyId } = runtime.pendingBodyTap;
+        runtime.pendingBodyTap = null;
+        propsRef.current.onBodySelect(bodyId);
+        propsRef.current.onBodyAudition(bodyId);
+      }
       if (runtime.moonBirth) {
-        event.stopImmediatePropagation();
+        if (event.pointerType !== "touch") event.stopImmediatePropagation();
         const moonBirth = runtime.moonBirth;
         runtime.moonBirth = null;
         moonPreview.seed.visible = false;
@@ -2164,7 +2837,7 @@ export function SoundflightStage(props) {
         }
       }
       if (runtime.birth) {
-        event.stopImmediatePropagation();
+        if (event.pointerType !== "touch") event.stopImmediatePropagation();
         const birth = runtime.birth;
         runtime.birth = null;
         launchPreview.group.visible = false;
@@ -2190,33 +2863,52 @@ export function SoundflightStage(props) {
         }
       }
       if (runtime.pluck) {
+        const pluck = runtime.pluck;
         runtime.pluck = null;
-        controls.enabled = true;
-        if (renderer.domElement.hasPointerCapture(event.pointerId)) {
-          renderer.domElement.releasePointerCapture(event.pointerId);
+        if (pluck.pointerId === event.pointerId
+          && shouldDeferStringPluck(pluck.pointerType)
+          && runtime.activeTouchPointers.size === 0
+          && pluck.pendingPluck) {
+          performPluck(pluck.pendingPluck.hit, pluck.pendingPluck.strength);
         }
+        controls.enabled = true;
+        releaseCapturedPointer(event.pointerId);
         return;
       }
       runtime.latestGesture = null;
       controls.enabled = true;
-      if (renderer.domElement.hasPointerCapture(event.pointerId)) {
-        renderer.domElement.releasePointerCapture(event.pointerId);
-      }
+      releaseCapturedPointer(event.pointerId);
+    };
+
+    const clearCancelledPointerOutsideCanvas = (event) => {
+      if (event.target === renderer.domElement) return;
+      if (!runtime.cancelledPointerIds.delete(event.pointerId)) return;
+      runtime.activeTouchPointers.delete(event.pointerId);
+      releaseCapturedPointer(event.pointerId);
     };
 
     renderer.domElement.addEventListener("pointerdown", onPointerDown, { capture: true });
     renderer.domElement.addEventListener("pointermove", onPointerMove, { capture: true });
     renderer.domElement.addEventListener("pointerup", finishPointer, { capture: true });
     renderer.domElement.addEventListener("pointercancel", cancelPointer, { capture: true });
+    window.addEventListener("pointerup", clearCancelledPointerOutsideCanvas, true);
+    window.addEventListener("pointercancel", clearCancelledPointerOutsideCanvas, true);
     const handleControlStart = () => {
       runtime.userControllingCamera = true;
-      propsRef.current.onCameraNavigate();
+      runtime.cameraJourneyTargetId = null;
+      propsRef.current.onCameraNavigate({ type: "manual" });
     };
     const handleControlEnd = () => {
       runtime.userControllingCamera = false;
       if (propsRef.current.interactionMode === "explore" || runtime.lastFitDistance <= 0) return;
+      runtime.authoredCameraDistance = clamp(
+        camera.position.distanceTo(controls.target),
+        controls.minDistance,
+        controls.maxDistance,
+      );
+      runtime.authoredScaleId = null;
       runtime.compositionZoom = clamp(
-        camera.position.distanceTo(controls.target) / runtime.lastFitDistance,
+        runtime.authoredCameraDistance / runtime.lastFitDistance,
         0.58,
         7.2,
       );
@@ -2228,6 +2920,10 @@ export function SoundflightStage(props) {
       engineRef.current.reset(initialStateRef.current);
       appliedEventIndexRef.current = 0;
       accumulatorRef.current = 0;
+      runtime.authoredCameraDistance = COSMIC_DESTINATIONS.system.distance;
+      runtime.authoredScaleId = "system";
+      runtime.compositionZoom = 1;
+      runtime.resettingCamera = true;
       previousSideRef.current = new Map(
         engineRef.current.state.bodies
           .filter((body) => body.kind !== "star")
@@ -2245,6 +2941,18 @@ export function SoundflightStage(props) {
           currentProps.playbackEvents[appliedEventIndexRef.current].at <= engine.state.time + FIXED_STEP / 2
         ) {
           const event = currentProps.playbackEvents[appliedEventIndexRef.current];
+          if (event.kind === "cosmic-landmark") {
+            const landmark = cosmicLandmarkById(event.landmarkId);
+            const destination = cosmicDestination(landmark.scale);
+            runtime.authoredCameraDistance = destination.distance;
+            runtime.authoredScaleId = destination.id;
+            runtime.compositionZoom = 1;
+            runtime.resettingCamera = true;
+            triggerCosmicLandmark(cosmicLandmarkField, landmark.id);
+            currentProps.onCosmicAudition(landmark);
+            appliedEventIndexRef.current += 1;
+            continue;
+          }
           if (event.kind === "pluck") {
             const body = engine.getBody(event.bodyId);
             if (body) {
@@ -2351,10 +3059,15 @@ export function SoundflightStage(props) {
           starVisual.impulse *= Math.exp(-delta * 2.6);
           const breathPhase = Math.sin(snapshot.time * 1.4);
           const breath = 1 + breathPhase * 0.035 + starVisual.impulse * 0.06;
+          starVisual.group.scale.setScalar(0.34 + systemMix * 0.66);
           starVisual.corona.scale.setScalar(1.9 * breath);
-          starVisual.corona.material.opacity = 0.4 + starVisual.impulse * 0.22;
+          starVisual.corona.material.opacity = (
+            0.4 + starVisual.impulse * 0.22
+          ) * (0.34 + systemMix * 0.66);
           starVisual.glory.scale.setScalar(2.6 * (1 + breathPhase * 0.022 + starVisual.impulse * 0.05));
-          starVisual.glory.material.opacity = 0.5 + breathPhase * 0.05 + starVisual.impulse * 0.18;
+          starVisual.glory.material.opacity = (
+            0.5 + breathPhase * 0.05 + starVisual.impulse * 0.18
+          ) * (0.3 + systemMix * 0.7);
           starVisual.glory.material.rotation += delta * 0.016;
           starVisual.outerCorona.scale.setScalar(3.7 * (1 + Math.sin(snapshot.time * 0.42) * 0.05));
           starVisual.mesh.rotation.y += delta * 0.07;
@@ -2520,6 +3233,12 @@ export function SoundflightStage(props) {
         reducedMotionQuery.matches,
         cathedralLevel,
       );
+      updateCosmicLandmarkField(
+        cosmicLandmarkField,
+        runtime.cosmicScale,
+        delta,
+        reducedMotionQuery.matches,
+      );
       updateMemoryComet(memoryComet, runtime.bodyVisuals, now, resolution);
       if (runtime.starfield) {
         runtime.starfield.material.uniforms.uOpacity.value = (
@@ -2527,13 +3246,30 @@ export function SoundflightStage(props) {
           - runtime.cosmicScale.galaxyMix * 0.18
           + runtime.cosmicScale.universeMix * 0.08
         ) * (1 - cathedralLevel * 0.42);
+        runtime.starfield.material.uniforms.uDustOpacity.value = (
+          runtime.cosmicScale.id === "orbit" || runtime.cosmicScale.id === "system"
+            ? 0
+            : (
+                runtime.cosmicScale.neighborhoodMix * 0.08
+                + runtime.cosmicScale.galaxyMix * 0.18
+                + runtime.cosmicScale.universeMix * 0.12
+              ) * (1 - cathedralLevel * 0.5)
+        );
       }
       updateMoonBand();
 
       const projectedStar = starStage.clone().project(camera);
       timeNeedle.style.left = `${clamp((projectedStar.x * 0.5 + 0.5) * 100, 8, 92)}%`;
+      timeNeedle.style.opacity = `${clamp(systemMix * 1.18 - 0.14, 0, 1)}`;
       runtime.systemRadius = systemRadius;
-      runtime.editorialCameraTarget.copy(starStage);
+      const semanticScaleId = runtime.authoredScaleId
+        ?? (runtime.cosmicScale.id === "orbit" ? "system" : runtime.cosmicScale.id);
+      const authoredTarget = cosmicCameraTarget(semanticScaleId, starStage);
+      runtime.editorialCameraTarget.set(
+        authoredTarget.x,
+        authoredTarget.y,
+        authoredTarget.z,
+      );
     };
 
     const animate = (milliseconds) => {
@@ -2541,8 +3277,11 @@ export function SoundflightStage(props) {
       const delta = Math.min(MAX_FRAME_DELTA, Math.max(0, (milliseconds - previousFrameRef.current) / 1000));
       previousFrameRef.current = milliseconds;
       const currentProps = propsRef.current;
+      applyPendingInteractionCancel();
       const exploring = currentProps.interactionMode === "explore";
-      controls.enabled = !runtime.birth && !runtime.moonBirth && !runtime.theremin;
+      controls.enabled = !runtime.birth?.active
+        && !runtime.moonBirth?.active
+        && !runtime.theremin?.active;
       controls.enableRotate = exploring;
       controls.enablePan = exploring;
       controls.enableZoom = true;
@@ -2582,10 +3321,44 @@ export function SoundflightStage(props) {
         runtime.lastCameraCommandId = cameraCommand.id;
         if (cameraCommand.type === "reset") {
           runtime.compositionZoom = 1;
+          runtime.authoredCameraDistance = null;
+          runtime.authoredScaleId = null;
+          runtime.cameraJourneyTargetId = null;
           runtime.resettingCamera = true;
+        } else if (cameraCommand.type === "travel") {
+          if (!Number.isFinite(cameraCommand.distance)) {
+            currentProps.onBirthRefused("Cosmic travel requires a real destination.");
+          } else {
+            runtime.authoredCameraDistance = clamp(
+              cameraCommand.distance,
+              controls.minDistance,
+              controls.maxDistance,
+            );
+            runtime.authoredScaleId = cameraCommand.targetId ?? null;
+            runtime.cameraJourneyTargetId = cameraCommand.targetId ?? null;
+            runtime.compositionZoom = clamp(
+              runtime.authoredCameraDistance / Math.max(0.001, runtime.lastFitDistance),
+              0.58,
+              7.2,
+            );
+            runtime.resettingCamera = true;
+          }
         } else if (!exploring) {
           const zoomFactor = cameraCommand.direction < 0 ? 0.86 : 1.16;
-          runtime.compositionZoom = clamp(runtime.compositionZoom * zoomFactor, 0.58, 7.2);
+          const currentDistance = runtime.authoredCameraDistance
+            ?? camera.position.distanceTo(controls.target);
+          runtime.authoredCameraDistance = clamp(
+            currentDistance * zoomFactor,
+            controls.minDistance,
+            controls.maxDistance,
+          );
+          runtime.authoredScaleId = null;
+          runtime.cameraJourneyTargetId = null;
+          runtime.compositionZoom = clamp(
+            runtime.authoredCameraDistance / Math.max(0.001, runtime.lastFitDistance),
+            0.58,
+            7.2,
+          );
         } else {
           const offset = camera.position.clone().sub(controls.target);
           if (offset.lengthSq() < 0.001) offset.set(-3.7, 3, 6.4);
@@ -2607,8 +3380,20 @@ export function SoundflightStage(props) {
       if (!exploring && !runtime.userControllingCamera) {
         const fitDistance = editorialCameraDistance(runtime.systemRadius ?? 4, camera.aspect);
         runtime.lastFitDistance = fitDistance;
-        const desiredDistance = clamp(fitDistance * runtime.compositionZoom, controls.minDistance, controls.maxDistance);
-        const viewDirection = new THREE.Vector3(0, 0.37, 0.929).normalize();
+        const authoredDistance = runtime.authoredCameraDistance === null
+          ? null
+          : runtime.authoredScaleId === "system"
+            ? Math.max(runtime.authoredCameraDistance, fitDistance)
+            : runtime.authoredCameraDistance;
+        const desiredDistance = clamp(
+          authoredDistance ?? fitDistance * runtime.compositionZoom,
+          controls.minDistance,
+          controls.maxDistance,
+        );
+        const semanticScaleId = runtime.authoredScaleId
+          ?? (runtime.cosmicScale.id === "orbit" ? "system" : runtime.cosmicScale.id);
+        const direction = cosmicCameraDirection(semanticScaleId);
+        const viewDirection = new THREE.Vector3(direction.x, direction.y, direction.z);
         runtime.editorialCameraPosition.copy(runtime.editorialCameraTarget).addScaledVector(viewDirection, desiredDistance);
         const easing = 1 - Math.exp(-delta * (runtime.resettingCamera ? 6.5 : 2.8));
         camera.position.lerp(runtime.editorialCameraPosition, easing);
@@ -2619,16 +3404,24 @@ export function SoundflightStage(props) {
           camera.position.copy(runtime.editorialCameraPosition);
           controls.target.copy(runtime.editorialCameraTarget);
           runtime.resettingCamera = false;
+          if (runtime.cameraJourneyTargetId) {
+            const targetId = runtime.cameraJourneyTargetId;
+            runtime.cameraJourneyTargetId = null;
+            currentProps.onCameraNavigate({ type: "settled", targetId });
+          }
         }
       }
       controls.autoRotate = false;
       controls.update(delta);
 
       const cameraDistance = camera.position.distanceTo(controls.target);
-      runtime.cosmicScale = cosmicScaleForDistance(cameraDistance);
+      runtime.cosmicScale = cosmicScaleForView(cameraDistance, runtime.authoredScaleId);
       if (now - runtime.lastCameraReport > 0.12) {
         runtime.lastCameraReport = now;
-        currentProps.onCameraScale(cameraScaleLabel(cameraDistance));
+        const reportedDistance = runtime.authoredScaleId === "system"
+          ? COSMIC_DESTINATIONS.system.distance
+          : cameraDistance;
+        currentProps.onCameraScale(cameraScaleLabel(reportedDistance));
         currentProps.onCosmicScale(runtime.cosmicScale);
       }
       composer.render(delta);
@@ -2642,6 +3435,8 @@ export function SoundflightStage(props) {
       renderer.domElement.removeEventListener("pointermove", onPointerMove, { capture: true });
       renderer.domElement.removeEventListener("pointerup", finishPointer, { capture: true });
       renderer.domElement.removeEventListener("pointercancel", cancelPointer, { capture: true });
+      window.removeEventListener("pointerup", clearCancelledPointerOutsideCanvas, true);
+      window.removeEventListener("pointercancel", clearCancelledPointerOutsideCanvas, true);
       controls.removeEventListener("start", handleControlStart);
       controls.removeEventListener("end", handleControlEnd);
       resizeObserver.disconnect();
@@ -2653,12 +3448,14 @@ export function SoundflightStage(props) {
       opalTexture.dispose();
       solarTexture.dispose();
       sharedRadialTexture.dispose();
+      for (const visual of cosmicLandmarkField.visuals) visual.labelTexture.dispose();
       scene.environment?.dispose();
       disposeObject(scene);
       renderer.dispose();
       renderer.domElement.remove();
       timeNeedle.remove();
       delete mount.__rgDebugState;
+      delete mount.__rgTrailPaths;
       visualRuntimeRef.current = null;
     };
   }, []);
@@ -2669,7 +3466,7 @@ export function SoundflightStage(props) {
       className="soundflight-stage"
       data-interaction-mode={props.interactionMode}
       role="application"
-      aria-label="Three-dimensional orbit harp. Drag from the star to make a planet. Drag from a planet to make a moon. Touch an orbit to play it. Hold empty space for the gravitational theremin. Pinch or scroll to cross from a star system into the Milky Way."
+      aria-label="Three-dimensional cosmic instrument. Make planets and moons in your star system, touch orbit strings to play them, or use the Cosmic Lens to visit nearby stars, the Milky Way, the Local Group, and the deep universe. Touch any luminous cosmic landmark to hear its voice."
       tabIndex={0}
     />
   );

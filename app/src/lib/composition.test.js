@@ -9,6 +9,7 @@ import {
   encodeComposition,
   fingerprintComposition,
   getPresentationTheme,
+  recordingDuration,
   resolveScoreRoster,
 } from "./composition.js";
 import { PhysicsEngine, createInitialPhysicsState, PHYSICS_MODEL } from "./physicsEngine.js";
@@ -79,6 +80,36 @@ test("plucked strings are recorded, replayed, and validated against the living r
   const badOffset = createDefaultComposition();
   badOffset.events.push({ kind: "pluck", at: 1, bodyId: "io", offset: 1.4, strength: 1 });
   assert.throws(() => encodeComposition(badOffset), /Invalid pluck/i);
+});
+
+test("played cosmic landmarks survive a share link without requiring a planet", () => {
+  const composition = createBlankComposition();
+  composition.events.push({
+    kind: "cosmic-landmark",
+    at: 1.25,
+    landmarkId: "andromeda",
+  });
+
+  assert.deepEqual(decodeComposition(encodeComposition(composition)), composition);
+
+  const unknown = createBlankComposition();
+  unknown.events.push({
+    kind: "cosmic-landmark",
+    at: 1.25,
+    landmarkId: "imaginary-galaxy",
+  });
+  assert.throws(() => encodeComposition(unknown), /unknown cosmic landmark/i);
+});
+
+test("a long cosmic performance stays long enough to replay its final voice", () => {
+  const events = [
+    { kind: "cosmic-landmark", at: 18.2, landmarkId: "sirius" },
+    { kind: "cosmic-landmark", at: 152.108, landmarkId: "andromeda" },
+  ];
+
+  assert.equal(recordingDuration(151.9, events), 154);
+  assert.equal(recordingDuration(2, []), 12);
+  assert.throws(() => recordingDuration(Number.NaN, events), /finite elapsed time/i);
 });
 
 test("an existing tau-record/4 link migrates into the harp format unchanged", () => {
