@@ -68,10 +68,49 @@ test("closing the system sheet does not copy behind the user's back", async () =
   assert.deepEqual(copied, []);
 });
 
-test("copy failure leaves a selectable manual link without exposing browser errors", async () => {
+test("a denied async clipboard falls back to a user-activated document copy", async () => {
+  const calls = [];
+  const field = {
+    style: {},
+    setAttribute: (name, value) => calls.push(["attribute", name, value]),
+    select: () => calls.push(["select"]),
+    setSelectionRange: (start, end) => calls.push(["range", start, end]),
+    remove: () => calls.push(["remove"]),
+  };
   const result = await copyOrbitLink(data.url, {
     navigatorRef: {
       clipboard: { writeText: async () => { throw new Error("Secret browser detail"); } },
+    },
+    documentRef: {
+      body: { append: (node) => calls.push(["append", node]) },
+      createElement: () => field,
+      execCommand: (command) => {
+        calls.push(["command", command]);
+        return true;
+      },
+    },
+  });
+
+  assert.deepEqual(result, { kind: "copied" });
+  assert.ok(calls.some((call) => call[0] === "command" && call[1] === "copy"));
+  assert.ok(calls.some((call) => call[0] === "remove"));
+});
+
+test("copy failure leaves a selectable manual link only when both browser copy paths are blocked", async () => {
+  const result = await copyOrbitLink(data.url, {
+    navigatorRef: {
+      clipboard: { writeText: async () => { throw new Error("Secret browser detail"); } },
+    },
+    documentRef: {
+      body: { append: () => {} },
+      createElement: () => ({
+        style: {},
+        setAttribute: () => {},
+        select: () => {},
+        setSelectionRange: () => {},
+        remove: () => {},
+      }),
+      execCommand: () => false,
     },
   });
 
