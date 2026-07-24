@@ -1,12 +1,16 @@
 import { spectralMix } from "./sonification.js";
 
 const DEFAULT_STATE = Object.freeze({ mode: "compose", followingBodyId: null });
+export const INITIAL_PLAYBACK = true;
 
 const VOICE_VISUALS = Object.freeze({
   earth: Object.freeze({ label: "EARTH", colorName: "CYAN", color: 0x72edff }),
   moon: Object.freeze({ label: "MOON", colorName: "AMBER", color: 0xffc66d }),
   light: Object.freeze({ label: "LIGHT", colorName: "MAGENTA", color: 0xff76d6 }),
   "alpha-centauri": Object.freeze({ label: "ALPHA CEN", colorName: "MINT", color: 0x8fffc1 }),
+  theremin: Object.freeze({ label: "THEREMIN", colorName: "VIOLET", color: 0xb99cff }),
+  ondes: Object.freeze({ label: "ONDES", colorName: "AZURE", color: 0x7fb8ff }),
+  trautonium: Object.freeze({ label: "TRAUTONIUM", colorName: "COPPER", color: 0xff8a66 }),
 });
 
 const DOPPLER_APPROACH_TINT = Object.freeze({ r: 0x86 / 255, g: 0xe6 / 255, b: 0xff / 255 });

@@ -327,6 +327,25 @@ export function createBlankComposition() {
   };
 }
 
+export function resolveScoreRoster(composition) {
+  assertComposition(composition);
+  const roster = new Map(composition.bodies.map((body) => [body.id, clone(body)]));
+
+  for (const event of composition.events) {
+    if (event.kind === "add-body") {
+      roster.set(event.body.id, clone(event.body));
+      continue;
+    }
+    if (event.kind !== "remove-body") continue;
+    roster.delete(event.bodyId);
+    for (const [bodyId, body] of roster) {
+      if (body.kind === "moon" && body.parentId === event.bodyId) roster.delete(bodyId);
+    }
+  }
+
+  return [...roster.values()].map(clone);
+}
+
 export function fingerprintComposition(composition) {
   const source = JSON.stringify(composition);
   let hash = 0x811c9dc5;

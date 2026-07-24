@@ -9,6 +9,7 @@ import {
   createSoundflightState,
   dopplerTintedColor,
   frequencyToNoteName,
+  INITIAL_PLAYBACK,
   launchGuidance,
   nextCameraDistance,
   reduceSoundflightState,
@@ -18,6 +19,10 @@ import {
   sonicIntensity,
   voiceVisual,
 } from "./soundflight.js";
+
+test("the instrument opens already moving instead of presenting a dormant play state", () => {
+  assert.equal(INITIAL_PLAYBACK, true);
+});
 
 test("launch guidance turns one unfamiliar gesture into three explicit moments", () => {
   assert.deepEqual(launchGuidance("armed"), {
@@ -183,6 +188,9 @@ test("voice colors are stable, named, and never rely on color alone", () => {
   assert.deepEqual(voiceVisual("moon"), { label: "MOON", colorName: "AMBER", color: 0xffc66d });
   assert.deepEqual(voiceVisual("light"), { label: "LIGHT", colorName: "MAGENTA", color: 0xff76d6 });
   assert.deepEqual(voiceVisual("alpha-centauri"), { label: "ALPHA CEN", colorName: "MINT", color: 0x8fffc1 });
+  assert.deepEqual(voiceVisual("theremin"), { label: "THEREMIN", colorName: "VIOLET", color: 0xb99cff });
+  assert.deepEqual(voiceVisual("ondes"), { label: "ONDES", colorName: "AZURE", color: 0x7fb8ff });
+  assert.deepEqual(voiceVisual("trautonium"), { label: "TRAUTONIUM", colorName: "COPPER", color: 0xff8a66 });
   assert.throws(() => voiceVisual("mystery"), /unknown cosmic voice/i);
 });
 

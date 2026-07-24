@@ -17,7 +17,15 @@ export function visibleWavelengthToAudibleFrequency(wavelengthNm) {
   return 220 * (2 ** (spectralPosition * 2));
 }
 
-export const COSMIC_VOICE_ORDER = ["earth", "moon", "light", "alpha-centauri"];
+export const COSMIC_VOICE_ORDER = [
+  "earth",
+  "theremin",
+  "ondes",
+  "trautonium",
+  "light",
+  "moon",
+  "alpha-centauri",
+];
 
 export const COSMIC_VOICES = Object.freeze({
   earth: Object.freeze({
@@ -36,6 +44,9 @@ export const COSMIC_VOICES = Object.freeze({
     tremoloScale: 1.38,
     attack: 0.028,
     release: 1.65,
+    glideSeconds: 0.055,
+    vibratoRate: 4.1,
+    vibratoDepthCents: 3,
     previewFrequency: 246.94,
   }),
   moon: Object.freeze({
@@ -54,6 +65,9 @@ export const COSMIC_VOICES = Object.freeze({
     tremoloScale: 0.52,
     attack: 0.012,
     release: 3.8,
+    glideSeconds: 0.07,
+    vibratoRate: 3.2,
+    vibratoDepthCents: 1.5,
     previewFrequency: 164.81,
   }),
   light: Object.freeze({
@@ -72,6 +86,9 @@ export const COSMIC_VOICES = Object.freeze({
     tremoloScale: 1.9,
     attack: 0.008,
     release: 1.08,
+    glideSeconds: 0.025,
+    vibratoRate: 6.2,
+    vibratoDepthCents: 4,
     previewFrequency: visibleWavelengthToAudibleFrequency(550),
     wavelengthNm: 550,
   }),
@@ -91,7 +108,73 @@ export const COSMIC_VOICES = Object.freeze({
     tremoloScale: 0.76,
     attack: 0.045,
     release: 2.45,
+    glideSeconds: 0.075,
+    vibratoRate: 4.4,
+    vibratoDepthCents: 5,
     previewFrequency: 220,
+  }),
+  theremin: Object.freeze({
+    id: "theremin",
+    label: "THEREMIN",
+    channel: "HETERODYNE FIELD / HAND-DRAWN PORTAMENTO",
+    explanation: "A continuous field voice glides between orbital pitches with human vibrato.",
+    waveform: "sine",
+    partialWaveform: "triangle",
+    partialRatio: 2.004,
+    partialGainScale: 0.68,
+    subRatio: 0.5,
+    subGain: 0.006,
+    cutoffScale: 1.24,
+    q: 1.15,
+    tremoloScale: 0.54,
+    attack: 0.08,
+    release: 2.7,
+    glideSeconds: 0.14,
+    vibratoRate: 5.3,
+    vibratoDepthCents: 18,
+    previewFrequency: 329.63,
+  }),
+  ondes: Object.freeze({
+    id: "ondes",
+    label: "ONDES MARTENOT",
+    channel: "RUBAN / RINGING DIFFUSERS",
+    explanation: "A ribbon-like singing tone blooms through a near-unison halo and long acoustic tail.",
+    waveform: "sine",
+    partialWaveform: "sine",
+    partialRatio: 1.006,
+    partialGainScale: 1.18,
+    subRatio: 0.5,
+    subGain: 0.014,
+    cutoffScale: 1.12,
+    q: 1.9,
+    tremoloScale: 0.58,
+    attack: 0.065,
+    release: 3.05,
+    glideSeconds: 0.06,
+    vibratoRate: 4.7,
+    vibratoDepthCents: 7.5,
+    previewFrequency: 261.63,
+  }),
+  trautonium: Object.freeze({
+    id: "trautonium",
+    label: "TRAUTONIUM",
+    channel: "RIBBON / SUBHARMONIC MIXTURE",
+    explanation: "A pressed ribbon voice divides the fundamental into a dark subharmonic chord.",
+    waveform: "sawtooth",
+    partialWaveform: "square",
+    partialRatio: 2 / 3,
+    partialGainScale: 1.08,
+    subRatio: 0.5,
+    subGain: 0.085,
+    cutoffScale: 0.72,
+    q: 3.8,
+    tremoloScale: 0.38,
+    attack: 0.018,
+    release: 1.8,
+    glideSeconds: 0.035,
+    vibratoRate: 3.1,
+    vibratoDepthCents: 2.4,
+    previewFrequency: 196,
   }),
 });
 
@@ -100,6 +183,9 @@ export const VOICE_HARMONICS = Object.freeze({
   moon: Object.freeze([0, 1, 0.14, 0.31, 0.08, 0.15, 0.04, 0.02]),
   light: Object.freeze([0, 1, 0.5, 0.34, 0.25, 0.19, 0.14, 0.1, 0.075, 0.055]),
   "alpha-centauri": Object.freeze([0, 1, 0.56, 0.18, 0.27, 0.07, 0.11, 0.03]),
+  theremin: Object.freeze([0, 1, 0.19, 0.07, 0.035, 0.018, 0.009, 0.004]),
+  ondes: Object.freeze([0, 1, 0.42, 0.11, 0.2, 0.065, 0.09, 0.028]),
+  trautonium: Object.freeze([0, 1, 0.68, 0.45, 0.31, 0.23, 0.16, 0.11, 0.075]),
 });
 
 const DEFAULT_BODY_VOICES = Object.freeze({ io: "earth", europa: "moon", callisto: "light" });
@@ -151,6 +237,9 @@ export function voiceParameters(body, resonanceStrength = 0) {
     tremoloDepth: clamp(0.018 + Math.abs(doppler - 1) * 1.8 + resonanceStrength * 0.025, 0.01, 0.12),
     attack: profile.attack,
     release: profile.release,
+    glideSeconds: profile.glideSeconds,
+    vibratoRate: profile.vibratoRate,
+    vibratoDepthCents: profile.vibratoDepthCents,
   };
 }
 

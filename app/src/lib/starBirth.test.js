@@ -96,7 +96,7 @@ test("ids stay unique and stable while voices and sprites cycle deterministicall
   assert.equal(spec.id, "nova-2");
   assert.deepEqual(spec, again, "birth math must be deterministic");
 
-  for (const [index, expectedVoice] of ["earth", "moon", "light", "alpha-centauri", "earth"].entries()) {
+  for (const [index, expectedVoice] of ["earth", "theremin", "ondes", "trautonium", "light"].entries()) {
     const cycled = birthBodyFromGesture(gesture({ birthIndex: index }));
     assert.equal(cycled.voice, expectedVoice);
     assert.equal(cycled.sprite, 1 + (index % 3));
@@ -186,7 +186,7 @@ test("radial launches allocate the first available id and cycle score fields det
   const spec = birthBodyFromRadialLaunch(input);
 
   assert.equal(spec.id, "nova-2");
-  assert.equal(spec.voice, COSMIC_VOICE_ORDER[0]);
+  assert.equal(spec.voice, COSMIC_VOICE_ORDER[4]);
   assert.equal(spec.sprite, 2);
   assert.deepEqual(spec, birthBodyFromRadialLaunch(input));
   for (const key of ["x", "y", "vx", "vy", "mass", "frequency", "pan"]) {

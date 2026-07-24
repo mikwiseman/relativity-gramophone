@@ -94,16 +94,36 @@ test("mass makes a voice denser without allowing it to clip the mix", () => {
   assert.ok(heavy.gain <= 0.11);
 });
 
-test("Earth, Moon, light, and Alpha Centauri produce distinct scientific timbre signatures", () => {
+test("every scientific and future-instrument voice has a distinct timbre signature", () => {
   const signatures = Object.keys(COSMIC_VOICES).map((voice) => {
     const parameters = voiceParameters({ ...BODY, voice });
     return [parameters.waveform, parameters.partialWaveform, parameters.partialRatio, parameters.subRatio].join(":");
   });
 
-  assert.equal(new Set(signatures).size, 4);
+  assert.equal(new Set(signatures).size, 7);
   assert.ok(voiceParameters({ ...BODY, voice: "moon" }).release > voiceParameters({ ...BODY, voice: "earth" }).release);
   assert.ok(voiceParameters({ ...BODY, voice: "light" }).cutoff > voiceParameters({ ...BODY, voice: "moon" }).cutoff);
   assert.ok(voiceParameters({ ...BODY, voice: "alpha-centauri" }).subGain > 0);
+});
+
+test("future-instrument voices turn continuous orbit motion into distinct expression", () => {
+  assert.deepEqual(COSMIC_VOICE_ORDER.slice(0, 5), [
+    "earth",
+    "theremin",
+    "ondes",
+    "trautonium",
+    "light",
+  ]);
+
+  const theremin = voiceParameters({ ...BODY, voice: "theremin" });
+  const ondes = voiceParameters({ ...BODY, voice: "ondes" });
+  const trautonium = voiceParameters({ ...BODY, voice: "trautonium" });
+
+  assert.ok(theremin.vibratoDepthCents >= 12, "theremin pitch must visibly breathe");
+  assert.ok(theremin.glideSeconds > ondes.glideSeconds, "theremin uses the slowest hand-like portamento");
+  assert.ok(ondes.attack > 0.03 && ondes.release > 2, "Ondes Martenot keeps a soft singing envelope");
+  assert.ok(trautonium.partialRatio < 1, "Trautonium exposes a real subharmonic division");
+  assert.ok(trautonium.subGain > theremin.subGain, "Trautonium carries the densest undertone");
 });
 
 test("a resonance challenge requires the requested ratio and a strong physical lock", () => {

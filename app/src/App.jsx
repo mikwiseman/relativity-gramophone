@@ -16,12 +16,14 @@ import {
   getPresentationTheme,
   MAX_SCORE_EVENTS,
   readCompositionFromHash,
+  resolveScoreRoster,
 } from "./lib/composition.js";
 import { THEMES } from "./lib/themes.js";
 import { copyOrbitLink, shareOrbit } from "./lib/sharing.js";
 import { COSMIC_VOICES, hapticPattern, voiceParameters } from "./lib/sonification.js";
 import {
   frequencyToNoteName,
+  INITIAL_PLAYBACK,
   instrumentHint,
   shouldApplyGestationUpdate,
   voiceVisual,
@@ -45,7 +47,7 @@ export function App() {
   const initial = useMemo(readInitialScore, []);
   const [composition, setComposition] = useState(initial.score ?? createBlankComposition);
   const [isListener, setIsListener] = useState(Boolean(initial.score));
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(INITIAL_PLAYBACK);
   const [elapsed, setElapsed] = useState(0);
   const [resetToken, setResetToken] = useState(0);
   const [inscribed, setInscribed] = useState(initial.score);
@@ -75,6 +77,7 @@ export function App() {
   const theme = THEMES.lacquer;
   const shareScore = inscribed ?? composition;
   const shareLink = useMemo(() => createShareUrl(shareScore), [shareScore]);
+  const recordedBodies = useMemo(() => resolveScoreRoster(shareScore), [shareScore]);
   const liveBodies = physicsFrame?.bodies ?? [];
   const planets = liveBodies.filter((body) => body.kind === "planet");
   const selectedBody = liveBodies.find((body) => body.id === selectedBodyId) ?? null;
@@ -93,7 +96,7 @@ export function App() {
     : selectedBody?.kind === "planet" && selectedMoonCount < 2 && !isListener
       ? selectedMoonCount === 1
         ? "DRAG AGAIN TO ADD ONE MORE MOON"
-        : "THE SMALL LIGHT SHOWS WHERE THE MOON WILL ORBIT"
+        : "THE THIN RING MARKS A STABLE MOON ORBIT"
       : "TAP A PLANET TO HEAR IT · SWIPE ACROSS ITS ORBIT";
 
   useEffect(() => {
@@ -144,6 +147,17 @@ export function App() {
       setRuntimeError(null);
       setIsPlaying(true);
       setDialogOpen(false);
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : "Audio could not start");
+    }
+  }, [isPlaying]);
+
+  const closeDialog = useCallback(async () => {
+    setDialogOpen(false);
+    if (!isPlaying) return;
+    try {
+      await audioRef.current.resume(true);
+      setRuntimeError(null);
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : "Audio could not start");
     }
@@ -316,7 +330,7 @@ export function App() {
   }, [shareLink]);
 
   const share = useCallback(async () => {
-    const voices = (physicsFrameRef.current?.bodies ?? shareScore.bodies)
+    const voices = recordedBodies
       .map((body) => COSMIC_VOICES[body.voice]?.label)
       .filter(Boolean)
       .join(" · ");
@@ -334,7 +348,7 @@ export function App() {
       : result.kind === "copied"
         ? "LINK COPIED — READY TO PASTE"
         : "SELECT THE LINK, THEN COPY IT");
-  }, [shareLink, shareScore]);
+  }, [recordedBodies, shareLink, shareScore]);
 
   const enterOrbit = useCallback(async () => {
     try {
@@ -369,6 +383,7 @@ export function App() {
       data-theme="lacquer"
       data-live-body-count={liveBodies.length}
       data-live-moon-count={liveBodies.filter((body) => body.kind === "moon").length}
+      data-playing={isPlaying}
       data-camera-scale={cameraScale}
       style={{
         "--paper": theme.paper,
@@ -480,14 +495,14 @@ export function App() {
       )}
 
       <InscriptionDialog
-        bodies={liveBodies.length ? liveBodies : shareScore.bodies}
+        bodies={isListener ? recordedBodies : liveBodies.length ? liveBodies : recordedBodies}
         duration={shareScore.duration}
         link={shareLink}
         message={inscribed?.message ?? composition.message}
         mode={isListener ? "listener" : "composer"}
         open={dialogOpen}
         resonances={shareScore.resonances}
-        onClose={() => setDialogOpen(false)}
+        onClose={closeDialog}
         onCopy={copyLink}
         onEnterOrbit={enterOrbit}
         onMessageChange={updateMessage}

@@ -206,6 +206,8 @@ export class AudioEngine {
     const panner = this.context.createStereoPanner();
     const tremolo = this.context.createOscillator();
     const tremoloDepth = this.context.createGain();
+    const vibrato = this.context.createOscillator();
+    const vibratoDepth = this.context.createGain();
     const delaySend = this.context.createGain();
     const reverbSend = this.context.createGain();
 
@@ -220,6 +222,9 @@ export class AudioEngine {
     tremolo.type = "sine";
     tremolo.frequency.value = 0.4;
     tremoloDepth.gain.value = 0.02;
+    vibrato.type = "sine";
+    vibrato.frequency.value = 4.4;
+    vibratoDepth.gain.value = 3;
     delaySend.gain.value = 0.13;
     reverbSend.gain.value = 0.08;
 
@@ -230,10 +235,14 @@ export class AudioEngine {
     panner.connect(delaySend).connect(this.delay);
     panner.connect(reverbSend).connect(this.reverb);
     tremolo.connect(tremoloDepth).connect(gain.gain);
+    vibrato.connect(vibratoDepth);
+    vibratoDepth.connect(fundamental.detune);
+    vibratoDepth.connect(partial.detune);
     fundamental.start(now);
     partial.start(now);
     sub.start(now);
     tremolo.start(now);
+    vibrato.start(now);
 
     const voice = {
       fundamental,
@@ -246,6 +255,8 @@ export class AudioEngine {
       panner,
       tremolo,
       tremoloDepth,
+      vibrato,
+      vibratoDepth,
       delaySend,
       reverbSend,
       appliedVoiceId: null,
@@ -262,7 +273,9 @@ export class AudioEngine {
     voice.gain.gain.cancelScheduledValues(now);
     voice.gain.gain.setTargetAtTime(0.0001, now, 0.09);
     const stopAt = now + 0.6;
-    for (const oscillator of [voice.fundamental, voice.partial, voice.sub, voice.tremolo]) oscillator.stop(stopAt);
+    for (const oscillator of [voice.fundamental, voice.partial, voice.sub, voice.tremolo, voice.vibrato]) {
+      oscillator.stop(stopAt);
+    }
     setTimeout(() => {
       const nodes = [
         voice.gain,
@@ -271,6 +284,7 @@ export class AudioEngine {
         voice.partialGain,
         voice.subGain,
         voice.tremoloDepth,
+        voice.vibratoDepth,
         voice.delaySend,
         voice.reverbSend,
       ];
@@ -306,9 +320,17 @@ export class AudioEngine {
         this.applyVoiceWave(voice.fundamental, body.voice, parameters.waveform);
       }
       voice.partial.type = parameters.partialWaveform;
-      voice.fundamental.frequency.setTargetAtTime(fundamentalFrequency, now, 0.055);
-      voice.partial.frequency.setTargetAtTime(fundamentalFrequency * parameters.partialRatio, now, 0.07);
-      voice.sub.frequency.setTargetAtTime(fundamentalFrequency * parameters.subRatio, now, 0.09);
+      voice.fundamental.frequency.setTargetAtTime(fundamentalFrequency, now, parameters.glideSeconds);
+      voice.partial.frequency.setTargetAtTime(
+        fundamentalFrequency * parameters.partialRatio,
+        now,
+        Math.max(0.025, parameters.glideSeconds * 0.85),
+      );
+      voice.sub.frequency.setTargetAtTime(
+        fundamentalFrequency * parameters.subRatio,
+        now,
+        Math.max(0.035, parameters.glideSeconds),
+      );
       voice.partialGain.gain.setTargetAtTime(parameters.partialGain, now, 0.1);
       voice.subGain.gain.setTargetAtTime(parameters.subGain, now, 0.12);
       voice.filter.frequency.setTargetAtTime(parameters.cutoff, now, 0.12);
@@ -317,6 +339,8 @@ export class AudioEngine {
       voice.panner.pan.setTargetAtTime(parameters.pan, now, 0.08);
       voice.tremolo.frequency.setTargetAtTime(parameters.tremoloRate, now, 0.12);
       voice.tremoloDepth.gain.setTargetAtTime(parameters.tremoloDepth * parameters.gain, now, 0.12);
+      voice.vibrato.frequency.setTargetAtTime(parameters.vibratoRate, now, 0.12);
+      voice.vibratoDepth.gain.setTargetAtTime(parameters.vibratoDepthCents, now, 0.12);
       const distance = Math.hypot(body.x ?? 0, body.y ?? 0);
       voice.reverbSend.gain.setTargetAtTime(
         Math.min(0.34, 0.06 + distance * 0.42),
@@ -358,15 +382,24 @@ export class AudioEngine {
     const fundamental = this.context.createOscillator();
     const partial = this.context.createOscillator();
     const sub = this.context.createOscillator();
+    const vibrato = this.context.createOscillator();
+    const vibratoDepth = this.context.createGain();
     const partialGain = this.context.createGain();
     const subGain = this.context.createGain();
 
     this.applyVoiceWave(fundamental, body.voice, parameters.waveform);
     partial.type = parameters.partialWaveform;
     sub.type = "sine";
-    fundamental.frequency.setValueAtTime(parameters.frequency, now);
-    partial.frequency.setValueAtTime(parameters.frequency * parameters.partialRatio, now);
+    const entranceRatio = 1 - Math.min(0.035, parameters.glideSeconds * 0.2);
+    const glideEnd = now + Math.max(0.02, parameters.glideSeconds * 1.7);
+    fundamental.frequency.setValueAtTime(parameters.frequency * entranceRatio, now);
+    fundamental.frequency.exponentialRampToValueAtTime(parameters.frequency, glideEnd);
+    partial.frequency.setValueAtTime(parameters.frequency * parameters.partialRatio * entranceRatio, now);
+    partial.frequency.exponentialRampToValueAtTime(parameters.frequency * parameters.partialRatio, glideEnd);
     sub.frequency.setValueAtTime(parameters.frequency * parameters.subRatio, now);
+    vibrato.type = "sine";
+    vibrato.frequency.setValueAtTime(parameters.vibratoRate, now);
+    vibratoDepth.gain.setValueAtTime(parameters.vibratoDepthCents, now);
     partial.detune.setValueAtTime(-7 + (body.displayMass ?? body.mass) * 8, now);
     partialGain.gain.value = parameters.partialGain;
     subGain.gain.value = parameters.subGain;
@@ -385,6 +418,9 @@ export class AudioEngine {
     fundamental.connect(filter);
     partial.connect(partialGain).connect(filter);
     sub.connect(subGain).connect(filter);
+    vibrato.connect(vibratoDepth);
+    vibratoDepth.connect(fundamental.detune);
+    vibratoDepth.connect(partial.detune);
     filter.connect(gain).connect(panner).connect(this.master);
     panner.connect(this.delay);
     panner.connect(reverbSend).connect(this.reverb);
@@ -392,9 +428,11 @@ export class AudioEngine {
     fundamental.start(now);
     partial.start(now);
     sub.start(now);
+    vibrato.start(now);
     fundamental.stop(now + duration + 0.05);
     partial.stop(now + duration + 0.05);
     sub.stop(now + duration + 0.05);
+    vibrato.stop(now + duration + 0.05);
   }
 
   playPluck(body, { offset, strength }) {
@@ -479,15 +517,18 @@ export class AudioEngine {
       overtone.type = kind === "moon" ? "sine" : "triangle";
       oscillator.frequency.value = frequency;
       overtone.frequency.value = frequency * (kind === "moon" ? 1.5 : 2.01);
-      vibrato.frequency.value = 4.4;
-      vibratoDepth.gain.value = 1.7;
+      const profile = COSMIC_VOICES[voice];
+      vibrato.frequency.value = profile.vibratoRate;
+      vibratoDepth.gain.value = profile.vibratoDepthCents;
       overtoneGain.gain.value = kind === "moon" ? 0.22 : 0.13;
       filter.type = "lowpass";
       filter.frequency.value = Math.min(8_000, Math.max(900, frequency * 6));
       filter.Q.value = kind === "moon" ? 1.8 : 1.15;
       gain.gain.value = 0.0001;
       reverbSend.gain.value = kind === "moon" ? 0.3 : 0.18;
-      vibrato.connect(vibratoDepth).connect(oscillator.frequency);
+      vibrato.connect(vibratoDepth);
+      vibratoDepth.connect(oscillator.detune);
+      vibratoDepth.connect(overtone.detune);
       oscillator.connect(filter);
       overtone.connect(overtoneGain).connect(filter);
       filter.connect(gain).connect(panner).connect(this.master);
@@ -514,11 +555,14 @@ export class AudioEngine {
       this.applyVoiceWave(this.gestation.oscillator, voice, "sine");
       this.gestation.appliedVoiceId = voice;
     }
-    this.gestation.oscillator.frequency.setTargetAtTime(frequency, now, 0.075);
+    const profile = COSMIC_VOICES[voice];
+    this.gestation.vibrato.frequency.setTargetAtTime(profile.vibratoRate, now, 0.08);
+    this.gestation.vibratoDepth.gain.setTargetAtTime(profile.vibratoDepthCents, now, 0.08);
+    this.gestation.oscillator.frequency.setTargetAtTime(frequency, now, profile.glideSeconds);
     this.gestation.overtone.frequency.setTargetAtTime(
       frequency * (kind === "moon" ? 1.5 : 2.01),
       now,
-      0.09,
+      Math.max(0.04, profile.glideSeconds),
     );
     this.gestation.filter.frequency.setTargetAtTime(
       Math.min(8_000, Math.max(900, frequency * 6)),

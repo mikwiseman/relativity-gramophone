@@ -1406,20 +1406,7 @@ export function SoundflightStage(props) {
           1.65,
           resolution,
         );
-        const previewRadius = THREE.MathUtils.lerp(displayInnerRadius, displayOuterRadius, 0.58);
-        const previewAngle = reducedMotionQuery.matches
-          ? -0.24
-          : -0.24 + performance.now() * 0.00018;
-        const previewPoint = {
-          x: Math.cos(previewAngle) * previewRadius,
-          y: 0.08,
-          z: Math.sin(previewAngle) * previewRadius,
-        };
-        moonPreview.seed.position.set(previewPoint.x, previewPoint.y, previewPoint.z);
-        moonPreview.seed.scale.setScalar(0.76);
-        moonPreview.seed.material.emissive.setHex(voice.color);
-        moonPreview.seed.material.opacity = 0.72;
-        moonPreview.seed.visible = true;
+        moonPreview.seed.visible = false;
         moonPreview.guideLine.visible = false;
         moonPreview.orbitLine.visible = false;
       }

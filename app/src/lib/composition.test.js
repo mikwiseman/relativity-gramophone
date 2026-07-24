@@ -9,6 +9,7 @@ import {
   encodeComposition,
   fingerprintComposition,
   getPresentationTheme,
+  resolveScoreRoster,
 } from "./composition.js";
 import { PhysicsEngine, createInitialPhysicsState, PHYSICS_MODEL } from "./physicsEngine.js";
 import { birthBodyFromGesture } from "./starBirth.js";
@@ -146,6 +147,31 @@ test("a recorded birth replays through the physics engine deterministically", ()
   engine.applyEvent(decodeComposition(encodeComposition(composition)).events[0]);
 
   assert.ok(engine.getBody(birth.body.id));
+});
+
+test("a shared score resolves its final world and moon roster before playback begins", () => {
+  const composition = createBlankComposition();
+  const planet = novaBirthEvent(4).body;
+  const moon = {
+    ...novaBirthEvent(5, { birthIndex: 1 }).body,
+    id: "moon-nova-1-1",
+    kind: "moon",
+    parentId: planet.id,
+    voice: planet.voice,
+  };
+  composition.events.push(
+    { kind: "add-body", at: 4, body: planet },
+    { kind: "add-body", at: 5, body: moon },
+  );
+
+  assert.deepEqual(resolveScoreRoster(composition).map((body) => body.id), [
+    planet.id,
+    moon.id,
+  ]);
+  assert.deepEqual(composition.bodies, [], "summary projection must not rewrite the recorded opening state");
+
+  composition.events.push({ kind: "remove-body", at: 6, bodyId: planet.id });
+  assert.deepEqual(resolveScoreRoster(composition), [], "removing a planet also removes its moons from the summary");
 });
 
 test("events touching worlds that are not alive at that moment are rejected", () => {
