@@ -293,6 +293,33 @@ export function sonicIntensity({ displayMass, doppler, resonanceStrength, impuls
   return clamp(0.03 + massEnergy + dopplerEnergy + harmonicEnergy + impulseEnergy, 0, 1);
 }
 
+export function shouldAutoSoundBody(body) {
+  if (body?.kind !== "planet" && body?.kind !== "moon") {
+    throw new Error("Automatic sound requires a playable body kind");
+  }
+  return body.kind === "planet";
+}
+
+export function orbitStringStyle({ kind, selected, isPlaying, impulse }) {
+  if ((kind !== "planet" && kind !== "moon")
+    || typeof selected !== "boolean"
+    || typeof isPlaying !== "boolean"
+    || !Number.isFinite(impulse)) {
+    throw new Error("Orbit string style requires an explicit playable state");
+  }
+  const energy = clamp(impulse, 0, 1);
+  if (kind === "moon") {
+    return {
+      opacity: 0.07 + (selected ? 0.07 : 0) + (isPlaying ? 0.01 : 0) + energy * 0.12,
+      linewidth: 0.85 + (selected ? 0.3 : 0) + energy * 0.45,
+    };
+  }
+  return {
+    opacity: 0.16 + (selected ? 0.15 : 0) + (isPlaying ? 0.025 : 0) + energy * 0.42,
+    linewidth: 1.15 + (selected ? 0.75 : 0) + energy * 1.5,
+  };
+}
+
 export function cameraScaleLabel(distance) {
   if (!Number.isFinite(distance) || distance <= 0) throw new Error("Camera distance must be positive");
   return `${(distance * 0.12).toFixed(1)} AU`;

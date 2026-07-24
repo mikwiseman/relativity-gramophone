@@ -29,7 +29,9 @@ import {
   dopplerTintedColor,
   editorialCameraDistance,
   nextCameraDistance,
+  orbitStringStyle,
   selectRenderProfile,
+  shouldAutoSoundBody,
   shouldAdvancePhysics,
   shouldShowMoonPlacementGuide,
   sonicIntensity,
@@ -463,8 +465,11 @@ function updateNotePulse(visual, now) {
     THREE.MathUtils.lerp(current.z, next.z, localProgress),
   );
   const envelope = Math.sin(progress * Math.PI);
-  visual.notePulse.material.opacity = envelope * 0.94;
-  visual.notePulse.scale.setScalar(0.22 + envelope * 0.38);
+  const isMoon = visual.kind === "moon";
+  visual.notePulse.material.opacity = envelope * (isMoon ? 0.34 : 0.94);
+  visual.notePulse.scale.setScalar(
+    isMoon ? 0.14 + envelope * 0.2 : 0.22 + envelope * 0.38,
+  );
   visual.notePulse.visible = true;
 }
 
@@ -598,6 +603,7 @@ function createPlanetVisual(opalTexture, radialTexture, body) {
   const notePulse = createNotePulse(radialTexture, voiceVisual(body.voice).color);
 
   return {
+    kind: body.kind,
     group,
     mesh,
     rim,
@@ -1630,7 +1636,6 @@ export function SoundflightStage(props) {
           const birthEvent = engine.addBody(spec);
           propsRef.current.onBodySelect(spec.id);
           propsRef.current.onBodyGesture(birthEvent);
-          triggerOrbitPulse(spec.id);
           propsRef.current.onMoonBloom({ ...engine.getBody(spec.id) }, { ...parent });
           propsRef.current.onMoonComplete(spec.id, parent.id);
         } catch (error) {
@@ -1742,11 +1747,11 @@ export function SoundflightStage(props) {
             applyPlaybackEvent(engine, event);
             const born = engine.getBody(event.body.id);
             if (born) {
-              runtime.pendingOrbitPulses.set(born.id, performance.now() / 1000);
               if (born.kind === "moon") {
                 const parent = engine.getBody(born.parentId);
                 if (parent) currentProps.onMoonBloom({ ...born }, { ...parent });
               } else {
+                runtime.pendingOrbitPulses.set(born.id, performance.now() / 1000);
                 currentProps.onBirthBloom({ ...born });
               }
             }
@@ -1764,7 +1769,11 @@ export function SoundflightStage(props) {
         const focus = body.kind === "moon" ? engine.getBody(body.parentId) : star;
         const side = observerSide(body, engine.state.bodies);
         const previousSide = previousSideRef.current.get(body.id);
-        if (previousSide && side && previousSide !== side && !runtime.drag) {
+        if (previousSide
+          && side
+          && previousSide !== side
+          && !runtime.drag
+          && shouldAutoSoundBody(body)) {
           const note = {
             ...body,
             mass: body.displayMass,
@@ -1783,7 +1792,9 @@ export function SoundflightStage(props) {
           const radialVelocity = (dx * (body.vx - focus.vx) + dy * (body.vy - focus.vy)) /
             Math.max(0.001, Math.hypot(dx, dy));
           const previous = previousRadialVelocityRef.current.get(body.id);
-          if (previous < 0 && radialVelocity >= 0) currentProps.onHaptic({ kind: "pericenter", strength: body.displayMass });
+          if (previous < 0 && radialVelocity >= 0 && shouldAutoSoundBody(body)) {
+            currentProps.onHaptic({ kind: "pericenter", strength: body.displayMass });
+          }
           previousRadialVelocityRef.current.set(body.id, radialVelocity);
         }
       }
@@ -1850,7 +1861,7 @@ export function SoundflightStage(props) {
           : 0.24 + body.displayMass * 0.095;
         const scale = baseScale * (selected ? 1.12 : body.kind === "moon" ? 0.86 : 0.86);
         visual.mesh.scale.setScalar(scale);
-        visual.rim.scale.setScalar(scale * (body.kind === "moon" ? 5.3 : 4.2));
+        visual.rim.scale.setScalar(scale * (body.kind === "moon" ? 3.5 : 4.2));
         visual.mesh.rotation.y += delta * (0.1 + body.properRate * 0.1);
         visual.impulse *= Math.exp(-delta * 2.4);
         const intensity = sonicIntensity({
@@ -1859,12 +1870,26 @@ export function SoundflightStage(props) {
           resonanceStrength: snapshot.resonance?.bodyIds.includes(body.id) ? snapshot.resonance.strength : 0,
           impulse: visual.impulse,
         });
-        visual.mesh.material.emissiveIntensity = selected
-          ? 0.52 + intensity * 1.7
-          : 0.16 + intensity * 0.44;
+        if (body.kind === "moon") {
+          visual.mesh.material.emissiveIntensity = selected
+            ? 0.28 + intensity * 0.52
+            : 0.08 + intensity * 0.16;
+        } else {
+          visual.mesh.material.emissiveIntensity = selected
+            ? 0.52 + intensity * 1.7
+            : 0.16 + intensity * 0.44;
+        }
         const voiceColor = voiceVisual(body.voice).color;
         visual.rim.material.color.setHex(voiceColor);
-        visual.rim.material.opacity = selected ? 0.16 + intensity * 0.5 : 0.06 + intensity * 0.12;
+        if (body.kind === "moon") {
+          visual.rim.material.opacity = selected
+            ? 0.08 + intensity * 0.16
+            : 0.018 + intensity * 0.045;
+        } else {
+          visual.rim.material.opacity = selected
+            ? 0.16 + intensity * 0.5
+            : 0.06 + intensity * 0.12;
+        }
         const tinted = dopplerTintedColor(voiceColor, body.doppler);
         visual.trailColor.setRGB(tinted.r, tinted.g, tinted.b);
 
@@ -1896,16 +1921,18 @@ export function SoundflightStage(props) {
           visual.pulseStartIndex = nearestOrbitPointIndex(visual.orbitPoints, visual.group.position);
           runtime.pendingOrbitPulses.delete(body.id);
         }
-        const stringOpacity = (body.kind === "moon" ? 0.3 : 0.16)
-          + (selected ? 0.15 : 0)
-          + (propsRef.current.isPlaying ? 0.025 : 0)
-          + visual.impulse * 0.42;
+        const stringStyle = orbitStringStyle({
+          kind: body.kind,
+          selected,
+          isPlaying: propsRef.current.isPlaying,
+          impulse: visual.impulse,
+        });
         writeOrbitString(
           visual.orbitString,
           visual.orbitPoints,
           voiceColor,
-          moonMode && !inMoonFamily ? stringOpacity * 0.08 : stringOpacity,
-          (body.kind === "moon" ? 1.6 : 1.15) + (selected ? 0.75 : 0) + visual.impulse * 1.5,
+          moonMode && !inMoonFamily ? stringStyle.opacity * 0.08 : stringStyle.opacity,
+          stringStyle.linewidth,
           { width: renderer.domElement.clientWidth, height: renderer.domElement.clientHeight },
         );
         visual.notePulse.material.color.setHex(voiceColor);

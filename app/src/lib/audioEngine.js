@@ -1,4 +1,10 @@
-import { COSMIC_VOICES, VOICE_HARMONICS, voiceParameters, voicePluckParameters } from "./sonification.js";
+import {
+  COSMIC_VOICES,
+  VOICE_HARMONICS,
+  moonHarmonicFrequency,
+  voiceParameters,
+  voicePluckParameters,
+} from "./sonification.js";
 
 const AudioContextClass = globalThis.AudioContext ?? globalThis.webkitAudioContext;
 
@@ -297,6 +303,22 @@ export class AudioEngine {
     ramp(this.fieldBus.gain, active ? 0.72 : 0.0001, this.context.currentTime, active ? 0.34 : 0.12);
   }
 
+  audibleBody(body, parentOverride = null) {
+    if (body.kind !== "moon") return body;
+    const parent = parentOverride
+      ?? this.latestFrame?.bodies.find((candidate) => candidate.id === body.parentId);
+    if (!parent) return body;
+    return {
+      ...body,
+      frequency: moonHarmonicFrequency({
+        moonId: body.id,
+        parentFrequency: voiceParameters(parent).frequency,
+      }),
+      properRate: 1,
+      doppler: 1,
+    };
+  }
+
   updateField(frame) {
     this.latestFrame = frame;
     if (!this.context || this.context.state !== "running") return;
@@ -313,7 +335,7 @@ export class AudioEngine {
 
     for (const body of frame.bodies) {
       const voice = this.voices.get(body.id) ?? this.createVoice(body.id);
-      const parameters = voiceParameters(body, resonanceStrength);
+      const parameters = voiceParameters(this.audibleBody(body), resonanceStrength);
       const fundamentalFrequency = parameters.frequency / 2;
       if (voice.appliedVoiceId !== body.voice) {
         voice.appliedVoiceId = body.voice;
@@ -342,8 +364,11 @@ export class AudioEngine {
       voice.vibrato.frequency.setTargetAtTime(parameters.vibratoRate, now, 0.12);
       voice.vibratoDepth.gain.setTargetAtTime(parameters.vibratoDepthCents, now, 0.12);
       const distance = Math.hypot(body.x ?? 0, body.y ?? 0);
+      voice.delaySend.gain.setTargetAtTime(body.kind === "moon" ? 0.035 : 0.13, now, 0.18);
       voice.reverbSend.gain.setTargetAtTime(
-        Math.min(0.34, 0.06 + distance * 0.42),
+        body.kind === "moon"
+          ? Math.min(0.12, 0.035 + distance * 0.16)
+          : Math.min(0.34, 0.06 + distance * 0.42),
         now,
         0.25,
       );
@@ -370,12 +395,13 @@ export class AudioEngine {
     if (!this.context || this.context.state !== "running") return;
 
     const now = this.context.currentTime;
+    const audibleBody = this.audibleBody(body);
     const parameters = voiceParameters({
-      ...body,
-      displayMass: body.displayMass ?? body.mass,
-      doppler: body.doppler ?? 1 + body.velocityX * 0.075,
+      ...audibleBody,
+      displayMass: audibleBody.displayMass ?? audibleBody.mass,
+      doppler: audibleBody.doppler ?? 1 + audibleBody.velocityX * 0.075,
     });
-    const duration = parameters.release + (body.displayMass ?? body.mass) * 0.32;
+    const duration = parameters.release + (audibleBody.displayMass ?? audibleBody.mass) * 0.32;
     const gain = this.context.createGain();
     const filter = this.context.createBiquadFilter();
     const panner = this.context.createStereoPanner();
@@ -387,7 +413,7 @@ export class AudioEngine {
     const partialGain = this.context.createGain();
     const subGain = this.context.createGain();
 
-    this.applyVoiceWave(fundamental, body.voice, parameters.waveform);
+    this.applyVoiceWave(fundamental, audibleBody.voice, parameters.waveform);
     partial.type = parameters.partialWaveform;
     sub.type = "sine";
     const entranceRatio = 1 - Math.min(0.035, parameters.glideSeconds * 0.2);
@@ -400,7 +426,7 @@ export class AudioEngine {
     vibrato.type = "sine";
     vibrato.frequency.setValueAtTime(parameters.vibratoRate, now);
     vibratoDepth.gain.setValueAtTime(parameters.vibratoDepthCents, now);
-    partial.detune.setValueAtTime(-7 + (body.displayMass ?? body.mass) * 8, now);
+    partial.detune.setValueAtTime(-7 + (audibleBody.displayMass ?? audibleBody.mass) * 8, now);
     partialGain.gain.value = parameters.partialGain;
     subGain.gain.value = parameters.subGain;
     filter.type = "lowpass";
@@ -439,7 +465,7 @@ export class AudioEngine {
     if (!this.context || this.context.state !== "running") return;
 
     const now = this.context.currentTime;
-    const parameters = voicePluckParameters(body, { offset, strength });
+    const parameters = voicePluckParameters(this.audibleBody(body), { offset, strength });
     const duration = parameters.decay;
     const first = this.context.createOscillator();
     const second = this.context.createOscillator();
@@ -663,26 +689,7 @@ export class AudioEngine {
       displayMass: Math.max(0.12, (parent.displayMass ?? parent.mass ?? 0.5) * 0.46),
       doppler: 1,
     });
-    this.playOrbitNote({ ...moon, doppler: 1 });
-
-    const now = this.context.currentTime + 0.09;
-    const parameters = voiceParameters({ ...moon, doppler: 1 });
-    const shimmer = this.context.createOscillator();
-    const gain = this.context.createGain();
-    const panner = this.context.createStereoPanner();
-    const reverbSend = this.context.createGain();
-    shimmer.type = "sine";
-    shimmer.frequency.setValueAtTime(parameters.frequency * 1.5, now);
-    shimmer.frequency.exponentialRampToValueAtTime(parameters.frequency * 2, now + 1.35);
-    panner.pan.setValueAtTime(parameters.pan, now);
-    reverbSend.gain.value = 0.42;
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.028, now + 0.12);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.8);
-    shimmer.connect(gain).connect(panner).connect(this.master);
-    panner.connect(reverbSend).connect(this.reverb);
-    shimmer.start(now);
-    shimmer.stop(now + 1.9);
+    this.playOrbitNote(this.audibleBody(moon, parent));
   }
 
   playConsumption(body) {

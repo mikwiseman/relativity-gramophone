@@ -2,6 +2,26 @@ function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
+const MOON_HARMONIC_RATIOS = Object.freeze([3 / 2, 2]);
+
+function moonOrdinal(moonId) {
+  if (typeof moonId !== "string") throw new Error("Moon harmony requires a moon id");
+  const match = moonId.match(/-(\d+)$/u);
+  if (!match) throw new Error(`Moon harmony requires an ordinal id: ${moonId}`);
+  return Math.max(0, Number(match[1]) - 1);
+}
+
+export function moonHarmonicFrequency({ moonId, parentFrequency }) {
+  if (!Number.isFinite(parentFrequency) || parentFrequency <= 0) {
+    throw new Error("Moon harmony requires a positive parent frequency");
+  }
+  const ratio = MOON_HARMONIC_RATIOS[Math.min(moonOrdinal(moonId), MOON_HARMONIC_RATIOS.length - 1)];
+  let frequency = parentFrequency * ratio;
+  while (frequency > 1_760) frequency /= 2;
+  while (frequency < 55) frequency *= 2;
+  return frequency;
+}
+
 export const SONIFICATION_MODEL = "cosmic-voices/2";
 
 export const KEPLER_OCTAVE_LIFT = 2 ** 12;
@@ -215,31 +235,51 @@ export function voiceParameters(body, resonanceStrength = 0) {
   const properRate = clamp(body.properRate ?? 1, 0.9, 1);
   const doppler = clamp(body.doppler ?? 1, 0.9, 1.1);
   const profile = COSMIC_VOICES[body.voice] ?? COSMIC_VOICES.earth;
-  const partialGain = clamp(0.035 + mass * 0.075 + resonanceStrength * 0.025, 0.03, 0.16);
-  const fallbackFrequency = profile.id === "light"
-    ? visibleWavelengthToAudibleFrequency(body.wavelengthNm ?? profile.wavelengthNm)
-    : body.frequency;
-  const sungFrequency = keplerPitch(body.period) ?? fallbackFrequency;
+  const isMoon = body.kind === "moon";
+  const partialGain = clamp(0.035 + mass * 0.075 + resonanceStrength * 0.025, 0.03, 0.16)
+    * (isMoon ? 0.32 : 1);
+  const fallbackFrequency = isMoon
+    ? body.frequency
+    : profile.id === "light"
+      ? visibleWavelengthToAudibleFrequency(body.wavelengthNm ?? profile.wavelengthNm)
+      : body.frequency;
+  const sungFrequency = isMoon ? fallbackFrequency : keplerPitch(body.period) ?? fallbackFrequency;
+  const baseGain = clamp(0.018 + mass * 0.052 + resonanceStrength * 0.008, 0.015, 0.11);
+  const baseTremoloDepth = clamp(
+    0.018 + Math.abs(doppler - 1) * 1.8 + resonanceStrength * 0.025,
+    0.01,
+    0.12,
+  );
 
   return {
     frequency: clamp(sungFrequency * properRate * doppler, 40, 1800),
-    gain: clamp(0.018 + mass * 0.052 + resonanceStrength * 0.008, 0.015, 0.11),
+    gain: isMoon ? baseGain * 0.28 : baseGain,
     waveform: profile.waveform,
     partialWaveform: profile.partialWaveform,
     partialRatio: profile.partialRatio,
-    partialGain: clamp(partialGain * profile.partialGainScale, 0.02, 0.2),
+    partialGain: clamp(partialGain * profile.partialGainScale, 0.006, 0.2),
     subRatio: profile.subRatio,
-    subGain: profile.subGain,
-    cutoff: clamp((3300 - distance * 2800 + mass * 480) * profile.cutoffScale, 520, 7200),
-    q: profile.q,
+    subGain: profile.subGain * (isMoon ? 0.22 : 1),
+    cutoff: clamp(
+      (3300 - distance * 2800 + mass * 480) * profile.cutoffScale * (isMoon ? 0.78 : 1),
+      520,
+      7200,
+    ),
+    q: profile.q * (isMoon ? 0.72 : 1),
     pan: clamp(body.x / 0.52, -0.86, 0.86),
-    tremoloRate: clamp((0.28 + (1 - properRate) * 18 + resonanceStrength * 0.6) * profile.tremoloScale, 0.16, 4.2),
-    tremoloDepth: clamp(0.018 + Math.abs(doppler - 1) * 1.8 + resonanceStrength * 0.025, 0.01, 0.12),
-    attack: profile.attack,
-    release: profile.release,
-    glideSeconds: profile.glideSeconds,
+    tremoloRate: clamp(
+      (0.28 + (1 - properRate) * 18 + resonanceStrength * 0.6)
+        * profile.tremoloScale
+        * (isMoon ? 0.48 : 1),
+      0.12,
+      4.2,
+    ),
+    tremoloDepth: isMoon ? Math.min(0.02, baseTremoloDepth * 0.22) : baseTremoloDepth,
+    attack: isMoon ? Math.max(0.08, profile.attack * 1.6) : profile.attack,
+    release: isMoon ? Math.min(2.2, profile.release * 0.72) : profile.release,
+    glideSeconds: isMoon ? Math.max(0.12, profile.glideSeconds * 1.8) : profile.glideSeconds,
     vibratoRate: profile.vibratoRate,
-    vibratoDepthCents: profile.vibratoDepthCents,
+    vibratoDepthCents: profile.vibratoDepthCents * (isMoon ? 0.38 : 1),
   };
 }
 
@@ -248,14 +288,17 @@ export function voicePluckParameters(body, { offset, strength }) {
   const clampedStrength = clamp(strength, 0, 1);
   const mass = clamp(body.displayMass ?? body.mass ?? 0.5, 0.1, 1.3);
   const live = voiceParameters(body);
+  const isMoon = body.kind === "moon";
+  const baseGain = clamp(0.028 + clampedStrength * 0.058 + mass * 0.008, 0.02, 0.1);
+  const basePartialGain = clamp(0.06 + clampedOffset * 0.3, 0.05, 0.4);
 
   return {
     frequency: live.frequency,
     pan: live.pan,
     strength: clampedStrength,
-    gain: clamp(0.028 + clampedStrength * 0.058 + mass * 0.008, 0.02, 0.1),
+    gain: baseGain * (isMoon ? 0.55 : 1),
     cutoff: clamp(1050 + clampedOffset * 5200, 900, 7500),
-    partialGain: clamp(0.06 + clampedOffset * 0.3, 0.05, 0.4),
+    partialGain: basePartialGain * (isMoon ? 0.55 : 1),
     decay: clamp(0.85 + (1 - clampedOffset) * 1.15 + mass * 0.5, 0.7, 3),
     detuneCents: 4,
   };
