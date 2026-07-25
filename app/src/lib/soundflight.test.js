@@ -21,6 +21,7 @@ import {
   selectRenderProfile,
   shouldApplyGestationUpdate,
   shouldApplyThereminRelease,
+  shouldArmDirectMoon,
   shouldBeginThereminHold,
   shouldCelebrateThereminEnd,
   shouldCancelDirectManipulation,
@@ -67,6 +68,33 @@ test("moon placement geometry stays hidden until the player actually drags", () 
   assert.equal(shouldShowMoonPlacementGuide({ activeDrag: false }), false);
   assert.equal(shouldShowMoonPlacementGuide({ activeDrag: true }), true);
   assert.throws(() => shouldShowMoonPlacementGuide({}), /explicit drag state/i);
+});
+
+test("dragging a planet directly can make a moon without a selection panel", () => {
+  assert.equal(shouldArmDirectMoon({
+    body: { kind: "planet" },
+    interactionMode: "compose",
+    isListener: false,
+    siblingCount: 0,
+    liveBodyCount: 2,
+    maxWorlds: 12,
+  }), true);
+  assert.equal(shouldArmDirectMoon({
+    body: { kind: "moon" },
+    interactionMode: "compose",
+    isListener: false,
+    siblingCount: 0,
+    liveBodyCount: 2,
+    maxWorlds: 12,
+  }), false);
+  assert.equal(shouldArmDirectMoon({
+    body: { kind: "planet" },
+    interactionMode: "compose",
+    isListener: false,
+    siblingCount: 2,
+    liveBodyCount: 4,
+    maxWorlds: 12,
+  }), false);
 });
 
 test("launch guidance turns one unfamiliar gesture into three explicit moments", () => {

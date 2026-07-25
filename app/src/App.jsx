@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowRight,
+  DotsThree,
   House,
-  Minus,
   NavigationArrow,
   Pause,
   Play,
-  Plus,
   ShareNetwork,
   Trash,
+  Waveform,
+  X,
 } from "@phosphor-icons/react";
 
 import { InscriptionDialog } from "./components/InscriptionDialog.jsx";
@@ -32,7 +32,6 @@ import {
 import { THEMES } from "./lib/themes.js";
 import { copyOrbitLink, shareOrbit } from "./lib/sharing.js";
 import {
-  COSMIC_DESTINATIONS,
   cosmicDestination,
   cosmicJourneyForScale,
   cosmicLandmarkById,
@@ -40,7 +39,6 @@ import {
   thereminParameters,
 } from "./lib/cosmicInstrument.js";
 import { COSMIC_VOICES, hapticPattern, voiceParameters } from "./lib/sonification.js";
-import { MAX_WORLDS } from "./lib/physicsEngine.js";
 import {
   frequencyToNoteName,
   INITIAL_PLAYBACK,
@@ -112,7 +110,8 @@ export function App() {
   const [thereminPhase, setThereminPhase] = useState("idle");
   const [hasPlayedTheremin, setHasPlayedTheremin] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
-  const [mapOpen, setMapOpen] = useState(false);
+  const [lightOpen, setLightOpen] = useState(false);
+  const [utilityOpen, setUtilityOpen] = useState(false);
   const [interactionCancelToken, setInteractionCancelToken] = useState(0);
 
   const audioRef = useRef(new AudioEngine());
@@ -160,6 +159,7 @@ export function App() {
 
   const openGuide = useCallback(() => {
     cancelDirectGestures();
+    setUtilityOpen(false);
     setGuideOpen(true);
   }, [cancelDirectGestures]);
 
@@ -169,6 +169,7 @@ export function App() {
 
   const openListenerShare = useCallback(() => {
     cancelDirectGestures();
+    setUtilityOpen(false);
     setDialogOpen(true);
   }, [cancelDirectGestures]);
 
@@ -202,7 +203,8 @@ export function App() {
     setHasPluckedOrbit(false);
     setHasPlayedTheremin(false);
     setGuideOpen(false);
-    setMapOpen(false);
+    setLightOpen(false);
+    setUtilityOpen(false);
     setCameraScale("1.2 AU");
     setCosmicScale(cosmicScaleForDistance(10));
     setCameraCommand((current) => ({ id: current.id + 1, type: "reset" }));
@@ -216,10 +218,6 @@ export function App() {
   const liveBodies = physicsFrame?.bodies ?? [];
   const planets = liveBodies.filter((body) => body.kind === "planet");
   const selectedBody = liveBodies.find((body) => body.id === selectedBodyId) ?? null;
-  const selectedMoonCount = selectedBody?.kind === "planet"
-    ? liveBodies.filter((body) => body.kind === "moon" && body.parentId === selectedBody.id).length
-    : 0;
-  const selectedVoice = selectedBody ? voiceVisual(selectedBody.voice) : null;
   const currentDestination = cosmicDestination(
     cosmicScale.id === "orbit" ? "system" : cosmicScale.id,
   );
@@ -229,16 +227,11 @@ export function App() {
     && liveBodies.length === 0
     && (cosmicScale.id === "orbit" || cosmicScale.id === "system")
     && !journeyTarget;
-  const cosmicDestinations = Object.values(COSMIC_DESTINATIONS);
-  const currentDestinationIndex = cosmicDestinations.findIndex(
-    (destination) => destination.id === currentDestination.id,
-  );
   const cosmicJourney = cosmicJourneyForScale(currentDestination.id);
   const nextDestination = cosmicJourney.outward;
   const guidance = instrumentHint({
     planetCount: planets.length,
     selectedBody,
-    selectedMoonCount,
     isListener,
     hasPluckedOrbit,
     thereminPhase,
@@ -247,7 +240,6 @@ export function App() {
   const guidanceDetail = instrumentGuidanceDetail({
     planetCount: planets.length,
     selectedBody,
-    selectedMoonCount,
     isListener,
     hasPluckedOrbit,
     thereminPhase,
@@ -268,26 +260,13 @@ export function App() {
     && !journeyTarget,
   );
   const onboardingComplete = isListener || !lesson;
-  const showThereminPad = !isListener
-    && currentDestination.id === "system"
-    && interactionMode === "compose"
-    && !journeyTarget
-    && !mapOpen
-    && (
-      (showInstrumentLesson && lesson.showThereminPad)
-      || (onboardingComplete && hasPlayedTheremin)
-    );
   const activeGuidance = showInstrumentLesson
     ? lesson.instruction
     : journeyTarget
     ? `FLYING TO ${cosmicDestination(journeyTarget).label}`
     : arrivalTarget
       ? `YOU ARE IN ${cosmicDestination(arrivalTarget).label}`
-    : interactionMode === "explore"
-      ? `LOOK AROUND ${currentDestination.label}`
-      : interactionMode === "moon" && selectedBody?.kind === "planet"
-        ? `DRAG FROM ${bodyLabel(selectedBody)}`
-      : isAwaitingCosmicScore
+    : isAwaitingCosmicScore
         ? "A SHARED UNIVERSE IS READY"
       : cosmicScale.id === "orbit" || cosmicScale.id === "system"
         ? guidance
@@ -302,11 +281,7 @@ export function App() {
           ? "TOUCH A GLOWING ORBIT TO PLAY IT"
           : "HOLD THE STAR · PULL OUTWARD · RELEASE"
         : "TOUCH A BRIGHT REGION TO HEAR IT"
-    : interactionMode === "explore"
-      ? "DRAG TO LOOK AROUND · PINCH TO FLY CLOSER OR FARTHER"
-      : interactionMode === "moon" && selectedBody?.kind === "planet"
-        ? "PULL OUTWARD · RELEASE INSIDE THE GLOWING HALO"
-      : isAwaitingCosmicScore
+    : isAwaitingCosmicScore
         ? "LISTEN · THE CAMERA FOLLOWS EACH COSMIC VOICE"
       : cosmicScale.id === "orbit" || cosmicScale.id === "system"
         ? guidanceDetail
@@ -341,6 +316,37 @@ export function App() {
     }
     setAudioState(state === "suspended" && intentionalPauseRef.current ? "paused" : "locked");
   }), []);
+
+  useEffect(() => {
+    const recoverSound = async () => {
+      if (document.visibilityState !== "visible"
+        || intentionalPauseRef.current
+        || !isPlaying
+        || audioRef.current.getState() === "uninitialized") return;
+      try {
+        await audioRef.current.resume(true);
+        setAudioState("running");
+        setRuntimeError(null);
+      } catch {
+        setAudioState("locked");
+      }
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        if (!intentionalPauseRef.current && isPlaying) {
+          audioRef.current.suspend().catch(() => setAudioState("locked"));
+        }
+        return;
+      }
+      recoverSound();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pageshow", recoverSound);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pageshow", recoverSound);
+    };
+  }, [isPlaying]);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -439,7 +445,7 @@ export function App() {
     intentionalPauseRef.current = false;
     if (audioStartPromiseRef.current) return audioStartPromiseRef.current;
     let request;
-    request = audioRef.current.resume(activateField)
+    request = audioRef.current.activateFromGesture(activateField)
       .then((state) => {
         setAudioState("running");
         return state;
@@ -614,28 +620,6 @@ export function App() {
     startAudio,
   ]);
 
-  const handleToggleExplore = useCallback(() => {
-    cancelDirectGestures();
-    if (interactionMode === "explore") {
-      setCameraCommand((command) => ({
-        id: command.id + 1,
-        type: "travel",
-        targetId: currentDestination.id,
-        distance: currentDestination.distance,
-      }));
-      setInteractionMode("compose");
-    } else {
-      setSelectedBodyId(null);
-      setInteractionMode("explore");
-    }
-  }, [cancelDirectGestures, currentDestination, interactionMode]);
-
-  const handleToggleMap = useCallback(() => {
-    cancelDirectGestures();
-    setInteractionMode("compose");
-    setMapOpen((current) => !current);
-  }, [cancelDirectGestures]);
-
   const handleCosmicTravel = useCallback((targetId) => {
     if (journeyTargetRef.current) return;
     cancelDirectGestures();
@@ -653,6 +637,33 @@ export function App() {
       distance: destination.distance,
     }));
   }, [cancelDirectGestures]);
+
+  const handlePrimaryFlight = useCallback(() => {
+    handleCosmicTravel(nextDestination?.id ?? "system");
+  }, [handleCosmicTravel, nextDestination]);
+
+  const handleOpenLight = useCallback(() => {
+    cancelDirectGestures();
+    setUtilityOpen(false);
+    setInteractionMode("light");
+    startAudio(true)
+      .then(() => {
+        setIsPlaying(true);
+        setLightOpen(true);
+        setRuntimeError(null);
+      })
+      .catch((error) => {
+        setAudioState("locked");
+        setRuntimeError(error instanceof Error ? error.message : "The light could not sound");
+      });
+  }, [cancelDirectGestures, startAudio]);
+
+  const handleCloseLight = useCallback(() => {
+    thereminPadPointerRef.current = null;
+    cancelTheremin();
+    setLightOpen(false);
+    setInteractionMode("compose");
+  }, [cancelTheremin]);
 
   const thereminPadParameters = useCallback((event) => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -705,19 +716,6 @@ export function App() {
     event.currentTarget.style.setProperty("--theremin-y", "50%");
   }, [handleTheremin]);
 
-  const handleZoom = useCallback((direction) => {
-    if (journeyTargetRef.current) return;
-    cancelDirectGestures();
-    setJourneyTarget(null);
-    window.clearTimeout(arrivalTimeoutRef.current);
-    setArrivalTarget(null);
-    setCameraCommand((current) => ({
-      id: current.id + 1,
-      type: "zoom",
-      direction,
-    }));
-  }, [cancelDirectGestures]);
-
   const handleTogglePlayback = useCallback(async () => {
     if (audioState === "running" && isPlaying) {
       cancelDirectGestures();
@@ -759,20 +757,15 @@ export function App() {
         setGuideOpen(false);
         return;
       }
-      if (mapOpen) {
-        setMapOpen(false);
+      if (lightOpen) {
+        handleCloseLight();
+        return;
+      }
+      if (utilityOpen) {
+        setUtilityOpen(false);
         return;
       }
       if (dialogOpen) return;
-      if (interactionMode === "moon") {
-        cancelDirectGestures();
-        setInteractionMode("compose");
-        return;
-      }
-      if (interactionMode === "explore") {
-        handleToggleExplore();
-        return;
-      }
       if (currentDestination.id !== "system") handleCosmicTravel("system");
     };
     window.addEventListener("keydown", onEscape);
@@ -782,10 +775,10 @@ export function App() {
     cancelDirectGestures,
     dialogOpen,
     guideOpen,
+    handleCloseLight,
     handleCosmicTravel,
-    handleToggleExplore,
-    interactionMode,
-    mapOpen,
+    lightOpen,
+    utilityOpen,
   ]);
 
   const closeDialog = useCallback(async () => {
@@ -997,6 +990,7 @@ export function App() {
 
   const handleInscribe = useCallback(async () => {
     cancelDirectGestures();
+    setUtilityOpen(false);
     setIsPlaying(false);
     intentionalPauseRef.current = true;
     await audioRef.current.suspend();
@@ -1107,25 +1101,10 @@ export function App() {
   const deleteSelected = useCallback(() => {
     if (!selectedBodyId || isListener) return;
     cancelDirectGestures();
+    setUtilityOpen(false);
     setInteractionMode("compose");
     setRemoveCommand((current) => ({ id: current.id + 1, bodyId: selectedBodyId }));
   }, [cancelDirectGestures, isListener, selectedBodyId]);
-
-  const toggleMoonCreation = useCallback(() => {
-    if (isListener || selectedBody?.kind !== "planet" || selectedMoonCount >= 2) return;
-    if (liveBodies.length >= MAX_WORLDS) {
-      setRuntimeError("The sky is full. Remove a world before adding another.");
-      return;
-    }
-    cancelDirectGestures();
-    setInteractionMode((current) => (current === "moon" ? "compose" : "moon"));
-  }, [
-    cancelDirectGestures,
-    isListener,
-    liveBodies.length,
-    selectedBody,
-    selectedMoonCount,
-  ]);
 
   const retryStoredScore = useCallback(() => {
     try {
@@ -1214,18 +1193,19 @@ export function App() {
         <p>DRAW ORBITS · HEAR GRAVITY</p>
       </header>
 
-      {!dialogOpen && storedScoreState === "idle" && onboardingComplete && (
-        <button
-          type="button"
-          className="playing-guide-trigger"
-          ref={guideTriggerRef}
-          aria-expanded={guideOpen}
-          aria-controls="playing-guide"
-          onClick={openGuide}
-        >
-          <i aria-hidden="true">?</i>
-          <span>HOW TO PLAY</span>
-        </button>
+      {!dialogOpen && storedScoreState === "idle" && !lightOpen && (
+        <div className="instrument-topbar">
+          <span className="instrument-location">{currentDestination.label}</span>
+          <button
+            type="button"
+            className="instrument-menu-trigger"
+            aria-label="Open instrument menu"
+            aria-expanded={utilityOpen}
+            onClick={() => setUtilityOpen((current) => !current)}
+          >
+            <DotsThree aria-hidden="true" weight="bold" />
+          </button>
+        </div>
       )}
 
       {storedScoreState !== "idle" && (
@@ -1252,75 +1232,37 @@ export function App() {
 
       {!dialogOpen && storedScoreState === "idle" && (
         <>
-          <section className="instrument-guidance" aria-live="polite">
-            {showInstrumentLesson && (
-              <small>
-                STEP {lesson.step} OF {lesson.total} · {lesson.label}
-              </small>
-            )}
-            <strong>{activeGuidance}</strong>
-            <span>{activeGuidanceDetail}</span>
-          </section>
-
-          {showThereminPad && (
+          {audioState === "locked" && (
             <button
               type="button"
-              className={`theremin-beacon${onboardingComplete ? " is-compact" : ""}`}
-              aria-label="Play the Light Theremin. Hold the blue light, then move your finger."
-              onPointerDown={handleThereminPadStart}
-              onPointerMove={handleThereminPadMove}
-              onPointerUp={handleThereminPadEnd}
-              onPointerCancel={handleThereminPadEnd}
+              className="sound-gate"
+              onClick={handleTogglePlayback}
+              aria-label="Touch to hear the universe"
             >
-              <i />
-              <span>
-                <small>LIGHT THEREMIN</small>
-                <strong>{
-                  thereminPhase === "active"
-                    ? "MOVE YOUR FINGER"
-                    : onboardingComplete
-                      ? "HOLD + MOVE"
-                      : "HOLD THE BLUE LIGHT"
-                }</strong>
-              </span>
-              <b>BRIGHTER ↑</b>
-              <em>NOTE →</em>
+              <Play aria-hidden="true" weight="fill" />
+              <strong>TOUCH TO HEAR</strong>
+              <span>ONE TAP STARTS THE UNIVERSE</span>
             </button>
           )}
 
-          {selectedBody && !isListener && onboardingComplete && interactionMode !== "explore" && (
-            <aside
-              className="instrument-selection"
-              style={{ "--selected-voice": `#${selectedVoice.color.toString(16).padStart(6, "0")}` }}
-              aria-label={`Selected ${bodyLabel(selectedBody)}`}
-            >
-              <i aria-hidden="true" />
-              <span>
-                <small>SELECTED</small>
-                <strong>{bodyLabel(selectedBody)}</strong>
-              </span>
-              {selectedBody.kind === "planet" && selectedMoonCount < 2 && (
-                <button
-                  type="button"
-                  className="instrument-selection__moon"
-                  aria-label={interactionMode === "moon"
-                    ? `Cancel moon creation for ${bodyLabel(selectedBody)}`
-                    : `Add moon to ${bodyLabel(selectedBody)}`}
-                  aria-pressed={interactionMode === "moon"}
-                  onClick={toggleMoonCreation}
-                >
-                  <Plus aria-hidden="true" weight="thin" />
-                  <span>{interactionMode === "moon" ? "CANCEL" : "ADD MOON"}</span>
-                </button>
-              )}
-              <button type="button" onClick={deleteSelected} aria-label={`Delete ${bodyLabel(selectedBody)}`}>
-                <Trash aria-hidden="true" weight="thin" />
-                <span>DELETE</span>
-              </button>
-            </aside>
+          {audioState === "running"
+            && !lightOpen
+            && !utilityOpen
+            && (
+              showInstrumentLesson
+              || Boolean(journeyTarget)
+              || Boolean(arrivalTarget)
+              || isAwaitingCosmicScore
+              || currentDestination.id !== "system"
+            ) && (
+            <section className="instrument-guidance" aria-live="polite">
+              <strong>{activeGuidance}</strong>
+              <span>{activeGuidanceDetail}</span>
+            </section>
           )}
 
-          <nav className="instrument-controls" aria-label="Music controls">
+          {!lightOpen && audioState !== "locked" && (
+          <nav className="instrument-controls minimal-controls" aria-label="Music controls">
             <button
               type="button"
               className="instrument-play"
@@ -1333,157 +1275,114 @@ export function App() {
                 : <Play aria-hidden="true" weight="fill" />}
               <span>{playback.label}</span>
             </button>
-            {onboardingComplete && (
-              <>
+            {currentDestination.id === "system" ? (
+              <button
+                type="button"
+                className="instrument-light"
+                onClick={handleOpenLight}
+              >
+                <Waveform aria-hidden="true" weight="thin" />
+                <span>LIGHT</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="instrument-home"
+                onClick={() => handleCosmicTravel("system")}
+                disabled={Boolean(journeyTarget)}
+              >
+                <House aria-hidden="true" weight="thin" />
+                <span>HOME</span>
+              </button>
+            )}
+            {nextDestination && (
                 <button
                   type="button"
-                  className="instrument-share"
+                  className="instrument-flight"
+                  aria-label={`Fly to ${nextDestination.label}`}
+                  onClick={handlePrimaryFlight}
+                  disabled={Boolean(journeyTarget)}
+                >
+                  <NavigationArrow aria-hidden="true" weight="thin" />
+                  <span>{journeyTarget ? "FLYING" : "FLY"}</span>
+                </button>
+            )}
+          </nav>
+          )}
+
+          {lightOpen && (
+            <section className="light-instrument" aria-label="Light Theremin">
+              <button
+                type="button"
+                className="light-instrument__back"
+                onClick={handleCloseLight}
+              >
+                <X aria-hidden="true" weight="thin" />
+                <span>BACK</span>
+              </button>
+              <div className="light-instrument__title">
+                <strong>LIGHT</strong>
+                <span>MOVE YOUR FINGER THROUGH SOUND</span>
+              </div>
+              <button
+                type="button"
+                className="light-instrument__field"
+                aria-label="Move left and right for the note. Move up and down for intensity."
+                onPointerDown={handleThereminPadStart}
+                onPointerMove={handleThereminPadMove}
+                onPointerUp={handleThereminPadEnd}
+                onPointerCancel={handleThereminPadEnd}
+              >
+                <i aria-hidden="true" />
+                <b>BRIGHTER</b>
+                <em>NOTE</em>
+              </button>
+            </section>
+          )}
+
+          {utilityOpen && !lightOpen && (
+            <div
+              className="instrument-menu-backdrop"
+              onPointerDown={(event) => {
+                if (event.target === event.currentTarget) setUtilityOpen(false);
+              }}
+            >
+              <section className="instrument-menu" role="dialog" aria-label="Instrument menu">
+                <button
+                  type="button"
+                  className="instrument-menu__close"
+                  aria-label="Close instrument menu"
+                  onClick={() => setUtilityOpen(false)}
+                >
+                  <X aria-hidden="true" weight="thin" />
+                </button>
+                <strong>WAI GRAMOPHONE</strong>
+                <button type="button" ref={guideTriggerRef} onClick={openGuide}>
+                  <span>HOW TO PLAY</span>
+                </button>
+                <button
+                  type="button"
                   onClick={isListener ? openListenerShare : handleInscribe}
                   disabled={!isListener && liveBodies.length === 0 && composition.events.length === 0}
                 >
                   <ShareNetwork aria-hidden="true" weight="thin" />
-                  <span>SHARE</span>
+                  <span>SHARE THIS UNIVERSE</span>
                 </button>
-                <button
-                  type="button"
-                  className="instrument-flight"
-                  aria-label={mapOpen ? "Close universe map" : "Open universe map"}
-                  aria-pressed={mapOpen}
-                  onClick={handleToggleMap}
-                  disabled={interactionMode === "moon" || Boolean(journeyTarget)}
-                >
-                  <NavigationArrow aria-hidden="true" weight="thin" />
-                  <span>{mapOpen ? "CLOSE MAP" : "FLY"}</span>
-                </button>
-              </>
-            )}
-          </nav>
-
-          {mapOpen && (
-            <aside
-              className="cosmic-lens"
-              aria-label="Cosmic lens"
-              aria-busy={Boolean(journeyTarget)}
-            >
-              <header>
-                <span>UNIVERSE MAP · {currentDestinationIndex + 1} OF {cosmicDestinations.length}</span>
-                <strong>{journeyTarget ? "IN FLIGHT" : currentDestination.label}</strong>
-              </header>
-              {(journeyTarget || nextDestination || cosmicJourney.home) && (
-                <button
-                  type="button"
-                  className="cosmic-lens__next"
-                  aria-label={`Travel to ${
-                    journeyTarget
-                      ? cosmicDestination(journeyTarget).label
-                      : (nextDestination ?? cosmicJourney.home).label
-                  }`}
-                  disabled={Boolean(journeyTarget)}
-                  onClick={() => handleCosmicTravel((nextDestination ?? cosmicJourney.home).id)}
-                >
-                  <span>{journeyTarget
-                    ? "FLYING TO"
-                    : nextDestination
-                      ? "NEXT FLIGHT"
-                      : "RETURN HOME"}</span>
-                  <strong>{journeyTarget
-                    ? cosmicDestination(journeyTarget).label
-                    : (nextDestination ?? cosmicJourney.home).label}</strong>
-                  {nextDestination
-                    ? <ArrowRight aria-hidden="true" weight="thin" />
-                    : <House aria-hidden="true" weight="thin" />}
-                </button>
-              )}
-              <nav className="cosmic-lens__stops" aria-label="Choose a cosmic scale">
-                {cosmicDestinations.map((destination, index) => {
-                  const active = !journeyTarget && currentDestination.id === destination.id;
-                  const invited = destination.id === nextDestination?.id;
-                  const isJourneyTarget = journeyTarget === destination.id;
-                  return (
-                    <button
-                      key={destination.id}
-                      type="button"
-                      aria-current={active ? "location" : undefined}
-                      aria-label={`Travel to ${destination.label}`}
-                      className={[
-                        active ? "is-active" : "",
-                        isJourneyTarget ? "is-journey-target" : "",
-                      ].filter(Boolean).join(" ")}
-                      data-invited={invited || undefined}
-                      disabled={Boolean(journeyTarget)}
-                      onClick={() => handleCosmicTravel(destination.id)}
-                    >
-                      <i aria-hidden="true">{String(index + 1).padStart(2, "0")}</i>
-                      <span>{destination.id === "system" ? "MY SYSTEM" : destination.label}</span>
-                      {destination.id === "system"
-                        ? <House aria-hidden="true" weight="thin" />
-                        : <ArrowRight aria-hidden="true" weight="thin" />}
-                    </button>
-                  );
-                })}
-              </nav>
-              <footer>
-                <span>{currentDestination.measure}</span>
-                <nav className="cosmic-zoom" aria-label="Fine cosmic zoom">
-                  <button
-                    type="button"
-                    onClick={() => handleZoom(-1)}
-                    aria-label="Zoom closer"
-                    disabled={Boolean(journeyTarget)}
-                  >
-                    <Plus aria-hidden="true" weight="thin" />
+                {selectedBody && !isListener && (
+                  <button type="button" onClick={deleteSelected}>
+                    <Trash aria-hidden="true" weight="thin" />
+                    <span>REMOVE {bodyLabel(selectedBody)}</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handleZoom(1)}
-                    aria-label="Zoom farther"
-                    disabled={Boolean(journeyTarget)}
-                  >
-                    <Minus aria-hidden="true" weight="thin" />
-                  </button>
-                </nav>
-              </footer>
-            </aside>
+                )}
+              </section>
+            </div>
           )}
 
-          {mapOpen && (
-            <nav
-              className="cosmic-zoom cosmic-zoom--mobile"
-              aria-label="Fine cosmic zoom"
-            >
-              <button
-                type="button"
-                onClick={() => handleZoom(-1)}
-                aria-label="Zoom closer"
-                disabled={Boolean(journeyTarget)}
-              >
-                <Plus aria-hidden="true" weight="thin" />
-              </button>
-              <button
-                type="button"
-                onClick={() => handleZoom(1)}
-                aria-label="Zoom farther"
-                disabled={Boolean(journeyTarget)}
-              >
-                <Minus aria-hidden="true" weight="thin" />
-              </button>
-            </nav>
+          {sonicCue && !lightOpen && (
+            <div className="soundflight-voice-breath simple-voice-breath is-cue" aria-live="polite">
+              <span>{sonicCue}</span>
+            </div>
           )}
-
-          <div
-            className={`soundflight-voice-breath simple-voice-breath${sonicCue ? " is-cue" : ""}`}
-            aria-live="polite"
-          >
-            <span>{sonicCue || (audioState !== "running"
-              ? "SOUND OFF · TAP START SOUND"
-              : isPlaying
-              ? liveBodies.length > 0
-                ? `${liveBodies.length} VOICES · ${cosmicScale.label}`
-                : cosmicScale.id === "orbit" || cosmicScale.id === "system"
-                  ? "SOLAR DRONE · LIVE"
-                  : `${currentDestination.label} · CHOIR LIVE`
-              : "PINCH OR SCROLL TO CROSS SCALES")}</span>
-          </div>
         </>
       )}
 
@@ -1512,34 +1411,34 @@ export function App() {
               ×
             </button>
             <small>HOW TO PLAY</small>
-            <h2 id="playing-guide-title">FOUR MOVES. ONE UNIVERSE.</h2>
+            <h2 id="playing-guide-title">PLAY WITH FOUR MOVES.</h2>
             <ol>
               <li>
                 <span>01</span>
                 <div>
-                  <strong>WAKE THE STAR · MAKE A WORLD</strong>
-                  <p>Touch the star to start the sound. Then drag it outward and release to make a planet.</p>
+                  <strong>MAKE A PLANET</strong>
+                  <p>Pull the star outward and release.</p>
                 </div>
               </li>
               <li>
                 <span>02</span>
                 <div>
                   <strong>PLAY AN ORBIT</strong>
-                  <p>Touch or swipe a glowing orbit. It is a string, and every planet gives it a different voice.</p>
+                  <p>Touch or swipe its glowing line like a string.</p>
                 </div>
               </li>
               <li>
                 <span>03</span>
                 <div>
-                  <strong>PLAY THE LIGHT THEREMIN</strong>
-                  <p>Hold the blue light, then move your finger. Sideways changes the note; upward makes it brighter.</p>
+                  <strong>MAKE A MOON</strong>
+                  <p>Pull any planet outward and release.</p>
                 </div>
               </li>
               <li>
                 <span>04</span>
                 <div>
-                  <strong>FLY</strong>
-                  <p>Tap NEXT FLIGHT to move outward one world at a time. MY SYSTEM always brings you home.</p>
+                  <strong>PLAY WITH LIGHT OR FLY</strong>
+                  <p>Light opens the theremin. Fly moves to the next cosmic scale.</p>
                 </div>
               </li>
             </ol>

@@ -302,20 +302,20 @@ test("one contextual sentence teaches the next literal gesture", () => {
     planetCount: 2,
     selectedBody: { kind: "planet" },
     selectedMoonCount: 0,
-  }), "TOUCH THE GLOWING ORBIT");
+  }), "TOUCH AN ORBIT");
   assert.equal(instrumentGuidanceDetail({
     planetCount: 2,
     selectedBody: { kind: "planet" },
     selectedMoonCount: 0,
-  }), "TAP OR SWIPE IT LIKE A STRING");
+  }), "SWIPE IT LIKE A STRING");
   assert.equal(instrumentHint({
     planetCount: 2,
     hasPluckedOrbit: true,
-  }), "FIND THE BLUE LIGHT");
+  }), "PULL A PLANET FOR A MOON");
   assert.equal(instrumentGuidanceDetail({
     planetCount: 2,
     hasPluckedOrbit: true,
-  }), "HOLD IT · THEN MOVE YOUR FINGER");
+  }), "OR CHOOSE LIGHT OR FLY");
   assert.equal(instrumentHint({
     planetCount: 2,
     hasPluckedOrbit: true,
@@ -340,12 +340,12 @@ test("one contextual sentence teaches the next literal gesture", () => {
     planetCount: 2,
     hasPluckedOrbit: true,
     hasPlayedTheremin: true,
-  }), "FLY TO NEARBY STARS");
+  }), "PULL A PLANET FOR A MOON");
   assert.equal(instrumentGuidanceDetail({
     planetCount: 2,
     hasPluckedOrbit: true,
     hasPlayedTheremin: true,
-  }), "TAP NEXT FLIGHT TO LEAVE YOUR SYSTEM");
+  }), "OR CHOOSE LIGHT OR FLY");
   assert.equal(instrumentHint({
     planetCount: 2,
     selectedBody: { kind: "moon" },
@@ -365,87 +365,53 @@ test("the child instrument lesson exposes one concrete gesture at a time", () =>
     planetCount: 0,
   }), {
     step: 1,
-    total: 4,
+    total: 3,
     label: "SOUND",
-    instruction: "TOUCH THE STAR",
-    detail: "THE STAR STARTS THE SOUND",
-    showThereminPad: false,
+    instruction: "TOUCH TO HEAR THE UNIVERSE",
+    detail: "SOUND STARTS WITH ONE TAP",
   });
   assert.deepEqual(instrumentLesson({
     audioState: "paused",
     planetCount: 0,
   }), {
     step: 1,
-    total: 4,
+    total: 3,
     label: "SOUND",
-    instruction: "TOUCH THE STAR",
-    detail: "THE STAR STARTS THE SOUND",
-    showThereminPad: false,
+    instruction: "TOUCH TO HEAR THE UNIVERSE",
+    detail: "SOUND STARTS WITH ONE TAP",
   });
   assert.deepEqual(instrumentLesson({
     audioState: "running",
     planetCount: 0,
   }), {
     step: 2,
-    total: 4,
+    total: 3,
     label: "MAKE A WORLD",
-    instruction: "DRAG THE STAR OUTWARD",
+    instruction: "PULL THE STAR",
     detail: "RELEASE TO MAKE A PLANET",
-    showThereminPad: false,
   });
   assert.deepEqual(instrumentLesson({ planetCount: 1 }), {
     step: 3,
-    total: 4,
-    label: "ORBIT STRING",
-    instruction: "TOUCH THE GLOWING ORBIT",
-    detail: "TAP OR SWIPE IT LIKE A STRING",
-    showThereminPad: false,
-  });
-  assert.deepEqual(instrumentLesson({
-    planetCount: 1,
-    hasPluckedOrbit: true,
-  }), {
-    step: 4,
-    total: 4,
-    label: "LIGHT THEREMIN",
-    instruction: "HOLD THE BLUE LIGHT",
-    detail: "THEN MOVE YOUR FINGER",
-    showThereminPad: true,
-  });
-  assert.deepEqual(instrumentLesson({
-    planetCount: 1,
-    hasPluckedOrbit: true,
-    thereminPhase: "arming",
-  }), {
-    step: 4,
-    total: 4,
-    label: "LIGHT THEREMIN",
-    instruction: "KEEP HOLDING",
-    detail: "THE LIGHT IS WAKING",
-    showThereminPad: true,
-  });
-  assert.deepEqual(instrumentLesson({
-    planetCount: 1,
-    hasPluckedOrbit: true,
-    thereminPhase: "active",
-  }), {
-    step: 4,
-    total: 4,
-    label: "LIGHT THEREMIN",
-    instruction: "MOVE YOUR FINGER",
-    detail: "SIDEWAYS CHANGES NOTE · UP MAKES IT BRIGHTER",
-    showThereminPad: true,
+    total: 3,
+    label: "PLAY",
+    instruction: "TOUCH AN ORBIT",
+    detail: "SWIPE IT LIKE A STRING",
   });
   assert.equal(instrumentLesson({
     planetCount: 1,
     hasPluckedOrbit: true,
-    hasPlayedTheremin: true,
   }), null);
-  assert.equal(instrumentLesson({
+  assert.deepEqual(instrumentLesson({
     planetCount: 0,
     hasPluckedOrbit: true,
     hasPlayedTheremin: true,
-  }), null);
+  }), {
+    step: 2,
+    total: 3,
+    label: "MAKE A WORLD",
+    instruction: "PULL THE STAR",
+    detail: "RELEASE TO MAKE A PLANET",
+  });
 });
 
 test("a moon birth survives the share format and listener replay contract", () => {

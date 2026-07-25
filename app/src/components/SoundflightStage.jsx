@@ -36,6 +36,7 @@ import {
   selectRenderProfile,
   shouldAutoSoundBody,
   shouldAdvancePhysics,
+  shouldArmDirectMoon,
   shouldBeginThereminHold,
   shouldCancelDirectManipulation,
   shouldDeferStringPluck,
@@ -2602,11 +2603,6 @@ export function SoundflightStage(props) {
       if (propsRef.current.interactionMode === "explore") return;
       const bodyId = hitBody(event);
       const engine = engineRef.current;
-      if (propsRef.current.interactionMode === "moon"
-        && bodyId !== propsRef.current.selectedBodyId) {
-        propsRef.current.onBirthRefused("Start from the selected planet to make its moon.");
-        return;
-      }
 
       if (bodyId === "star"
         && propsRef.current.interactionMode === "compose"
@@ -2649,12 +2645,14 @@ export function SoundflightStage(props) {
         const siblingCount = engine.state.bodies
           .filter((body) => body.kind === "moon" && body.parentId === bodyId)
           .length;
-        if (!propsRef.current.isListener
-          && propsRef.current.interactionMode === "moon"
-          && bodyId === propsRef.current.selectedBodyId
-          && parent?.kind === "planet"
-          && siblingCount < 2
-          && engine.state.bodies.filter((body) => body.kind !== "star").length < MAX_WORLDS) {
+        if (shouldArmDirectMoon({
+          body: parent,
+          interactionMode: propsRef.current.interactionMode,
+          isListener: propsRef.current.isListener,
+          siblingCount,
+          liveBodyCount: engine.state.bodies.filter((body) => body.kind !== "star").length,
+          maxWorlds: MAX_WORLDS,
+        })) {
           const point = intersectPlane(event);
           if (!point) return;
           runtime.moonBirth = {

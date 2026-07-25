@@ -129,6 +129,28 @@ export function shouldShowMoonPlacementGuide({ activeDrag }) {
   return activeDrag;
 }
 
+export function shouldArmDirectMoon({
+  body,
+  interactionMode,
+  isListener,
+  siblingCount,
+  liveBodyCount,
+  maxWorlds,
+}) {
+  if (typeof interactionMode !== "string"
+    || typeof isListener !== "boolean"
+    || !Number.isInteger(siblingCount)
+    || !Number.isInteger(liveBodyCount)
+    || !Number.isInteger(maxWorlds)) {
+    throw new Error("Direct moon creation requires an explicit interaction state");
+  }
+  return !isListener
+    && interactionMode === "compose"
+    && body?.kind === "planet"
+    && siblingCount < 2
+    && liveBodyCount < maxWorlds;
+}
+
 export function audioUnlockPhase(pointerType) {
   if (typeof pointerType !== "string" || pointerType.length === 0) {
     throw new Error("Audio unlock requires a pointer type");
@@ -521,8 +543,6 @@ export function instrumentLesson({
   audioState = "running",
   planetCount,
   hasPluckedOrbit = false,
-  thereminPhase = "idle",
-  hasPlayedTheremin = false,
 }) {
   if (!["locked", "paused", "running"].includes(audioState)) {
     throw new Error(`Unknown instrument lesson audio state: ${audioState}`);
@@ -530,56 +550,34 @@ export function instrumentLesson({
   if (!Number.isInteger(planetCount) || planetCount < 0) {
     throw new Error("Instrument lesson requires a planet count");
   }
-  if (!["idle", "arming", "active"].includes(thereminPhase)) {
-    throw new Error(`Unknown theremin lesson phase: ${thereminPhase}`);
-  }
-  if (hasPlayedTheremin) return null;
   if (audioState !== "running" && planetCount === 0) {
     return {
       step: 1,
-      total: 4,
+      total: 3,
       label: "SOUND",
-      instruction: "TOUCH THE STAR",
-      detail: "THE STAR STARTS THE SOUND",
-      showThereminPad: false,
+      instruction: "TOUCH TO HEAR THE UNIVERSE",
+      detail: "SOUND STARTS WITH ONE TAP",
     };
   }
   if (planetCount === 0) {
     return {
       step: 2,
-      total: 4,
+      total: 3,
       label: "MAKE A WORLD",
-      instruction: "DRAG THE STAR OUTWARD",
+      instruction: "PULL THE STAR",
       detail: "RELEASE TO MAKE A PLANET",
-      showThereminPad: false,
     };
   }
   if (!hasPluckedOrbit) {
     return {
       step: 3,
-      total: 4,
-      label: "ORBIT STRING",
-      instruction: "TOUCH THE GLOWING ORBIT",
-      detail: "TAP OR SWIPE IT LIKE A STRING",
-      showThereminPad: false,
+      total: 3,
+      label: "PLAY",
+      instruction: "TOUCH AN ORBIT",
+      detail: "SWIPE IT LIKE A STRING",
     };
   }
-  return {
-    step: 4,
-    total: 4,
-    label: "LIGHT THEREMIN",
-    instruction: thereminPhase === "active"
-      ? "MOVE YOUR FINGER"
-      : thereminPhase === "arming"
-        ? "KEEP HOLDING"
-        : "HOLD THE BLUE LIGHT",
-    detail: thereminPhase === "arming"
-      ? "THE LIGHT IS WAKING"
-      : thereminPhase === "active"
-        ? "SIDEWAYS CHANGES NOTE · UP MAKES IT BRIGHTER"
-        : "THEN MOVE YOUR FINGER",
-    showThereminPad: true,
-  };
+  return null;
 }
 
 export function instrumentHint({
@@ -603,9 +601,8 @@ export function instrumentHint({
   if (planetCount === 0) return "DRAG THE STAR OUTWARD";
   if (thereminPhase === "arming") return "KEEP HOLDING";
   if (thereminPhase === "active") return "MOVE YOUR FINGER";
-  if (!hasPluckedOrbit) return "TOUCH THE GLOWING ORBIT";
-  if (!hasPlayedTheremin) return "FIND THE BLUE LIGHT";
-  return "FLY TO NEARBY STARS";
+  if (!hasPluckedOrbit) return "TOUCH AN ORBIT";
+  return "PULL A PLANET FOR A MOON";
 }
 
 export function instrumentGuidanceDetail({
@@ -629,7 +626,6 @@ export function instrumentGuidanceDetail({
   if (planetCount === 0) return "RELEASE TO MAKE A SINGING PLANET";
   if (thereminPhase === "arming") return "THE LIGHT IS WAKING";
   if (thereminPhase === "active") return "SIDEWAYS CHANGES NOTE · UP MAKES IT BRIGHTER";
-  if (!hasPluckedOrbit) return "TAP OR SWIPE IT LIKE A STRING";
-  if (!hasPlayedTheremin) return "HOLD IT · THEN MOVE YOUR FINGER";
-  return "TAP NEXT FLIGHT TO LEAVE YOUR SYSTEM";
+  if (!hasPluckedOrbit) return "SWIPE IT LIKE A STRING";
+  return "OR CHOOSE LIGHT OR FLY";
 }

@@ -6,9 +6,20 @@ import {
   voicePluckParameters,
 } from "./sonification.js";
 
-const AudioContextClass = globalThis.AudioContext ?? globalThis.webkitAudioContext;
-
 const REVERB_SECONDS = 3.1;
+const AUDIO_CLOCK_PROBE_MS = 90;
+
+function browserAudioContextClass() {
+  return globalThis.AudioContext ?? globalThis.webkitAudioContext ?? null;
+}
+
+export function configurePlaybackAudioSession(
+  audioSession = globalThis.navigator?.audioSession ?? null,
+) {
+  if (!audioSession) return false;
+  audioSession.type = "playback";
+  return audioSession.type === "playback";
+}
 
 export function assertAudioContextRunning(state) {
   if (state === "running") return state;
@@ -63,22 +74,57 @@ export class AudioEngine {
     universeMix: 0,
   });
 
-  async resume(activateField = true) {
-    if (!AudioContextClass) throw new Error("Web Audio API is not available in this browser");
+  constructor({
+    AudioContextClass = browserAudioContextClass(),
+    audioSession = globalThis.navigator?.audioSession ?? null,
+  } = {}) {
+    this.AudioContextClass = AudioContextClass;
+    this.audioSession = audioSession;
+  }
 
+  async activateFromGesture(activateField = true) {
+    if (!this.AudioContextClass) {
+      throw new Error("Web Audio API is not available in this browser");
+    }
+
+    configurePlaybackAudioSession(this.audioSession);
     if (!this.context) this.createGraph();
-    const wasRunning = this.context.state === "running";
+    const shouldChime = this.context.state !== "running";
+    if (shouldChime) this.playUnlockChime();
     if (this.context.state !== "running") await this.context.resume();
     const state = assertAudioContextRunning(this.context.state);
+    await this.verifyClockAdvances();
     this.setFieldActive(activateField);
     if (this.latestFrame) this.updateField(this.latestFrame);
-    if (!wasRunning) this.playUnlockChime();
     this.notifyState();
     return state;
   }
 
+  async resume(activateField = true) {
+    if (!this.context) {
+      throw new Error("Sound is ready; tap once to start it");
+    }
+    if (this.context.state !== "running") await this.context.resume();
+    const state = assertAudioContextRunning(this.context.state);
+    await this.verifyClockAdvances();
+    this.setFieldActive(activateField);
+    if (this.latestFrame) this.updateField(this.latestFrame);
+    this.notifyState();
+    return state;
+  }
+
+  async verifyClockAdvances() {
+    const startedAt = this.context.currentTime;
+    await new Promise((resolve) => setTimeout(resolve, AUDIO_CLOCK_PROBE_MS));
+    assertAudioContextRunning(this.context.state);
+    if (this.context.currentTime <= startedAt) {
+      throw new Error("Sound did not start. Tap once more to wake it.");
+    }
+    return true;
+  }
+
   createGraph() {
-    this.context = new AudioContextClass({ latencyHint: "interactive" });
+    this.context = new this.AudioContextClass({ latencyHint: "interactive" });
     this.context.addEventListener?.("statechange", () => this.notifyState());
     this.master = this.context.createGain();
     this.sumBus = this.context.createGain();
