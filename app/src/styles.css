@@ -4163,13 +4163,11 @@ input:focus-visible {
     box-shadow:
       0 0 0 1px color-mix(in srgb, var(--rg-cyan) 8%, transparent),
       0 0 42px color-mix(in srgb, var(--rg-cyan) 12%, transparent);
-    transform: translate(-50%, -50%) scale(0.98);
   }
   50% {
     box-shadow:
       0 0 0 7px color-mix(in srgb, var(--rg-cyan) 5%, transparent),
       0 0 64px color-mix(in srgb, var(--rg-cyan) 22%, transparent);
-    transform: translate(-50%, -50%) scale(1.02);
   }
 }
 
