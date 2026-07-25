@@ -539,8 +539,8 @@ export function instrumentLesson({
       step: 1,
       total: 4,
       label: "SOUND",
-      instruction: "TOUCH TO HEAR",
-      detail: "ONE TAP STARTS THE UNIVERSE",
+      instruction: "TOUCH THE STAR",
+      detail: "THE STAR STARTS THE SOUND",
       showThereminPad: false,
     };
   }
@@ -549,8 +549,8 @@ export function instrumentLesson({
       step: 2,
       total: 4,
       label: "MAKE A WORLD",
-      instruction: "DRAG THE STAR",
-      detail: "PULL OUTWARD · RELEASE",
+      instruction: "DRAG THE STAR OUTWARD",
+      detail: "RELEASE TO MAKE A PLANET",
       showThereminPad: false,
     };
   }
@@ -559,8 +559,8 @@ export function instrumentLesson({
       step: 3,
       total: 4,
       label: "ORBIT STRING",
-      instruction: "SWIPE THE GLOWING LINE",
-      detail: "THE ORBIT IS A MUSICAL STRING",
+      instruction: "TOUCH THE GLOWING ORBIT",
+      detail: "TAP OR SWIPE IT LIKE A STRING",
       showThereminPad: false,
     };
   }
@@ -569,13 +569,15 @@ export function instrumentLesson({
     total: 4,
     label: "LIGHT THEREMIN",
     instruction: thereminPhase === "active"
-      ? "MOVE TO BEND THE NOTE"
+      ? "MOVE YOUR FINGER"
       : thereminPhase === "arming"
         ? "KEEP HOLDING"
-        : "HOLD THE LIGHT · THEN MOVE",
+        : "HOLD THE BLUE LIGHT",
     detail: thereminPhase === "arming"
-      ? "THE NOTE IS FORMING"
-      : "LEFT–RIGHT = PITCH · UP–DOWN = POWER",
+      ? "THE LIGHT IS WAKING"
+      : thereminPhase === "active"
+        ? "SIDEWAYS CHANGES NOTE · UP MAKES IT BRIGHTER"
+        : "THEN MOVE YOUR FINGER",
     showThereminPad: true,
   };
 }
@@ -598,11 +600,11 @@ export function instrumentHint({
     throw new Error(`Unknown theremin guidance phase: ${thereminPhase}`);
   }
   if (isListener) return "TOUCH A GLOWING ORBIT";
-  if (planetCount === 0) return "DRAG FROM THE STAR TO MAKE A PLANET";
+  if (planetCount === 0) return "DRAG THE STAR OUTWARD";
   if (thereminPhase === "arming") return "KEEP HOLDING";
-  if (thereminPhase === "active") return "BEND THE NOTE";
-  if (!hasPluckedOrbit) return "PLAY YOUR NEW WORLD";
-  if (!hasPlayedTheremin) return "FIND THE LIGHT THEREMIN";
+  if (thereminPhase === "active") return "MOVE YOUR FINGER";
+  if (!hasPluckedOrbit) return "TOUCH THE GLOWING ORBIT";
+  if (!hasPlayedTheremin) return "FIND THE BLUE LIGHT";
   return "FLY TO NEARBY STARS";
 }
 
@@ -624,10 +626,10 @@ export function instrumentGuidanceDetail({
     throw new Error(`Unknown theremin guidance phase: ${thereminPhase}`);
   }
   if (isListener) return "SWIPE ACROSS ORBITS TO PLAY THE COMPOSITION";
-  if (planetCount === 0) return "PULL OUTWARD · RELEASE TO HEAR A WORLD";
-  if (thereminPhase === "arming") return "A LIGHT IS FORMING";
-  if (thereminPhase === "active") return "LEFT–RIGHT = PITCH · UP–DOWN = POWER";
-  if (!hasPluckedOrbit) return "SWIPE ITS GLOWING ORBIT LIKE A STRING";
-  if (!hasPlayedTheremin) return "HOLD THE PULSING LIGHT · THEN MOVE";
+  if (planetCount === 0) return "RELEASE TO MAKE A SINGING PLANET";
+  if (thereminPhase === "arming") return "THE LIGHT IS WAKING";
+  if (thereminPhase === "active") return "SIDEWAYS CHANGES NOTE · UP MAKES IT BRIGHTER";
+  if (!hasPluckedOrbit) return "TAP OR SWIPE IT LIKE A STRING";
+  if (!hasPlayedTheremin) return "HOLD IT · THEN MOVE YOUR FINGER";
   return "TAP NEXT FLIGHT TO LEAVE YOUR SYSTEM";
 }

@@ -293,29 +293,29 @@ test("an active direct creation gesture freezes the system and uses a bounded lo
 });
 
 test("one contextual sentence teaches the next literal gesture", () => {
-  assert.equal(instrumentHint({ planetCount: 0 }), "DRAG FROM THE STAR TO MAKE A PLANET");
+  assert.equal(instrumentHint({ planetCount: 0 }), "DRAG THE STAR OUTWARD");
   assert.equal(
     instrumentGuidanceDetail({ planetCount: 0 }),
-    "PULL OUTWARD · RELEASE TO HEAR A WORLD",
+    "RELEASE TO MAKE A SINGING PLANET",
   );
   assert.equal(instrumentHint({
     planetCount: 2,
     selectedBody: { kind: "planet" },
     selectedMoonCount: 0,
-  }), "PLAY YOUR NEW WORLD");
+  }), "TOUCH THE GLOWING ORBIT");
   assert.equal(instrumentGuidanceDetail({
     planetCount: 2,
     selectedBody: { kind: "planet" },
     selectedMoonCount: 0,
-  }), "SWIPE ITS GLOWING ORBIT LIKE A STRING");
+  }), "TAP OR SWIPE IT LIKE A STRING");
   assert.equal(instrumentHint({
     planetCount: 2,
     hasPluckedOrbit: true,
-  }), "FIND THE LIGHT THEREMIN");
+  }), "FIND THE BLUE LIGHT");
   assert.equal(instrumentGuidanceDetail({
     planetCount: 2,
     hasPluckedOrbit: true,
-  }), "HOLD THE PULSING LIGHT · THEN MOVE");
+  }), "HOLD IT · THEN MOVE YOUR FINGER");
   assert.equal(instrumentHint({
     planetCount: 2,
     hasPluckedOrbit: true,
@@ -325,17 +325,17 @@ test("one contextual sentence teaches the next literal gesture", () => {
     planetCount: 2,
     hasPluckedOrbit: true,
     thereminPhase: "arming",
-  }), "A LIGHT IS FORMING");
+  }), "THE LIGHT IS WAKING");
   assert.equal(instrumentHint({
     planetCount: 2,
     hasPluckedOrbit: true,
     thereminPhase: "active",
-  }), "BEND THE NOTE");
+  }), "MOVE YOUR FINGER");
   assert.equal(instrumentGuidanceDetail({
     planetCount: 2,
     hasPluckedOrbit: true,
     thereminPhase: "active",
-  }), "LEFT–RIGHT = PITCH · UP–DOWN = POWER");
+  }), "SIDEWAYS CHANGES NOTE · UP MAKES IT BRIGHTER");
   assert.equal(instrumentHint({
     planetCount: 2,
     hasPluckedOrbit: true,
@@ -367,8 +367,8 @@ test("the child instrument lesson exposes one concrete gesture at a time", () =>
     step: 1,
     total: 4,
     label: "SOUND",
-    instruction: "TOUCH TO HEAR",
-    detail: "ONE TAP STARTS THE UNIVERSE",
+    instruction: "TOUCH THE STAR",
+    detail: "THE STAR STARTS THE SOUND",
     showThereminPad: false,
   });
   assert.deepEqual(instrumentLesson({
@@ -378,8 +378,8 @@ test("the child instrument lesson exposes one concrete gesture at a time", () =>
     step: 1,
     total: 4,
     label: "SOUND",
-    instruction: "TOUCH TO HEAR",
-    detail: "ONE TAP STARTS THE UNIVERSE",
+    instruction: "TOUCH THE STAR",
+    detail: "THE STAR STARTS THE SOUND",
     showThereminPad: false,
   });
   assert.deepEqual(instrumentLesson({
@@ -389,16 +389,16 @@ test("the child instrument lesson exposes one concrete gesture at a time", () =>
     step: 2,
     total: 4,
     label: "MAKE A WORLD",
-    instruction: "DRAG THE STAR",
-    detail: "PULL OUTWARD · RELEASE",
+    instruction: "DRAG THE STAR OUTWARD",
+    detail: "RELEASE TO MAKE A PLANET",
     showThereminPad: false,
   });
   assert.deepEqual(instrumentLesson({ planetCount: 1 }), {
     step: 3,
     total: 4,
     label: "ORBIT STRING",
-    instruction: "SWIPE THE GLOWING LINE",
-    detail: "THE ORBIT IS A MUSICAL STRING",
+    instruction: "TOUCH THE GLOWING ORBIT",
+    detail: "TAP OR SWIPE IT LIKE A STRING",
     showThereminPad: false,
   });
   assert.deepEqual(instrumentLesson({
@@ -408,8 +408,8 @@ test("the child instrument lesson exposes one concrete gesture at a time", () =>
     step: 4,
     total: 4,
     label: "LIGHT THEREMIN",
-    instruction: "HOLD THE LIGHT · THEN MOVE",
-    detail: "LEFT–RIGHT = PITCH · UP–DOWN = POWER",
+    instruction: "HOLD THE BLUE LIGHT",
+    detail: "THEN MOVE YOUR FINGER",
     showThereminPad: true,
   });
   assert.deepEqual(instrumentLesson({
@@ -421,7 +421,7 @@ test("the child instrument lesson exposes one concrete gesture at a time", () =>
     total: 4,
     label: "LIGHT THEREMIN",
     instruction: "KEEP HOLDING",
-    detail: "THE NOTE IS FORMING",
+    detail: "THE LIGHT IS WAKING",
     showThereminPad: true,
   });
   assert.deepEqual(instrumentLesson({
@@ -432,8 +432,8 @@ test("the child instrument lesson exposes one concrete gesture at a time", () =>
     step: 4,
     total: 4,
     label: "LIGHT THEREMIN",
-    instruction: "MOVE TO BEND THE NOTE",
-    detail: "LEFT–RIGHT = PITCH · UP–DOWN = POWER",
+    instruction: "MOVE YOUR FINGER",
+    detail: "SIDEWAYS CHANGES NOTE · UP MAKES IT BRIGHTER",
     showThereminPad: true,
   });
   assert.equal(instrumentLesson({

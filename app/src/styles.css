@@ -2255,6 +2255,22 @@ input:focus-visible {
   pointer-events: none;
 }
 
+.app-shell[data-onboarding="step-2"]::after {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  width: 72px;
+  height: 72px;
+  border: 1px solid color-mix(in srgb, var(--rg-cyan) 68%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 0 22px color-mix(in srgb, var(--rg-cyan) 18%, transparent);
+  content: "";
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation: star-drag-guide 2.8s var(--rg-ease) infinite;
+}
+
 .simple-title {
   top: clamp(var(--rg-space-5), 5vh, 48px);
   left: clamp(var(--rg-space-5), 4vw, 56px);
@@ -2571,11 +2587,20 @@ input:focus-visible {
 }
 
 .theremin-beacon > i::after {
+  inset: auto;
+  top: var(--theremin-y, 50%);
+  left: var(--theremin-x, 50%);
   width: 12px;
   height: 12px;
   border: 0;
   background: var(--rg-cyan);
   box-shadow: 0 0 22px var(--rg-cyan);
+  transition:
+    top 80ms linear,
+    left 80ms linear,
+    width 180ms ease,
+    height 180ms ease,
+    background-color 180ms ease;
 }
 
 .theremin-beacon > span {
@@ -2605,6 +2630,7 @@ input:focus-visible {
 .theremin-beacon strong {
   color: var(--rg-gold-bright);
   font-size: 9px;
+  line-height: 1.3;
 }
 
 .theremin-beacon b,
@@ -2693,16 +2719,38 @@ input:focus-visible {
 }
 
 .app-shell[data-onboarding="step-1"] .instrument-controls {
+  top: 50%;
+  bottom: auto;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
 }
 
 .app-shell[data-onboarding="step-1"] .instrument-play {
-  width: 112px;
-  height: 112px;
+  position: relative;
+  width: 120px;
+  height: 120px;
+  border-color: color-mix(in srgb, var(--rg-cyan) 60%, transparent);
   background:
-    radial-gradient(circle, color-mix(in srgb, var(--rg-cyan) 11%, transparent), transparent 68%),
-    var(--rg-panel);
+    radial-gradient(circle, transparent 0 24%, color-mix(in srgb, var(--rg-cyan) 8%, transparent) 56%, transparent 72%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--rg-cyan) 10%, transparent),
+    0 0 40px color-mix(in srgb, var(--rg-cyan) 16%, transparent),
+    inset 0 0 30px color-mix(in srgb, var(--rg-cyan) 8%, transparent);
+  backdrop-filter: none;
+}
+
+.app-shell[data-onboarding="step-1"] .instrument-play svg {
+  filter: drop-shadow(0 0 9px var(--rg-cyan));
+}
+
+.app-shell[data-onboarding="step-1"] .instrument-play span {
+  position: absolute;
+  top: calc(100% + 13px);
+  left: 50%;
+  width: 180px;
+  max-width: none;
+  color: var(--rg-cyan);
+  transform: translateX(-50%);
 }
 
 .instrument-controls button,
@@ -2794,6 +2842,11 @@ input:focus-visible {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--rg-cyan) 12%, transparent),
     0 0 32px color-mix(in srgb, var(--rg-cyan) 13%, transparent);
+}
+
+.app-shell[data-onboarding="step-1"][data-audio-state="locked"] .instrument-play {
+  width: 120px;
+  height: 120px;
 }
 
 .instrument-play svg {
@@ -3260,6 +3313,20 @@ input:focus-visible {
   }
 }
 
+@keyframes star-drag-guide {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7);
+  }
+  28% {
+    opacity: 0.58;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2.35);
+  }
+}
+
 @keyframes cosmic-next-arrow {
   0%,
   100% {
@@ -3376,8 +3443,8 @@ input:focus-visible {
   }
 
   .app-shell[data-onboarding="step-1"] .instrument-play {
-    width: 104px;
-    height: 104px;
+    width: 112px;
+    height: 112px;
   }
 
   .app-shell[data-audio-state="locked"] .instrument-play span {
@@ -3503,6 +3570,10 @@ input:focus-visible {
     transform: translateY(-50%);
   }
 
+  .app-shell[data-cosmic-scale="galaxy"] .cosmic-zoom--mobile {
+    top: 30%;
+  }
+
   .cosmic-zoom--mobile button {
     background: color-mix(in srgb, var(--rg-panel) 88%, transparent);
   }
@@ -3552,6 +3623,7 @@ input:focus-visible {
 
   .theremin-beacon > span {
     top: calc(50% + 34px);
+    width: 164px;
   }
 
   .theremin-beacon.is-compact {

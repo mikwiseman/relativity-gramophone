@@ -656,9 +656,19 @@ export function App() {
 
   const thereminPadParameters = useCallback((event) => {
     const bounds = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    event.currentTarget.style.setProperty(
+      "--theremin-x",
+      `${Math.min(92, Math.max(8, (x / bounds.width) * 100))}%`,
+    );
+    event.currentTarget.style.setProperty(
+      "--theremin-y",
+      `${Math.min(92, Math.max(8, (y / bounds.height) * 100))}%`,
+    );
     return thereminParameters({
-      x: event.clientX - bounds.left,
-      y: event.clientY - bounds.top,
+      x,
+      y,
       width: bounds.width,
       height: bounds.height,
     });
@@ -691,6 +701,8 @@ export function App() {
       event.currentTarget.releasePointerCapture?.(event.pointerId);
     }
     handleTheremin({ phase: "end" });
+    event.currentTarget.style.setProperty("--theremin-x", "50%");
+    event.currentTarget.style.setProperty("--theremin-y", "50%");
   }, [handleTheremin]);
 
   const handleZoom = useCallback((direction) => {
@@ -1254,7 +1266,7 @@ export function App() {
             <button
               type="button"
               className={`theremin-beacon${onboardingComplete ? " is-compact" : ""}`}
-              aria-label="Play the Light Theremin. Hold the light and move."
+              aria-label="Play the Light Theremin. Hold the blue light, then move your finger."
               onPointerDown={handleThereminPadStart}
               onPointerMove={handleThereminPadMove}
               onPointerUp={handleThereminPadEnd}
@@ -1263,10 +1275,16 @@ export function App() {
               <i />
               <span>
                 <small>LIGHT THEREMIN</small>
-                <strong>{thereminPhase === "active" ? "MOVE" : "HOLD + MOVE"}</strong>
+                <strong>{
+                  thereminPhase === "active"
+                    ? "MOVE YOUR FINGER"
+                    : onboardingComplete
+                      ? "HOLD + MOVE"
+                      : "HOLD THE BLUE LIGHT"
+                }</strong>
               </span>
-              <b>POWER ↑</b>
-              <em>PITCH →</em>
+              <b>BRIGHTER ↑</b>
+              <em>NOTE →</em>
             </button>
           )}
 
@@ -1499,22 +1517,22 @@ export function App() {
               <li>
                 <span>01</span>
                 <div>
-                  <strong>MAKE A WORLD</strong>
-                  <p>Hold the star. Pull outward. Release. Select a planet and tap ADD MOON when you want a satellite.</p>
+                  <strong>WAKE THE STAR · MAKE A WORLD</strong>
+                  <p>Touch the star to start the sound. Then drag it outward and release to make a planet.</p>
                 </div>
               </li>
               <li>
                 <span>02</span>
                 <div>
                   <strong>PLAY AN ORBIT</strong>
-                  <p>Swipe across a glowing orbit. It is a string, and every planet gives it a different voice.</p>
+                  <p>Touch or swipe a glowing orbit. It is a string, and every planet gives it a different voice.</p>
                 </div>
               </li>
               <li>
                 <span>03</span>
                 <div>
                   <strong>PLAY THE LIGHT THEREMIN</strong>
-                  <p>Hold the pulsing light. Keep holding, then move: left and right change pitch, up and down change power.</p>
+                  <p>Hold the blue light, then move your finger. Sideways changes the note; upward makes it brighter.</p>
                 </div>
               </li>
               <li>
