@@ -95,22 +95,40 @@ const COSMIC_JOURNEYS = Object.freeze({
 
 // Positions are deliberately schematic. Distances and relationships are real,
 // while each semantic scale is re-authored so a child can read it on one screen.
-// Sources: NASA Solar System Exploration, NASA Exoplanets, ESA Gaia.
+// Sources: NASA Exoplanet Archive pscomppars (2026-07-25), NASA Hubble, ESA Gaia.
 const COSMIC_LANDMARKS = Object.freeze({
   neighborhood: Object.freeze([
     Object.freeze({
       id: "proxima-centauri",
       scale: "neighborhood",
       name: "PROXIMA CENTAURI",
-      detail: "4.24 LIGHT-YEARS · PROXIMA b",
+      detail: "4.24 LIGHT-YEARS · 2 WORLDS",
       voice: "alpha-centauri",
       frequency: 220,
       color: 0xff8f74,
       position: Object.freeze([-1, -0.5, -1.4]),
       system: Object.freeze({
         kind: "planetary",
-        worlds: 1,
-        label: "PROXIMA b · 11.2 DAY YEAR",
+        worlds: 2,
+        label: "2 CONFIRMED WORLDS · 5.1–11.2 DAY YEARS",
+        bodies: Object.freeze([
+          Object.freeze({
+            id: "proxima-d",
+            name: "PROXIMA d",
+            kind: "planet",
+            periodDays: 5.12338,
+            orbitAu: 0.02881,
+            radiusEarth: 0.692,
+          }),
+          Object.freeze({
+            id: "proxima-b",
+            name: "PROXIMA b",
+            kind: "planet",
+            periodDays: 11.18465,
+            orbitAu: 0.04848,
+            radiusEarth: 1.02,
+          }),
+        ]),
       }),
     }),
     Object.freeze({
@@ -125,7 +143,17 @@ const COSMIC_LANDMARKS = Object.freeze({
       system: Object.freeze({
         kind: "binary",
         worlds: 1,
-        label: "SIRIUS A + B · 50 YEAR ORBIT",
+        label: "SIRIUS A + B · 50 YEAR ORBIT · 19.7 AU",
+        bodies: Object.freeze([
+          Object.freeze({
+            id: "sirius-b",
+            name: "SIRIUS B",
+            kind: "star",
+            periodDays: 18_262.5,
+            orbitAu: 19.7,
+            radiusEarth: 0.92,
+          }),
+        ]),
       }),
     }),
     Object.freeze({
@@ -140,7 +168,65 @@ const COSMIC_LANDMARKS = Object.freeze({
       system: Object.freeze({
         kind: "planetary",
         worlds: 7,
-        label: "7 ROCKY WORLDS · 1.5–19 DAY YEARS",
+        label: "7 ROCKY WORLDS · 1.5–18.8 DAY YEARS",
+        bodies: Object.freeze([
+          Object.freeze({
+            id: "trappist-1-b",
+            name: "TRAPPIST-1 b",
+            kind: "planet",
+            periodDays: 1.510826,
+            orbitAu: 0.01154,
+            radiusEarth: 1.116,
+          }),
+          Object.freeze({
+            id: "trappist-1-c",
+            name: "TRAPPIST-1 c",
+            kind: "planet",
+            periodDays: 2.421937,
+            orbitAu: 0.0158,
+            radiusEarth: 1.097,
+          }),
+          Object.freeze({
+            id: "trappist-1-d",
+            name: "TRAPPIST-1 d",
+            kind: "planet",
+            periodDays: 4.049219,
+            orbitAu: 0.02227,
+            radiusEarth: 0.788,
+          }),
+          Object.freeze({
+            id: "trappist-1-e",
+            name: "TRAPPIST-1 e",
+            kind: "planet",
+            periodDays: 6.101013,
+            orbitAu: 0.02925,
+            radiusEarth: 0.92,
+          }),
+          Object.freeze({
+            id: "trappist-1-f",
+            name: "TRAPPIST-1 f",
+            kind: "planet",
+            periodDays: 9.20754,
+            orbitAu: 0.03849,
+            radiusEarth: 1.045,
+          }),
+          Object.freeze({
+            id: "trappist-1-g",
+            name: "TRAPPIST-1 g",
+            kind: "planet",
+            periodDays: 12.352446,
+            orbitAu: 0.04683,
+            radiusEarth: 1.129,
+          }),
+          Object.freeze({
+            id: "trappist-1-h",
+            name: "TRAPPIST-1 h",
+            kind: "planet",
+            periodDays: 18.772866,
+            orbitAu: 0.06189,
+            radiusEarth: 0.755,
+          }),
+        ]),
       }),
     }),
   ]),
@@ -290,6 +376,16 @@ export function cosmicLandmarkById(landmarkId) {
     if (landmark) return landmark;
   }
   throw new Error(`Unknown cosmic landmark: ${landmarkId}`);
+}
+
+export function orbitalSonificationFrequency(periodDays) {
+  if (!Number.isFinite(periodDays) || periodDays <= 0) {
+    throw new Error("Orbital sonification requires a positive period in days");
+  }
+  const rawFrequency = 1 / (periodDays * 86_400);
+  const octaveShift = Math.ceil(Math.log2(110 / rawFrequency));
+  const frequency = rawFrequency * (2 ** octaveShift);
+  return frequency >= 440 ? frequency / 2 : frequency;
 }
 
 export function cosmicScaleForDistance(distance) {

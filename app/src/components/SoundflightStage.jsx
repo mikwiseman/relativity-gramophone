@@ -952,10 +952,17 @@ function createNearbySystem(landmark, radialTexture) {
   const rings = [];
   const worlds = [];
   const isBinary = landmark.system.kind === "binary";
-  const worldCount = landmark.system.worlds;
-  for (let index = 0; index < worldCount; index += 1) {
-    const progress = worldCount === 1 ? 0.5 : index / (worldCount - 1);
-    const radius = isBinary ? 0.74 : 0.38 + progress * 0.88;
+  const systemBodies = landmark.system.bodies;
+  const orbitValues = systemBodies.map((body) => Math.log(body.orbitAu));
+  const minimumOrbit = Math.min(...orbitValues);
+  const maximumOrbit = Math.max(...orbitValues);
+  const minimumPeriod = Math.min(...systemBodies.map((body) => body.periodDays));
+  for (let index = 0; index < systemBodies.length; index += 1) {
+    const systemBody = systemBodies[index];
+    const progress = maximumOrbit === minimumOrbit
+      ? 0.5
+      : (Math.log(systemBody.orbitAu) - minimumOrbit) / (maximumOrbit - minimumOrbit);
+    const radius = isBinary ? 0.86 : 0.36 + progress * 0.94;
     const geometry = new THREE.RingGeometry(
       Math.max(0.02, radius - 0.008),
       radius + 0.008,
@@ -984,13 +991,21 @@ function createNearbySystem(landmark, radialTexture) {
       blending: THREE.AdditiveBlending,
       toneMapped: false,
     }));
-    body.scale.setScalar(isBinary ? 0.3 : 0.105 + index * 0.006);
+    body.scale.setScalar(
+      systemBody.kind === "star"
+        ? 0.31
+        : 0.09 + Math.min(1.2, systemBody.radiusEarth ?? 1) * 0.025,
+    );
+    body.userData.cosmicLandmarkId = landmark.id;
     group.add(body);
     worlds.push({
       body,
+      systemBody,
       phase: index * 2.39996 + (isBinary ? Math.PI : 0),
       radius,
-      speed: (isBinary ? 0.14 : 0.38) / Math.sqrt(index + 1),
+      speed: (Math.PI * 2) / (
+        8 * Math.max(1, systemBody.periodDays / minimumPeriod)
+      ),
     });
   }
   group.position.y = 0.035;
@@ -1063,15 +1078,15 @@ function createCosmicLandmarkVisual(landmark, radialTexture) {
   }));
   const labelHeight = {
     neighborhood: 2.5,
-    galaxy: 3,
-    localGroup: 4.15,
-    universe: 4.45,
+    galaxy: 2.35,
+    localGroup: 2.85,
+    universe: 3.35,
   }[landmark.scale];
   label.position.y = {
     neighborhood: 1.75,
-    galaxy: 2.25,
-    localGroup: 4,
-    universe: 4.45,
+    galaxy: 1.9,
+    localGroup: 3.2,
+    universe: 3.85,
   }[landmark.scale];
   label.scale.set(
     labelHeight * 4.8,
@@ -1177,7 +1192,13 @@ function createCosmicLandmarkField(radialTexture) {
   };
 }
 
-function updateCosmicLandmarkField(field, scale, delta, reducedMotion) {
+function updateCosmicLandmarkField(
+  field,
+  scale,
+  delta,
+  reducedMotion,
+  focusedSystemId = null,
+) {
   const mixes = {
     neighborhood: scale.neighborhoodMix,
     galaxy: scale.galaxyMix,
@@ -1185,13 +1206,23 @@ function updateCosmicLandmarkField(field, scale, delta, reducedMotion) {
     universe: scale.universeMix,
   };
   for (const visual of field.visuals) {
+    const isFocusedSystem = focusedSystemId === visual.landmark.id;
+    const anotherSystemIsFocused = Boolean(focusedSystemId) && !isFocusedSystem;
     const mix = mixes[visual.landmark.scale] ?? 0;
     const focused = scale.id === visual.landmark.scale;
-    const opacity = mix * (focused ? 1 : 0.28);
+    const opacity = isFocusedSystem
+      ? 1
+      : anotherSystemIsFocused
+        ? 0
+        : mix * (focused ? 1 : 0.28);
     visual.group.visible = opacity > 0.015;
-    visual.glow.material.opacity = opacity * (0.34 + visual.impulse * 0.56);
-    visual.label.material.opacity = opacity * (focused ? 0.82 : 0.12);
-    visual.hitArea.visible = focused && opacity > 0.45;
+    visual.glow.material.opacity = opacity * (
+      isFocusedSystem ? 0.5 + visual.impulse * 0.42 : 0.34 + visual.impulse * 0.56
+    );
+    visual.label.material.opacity = isFocusedSystem
+      ? 0
+      : opacity * (focused ? 0.82 : 0.12);
+    visual.hitArea.visible = (isFocusedSystem || focused) && opacity > 0.45;
     visual.pulse.material.opacity = opacity * visual.impulse * 0.62;
     const pulseScale = 1 + (1 - visual.impulse) * 1.8;
     visual.pulse.scale.setScalar(visual.coreScale * pulseScale);
@@ -1200,7 +1231,7 @@ function updateCosmicLandmarkField(field, scale, delta, reducedMotion) {
       if (!reducedMotion) visual.cluster.rotation.y += delta * 0.035;
     }
     if (visual.nearbySystem) {
-      const systemOpacity = opacity * (focused ? 1 : 0.06);
+      const systemOpacity = opacity * (isFocusedSystem || focused ? 1 : 0.06);
       visual.nearbySystem.group.visible = systemOpacity > 0.03;
       if (!reducedMotion) visual.nearbySystem.elapsed += delta;
       for (const ring of visual.nearbySystem.rings) {
@@ -1215,7 +1246,9 @@ function updateCosmicLandmarkField(field, scale, delta, reducedMotion) {
         );
         world.body.material.opacity = systemOpacity * (0.64 + visual.impulse * 0.32);
       }
-      visual.nearbySystem.group.scale.setScalar(1 + visual.impulse * 0.12);
+      visual.nearbySystem.group.scale.setScalar(
+        (isFocusedSystem ? 3.7 : 1) * (1 + visual.impulse * 0.12),
+      );
     }
     visual.impulse *= Math.exp(-delta * 2.4);
   }
@@ -2015,6 +2048,7 @@ export function SoundflightStage(props) {
       compositionZoom: 1,
       authoredCameraDistance: null,
       authoredScaleId: null,
+      focusedSystemId: null,
       cameraJourneyTargetId: null,
       lastFitDistance: 10,
       editorialCameraPosition: new THREE.Vector3(-1.6, 4.6, 11.2),
@@ -2057,6 +2091,15 @@ export function SoundflightStage(props) {
             : null,
           cosmicScale: runtime.cosmicScale.id,
           cameraDistance: camera.position.distanceTo(controls.target),
+          focusedSystemId: runtime.focusedSystemId,
+          renderProfile: runtime.profile
+            ? {
+                pixelRatio: runtime.profile.pixelRatio,
+                maxBackingPixels: runtime.profile.maxBackingPixels,
+                backingWidth: renderer.domElement.width,
+                backingHeight: renderer.domElement.height,
+              }
+            : null,
           landmarks: cosmicLandmarkField.visuals
             .filter((visual) => visual.group.visible)
             .map((visual) => {
@@ -2169,7 +2212,8 @@ export function SoundflightStage(props) {
     };
 
     const hitCosmicLandmark = (event) => {
-      if (runtime.cosmicScale.id === "orbit" || runtime.cosmicScale.id === "system") return null;
+      if ((runtime.cosmicScale.id === "orbit" || runtime.cosmicScale.id === "system")
+        && !runtime.focusedSystemId) return null;
       const point = eventPoint(event, renderer.domElement);
       runtime.pointer.set((point.x / point.width) * 2 - 1, -(point.y / point.height) * 2 + 1);
       runtime.raycaster.setFromCamera(runtime.pointer, camera);
@@ -2600,6 +2644,7 @@ export function SoundflightStage(props) {
         }
         return;
       }
+      if (runtime.focusedSystemId) return;
       if (propsRef.current.interactionMode === "explore") return;
       const bodyId = hitBody(event);
       const engine = engineRef.current;
@@ -3014,6 +3059,7 @@ export function SoundflightStage(props) {
       accumulatorRef.current = 0;
       runtime.authoredCameraDistance = COSMIC_DESTINATIONS.system.distance;
       runtime.authoredScaleId = "system";
+      runtime.focusedSystemId = null;
       runtime.compositionZoom = 1;
       runtime.resettingCamera = true;
       previousSideRef.current = new Map(
@@ -3035,9 +3081,12 @@ export function SoundflightStage(props) {
           const event = currentProps.playbackEvents[appliedEventIndexRef.current];
           if (event.kind === "cosmic-landmark") {
             const landmark = cosmicLandmarkById(event.landmarkId);
-            const destination = cosmicDestination(landmark.scale);
+            const destination = cosmicDestination(
+              landmark.system ? "system" : landmark.scale,
+            );
             runtime.authoredCameraDistance = destination.distance;
             runtime.authoredScaleId = destination.id;
+            runtime.focusedSystemId = landmark.system ? landmark.id : null;
             runtime.compositionZoom = 1;
             runtime.resettingCamera = true;
             triggerCosmicLandmark(cosmicLandmarkField, landmark.id);
@@ -3135,7 +3184,8 @@ export function SoundflightStage(props) {
 
       const selectedId = propsRef.current.selectedBodyId;
       const moonMode = Boolean(runtime.moonBirth?.active);
-      const systemMix = runtime.cosmicScale?.systemMix ?? 1;
+      const remoteSystemFocused = Boolean(runtime.focusedSystemId);
+      const systemMix = remoteSystemFocused ? 0 : runtime.cosmicScale?.systemMix ?? 1;
       runtime.selectedBodyId = selectedId;
       const stageBodies = new Map();
       const bodiesById = new Map(snapshot.bodies.map((body) => [body.id, body]));
@@ -3146,6 +3196,7 @@ export function SoundflightStage(props) {
         const stage = bodyToStage(displayWorldForBody(body, bodiesById), STAGE_SCALE);
         stageBodies.set(body.id, stage);
         if (body.kind === "star") {
+          starVisual.group.visible = !remoteSystemFocused;
           starStage = new THREE.Vector3(stage.x, 0, stage.z);
           starVisual.group.position.lerp(new THREE.Vector3(stage.x, 0, stage.z), 1 - Math.exp(-delta * 18));
           starVisual.impulse *= Math.exp(-delta * 2.6);
@@ -3186,6 +3237,7 @@ export function SoundflightStage(props) {
           ? 0.125 + body.displayMass * 0.42
           : 0.24 + body.displayMass * 0.095;
         const scale = baseScale * (selected ? 1.12 : body.kind === "moon" ? 0.86 : 0.86);
+        visual.group.visible = !remoteSystemFocused;
         visual.mesh.scale.setScalar(scale);
         visual.rim.scale.setScalar(scale * (body.kind === "moon" ? 3.5 : 4.2));
         visual.mesh.rotation.y += delta * (0.1 + body.properRate * 0.1);
@@ -3263,12 +3315,13 @@ export function SoundflightStage(props) {
             moonMode && !inMoonFamily
               ? stringStyle.opacity * 0.08
               : stringStyle.opacity
-          ) * (0.05 + systemMix * 0.95),
+          ) * (remoteSystemFocused ? 0 : 0.05 + systemMix * 0.95),
           stringStyle.linewidth,
           { width: renderer.domElement.clientWidth, height: renderer.domElement.clientHeight },
         );
         visual.notePulse.material.color.setHex(voiceColor);
         updateNotePulse(visual, now);
+        if (remoteSystemFocused) visual.notePulse.visible = false;
       }
 
       runtime.selectedHistory = runtime.bodyVisuals.get(selectedId)?.orbitPoints ?? [];
@@ -3299,7 +3352,7 @@ export function SoundflightStage(props) {
       }
       updateHarmonicKnot(
         harmonicKnot,
-        snapshot.resonance,
+        remoteSystemFocused ? null : snapshot.resonance,
         snapshot.bodies.filter((body) => body.kind === "planet"),
         stageBodies,
         { width: renderer.domElement.clientWidth, height: renderer.domElement.clientHeight },
@@ -3311,7 +3364,7 @@ export function SoundflightStage(props) {
       };
       const cathedralLevel = updateResonanceCathedral(
         resonanceCathedral,
-        snapshot.resonance,
+        remoteSystemFocused ? null : snapshot.resonance,
         stageBodies,
         bodiesById,
         snapshot.bodies.filter((body) => body.kind === "planet").length,
@@ -3330,6 +3383,7 @@ export function SoundflightStage(props) {
         runtime.cosmicScale,
         delta,
         reducedMotionQuery.matches,
+        runtime.focusedSystemId,
       );
       updateMemoryComet(memoryComet, runtime.bodyVisuals, now, resolution);
       if (runtime.starfield) {
@@ -3354,9 +3408,14 @@ export function SoundflightStage(props) {
       timeNeedle.style.left = `${clamp((projectedStar.x * 0.5 + 0.5) * 100, 8, 92)}%`;
       timeNeedle.style.opacity = `${clamp(systemMix * 1.18 - 0.14, 0, 1)}`;
       runtime.systemRadius = systemRadius;
+      const focusedSystemVisual = runtime.focusedSystemId
+        ? cosmicLandmarkField.byId.get(runtime.focusedSystemId)
+        : null;
       const semanticScaleId = runtime.authoredScaleId
         ?? (runtime.cosmicScale.id === "orbit" ? "system" : runtime.cosmicScale.id);
-      const authoredTarget = cosmicCameraTarget(semanticScaleId, starStage);
+      const authoredTarget = focusedSystemVisual
+        ? focusedSystemVisual.group.position
+        : cosmicCameraTarget(semanticScaleId, starStage);
       runtime.editorialCameraTarget.set(
         authoredTarget.x,
         authoredTarget.y,
@@ -3415,6 +3474,7 @@ export function SoundflightStage(props) {
           runtime.compositionZoom = 1;
           runtime.authoredCameraDistance = null;
           runtime.authoredScaleId = null;
+          runtime.focusedSystemId = null;
           runtime.cameraJourneyTargetId = null;
           runtime.resettingCamera = true;
         } else if (cameraCommand.type === "travel") {
@@ -3427,12 +3487,25 @@ export function SoundflightStage(props) {
               controls.maxDistance,
             );
             runtime.authoredScaleId = cameraCommand.targetId ?? null;
+            runtime.focusedSystemId = null;
             runtime.cameraJourneyTargetId = cameraCommand.targetId ?? null;
             runtime.compositionZoom = clamp(
               runtime.authoredCameraDistance / Math.max(0.001, runtime.lastFitDistance),
               0.58,
               7.2,
             );
+            runtime.resettingCamera = true;
+          }
+        } else if (cameraCommand.type === "focus-system") {
+          const landmark = cosmicLandmarkById(cameraCommand.landmarkId);
+          if (!landmark.system) {
+            currentProps.onBirthRefused("This light is not a planetary system.");
+          } else {
+            runtime.focusedSystemId = landmark.id;
+            runtime.authoredCameraDistance = COSMIC_DESTINATIONS.system.distance;
+            runtime.authoredScaleId = "system";
+            runtime.cameraJourneyTargetId = null;
+            runtime.compositionZoom = 1;
             runtime.resettingCamera = true;
           }
         } else if (!exploring) {

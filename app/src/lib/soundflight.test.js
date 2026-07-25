@@ -376,17 +376,22 @@ test("render profile preserves the artwork while bounding GPU cost", () => {
     hardwareConcurrency: 4,
     reducedMotion: false,
   });
-  assert.equal(compact.pixelRatio, 1);
+  assert.equal(compact.pixelRatio, 2);
+  assert.ok(
+    390 * 844 * compact.pixelRatio ** 2 <= compact.maxBackingPixels,
+    "a Retina phone stays inside its physical-pixel budget",
+  );
   assert.equal(compact.particleCount, 480);
   assert.equal(compact.trailSamples, 96);
 
   const reduced = selectRenderProfile({
-    width: 1440,
-    height: 1024,
-    devicePixelRatio: 2,
-    hardwareConcurrency: 10,
+    width: 390,
+    height: 844,
+    devicePixelRatio: 3,
+    hardwareConcurrency: 4,
     reducedMotion: true,
   });
+  assert.equal(reduced.pixelRatio, 2);
   assert.equal(reduced.particleCount, 90);
   assert.equal(reduced.trailSamples, 40);
   assert.equal(reduced.autoDrift, false);
@@ -395,6 +400,20 @@ test("render profile preserves the artwork while bounding GPU cost", () => {
   assert.equal(compact.grain, false);
   assert.ok(reduced.starCount < compact.starCount);
   assert.ok(compact.starCount < desktop.starCount);
+
+  const largeCompact = selectRenderProfile({
+    width: 768,
+    height: 1024,
+    devicePixelRatio: 2,
+    hardwareConcurrency: 4,
+    reducedMotion: false,
+  });
+  assert.ok(largeCompact.pixelRatio > 1);
+  assert.ok(largeCompact.pixelRatio < 2);
+  assert.ok(
+    768 * 1024 * largeCompact.pixelRatio ** 2 <= largeCompact.maxBackingPixels + 1,
+    "large low-core screens stay sharp without exceeding the mobile GPU budget",
+  );
 
   assert.throws(() => selectRenderProfile({
     width: 390,

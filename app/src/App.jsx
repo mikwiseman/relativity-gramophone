@@ -104,6 +104,7 @@ export function App() {
   const [cameraCommand, setCameraCommand] = useState({ id: 0, type: "reset" });
   const [cameraScale, setCameraScale] = useState("1.2 AU");
   const [cosmicScale, setCosmicScale] = useState(() => cosmicScaleForDistance(10));
+  const [visitedSystemId, setVisitedSystemId] = useState(null);
   const [journeyTarget, setJourneyTarget] = useState(null);
   const [arrivalTarget, setArrivalTarget] = useState(null);
   const [interactionMode, setInteractionMode] = useState("compose");
@@ -208,6 +209,7 @@ export function App() {
     setUtilityOpen(false);
     setCameraScale("1.2 AU");
     setCosmicScale(cosmicScaleForDistance(10));
+    setVisitedSystemId(null);
     setCameraCommand((current) => ({ id: current.id + 1, type: "reset" }));
     setResetToken((current) => current + 1);
   }, [cancelDirectGestures]);
@@ -222,6 +224,7 @@ export function App() {
   const currentDestination = cosmicDestination(
     cosmicScale.id === "orbit" ? "system" : cosmicScale.id,
   );
+  const visitedSystem = visitedSystemId ? cosmicLandmarkById(visitedSystemId) : null;
   const hasCosmicScore = isListener
     && composition.events.some((event) => event.kind === "cosmic-landmark");
   const isAwaitingCosmicScore = hasCosmicScore
@@ -229,7 +232,17 @@ export function App() {
     && (cosmicScale.id === "orbit" || cosmicScale.id === "system")
     && !journeyTarget;
   const cosmicJourney = cosmicJourneyForScale(currentDestination.id);
-  const nextDestination = cosmicJourney.outward;
+  const nextDestination = visitedSystem
+    ? cosmicDestination("galaxy")
+    : cosmicJourney.outward;
+  const flightLabel = nextDestination
+    ? {
+        neighborhood: "STARS",
+        galaxy: "MILKY WAY",
+        localGroup: "GALAXIES",
+        universe: "UNIVERSE",
+      }[nextDestination.id] ?? nextDestination.label
+    : "";
   const guidance = instrumentHint({
     planetCount: planets.length,
     selectedBody,
@@ -257,6 +270,7 @@ export function App() {
     lesson
     && !isListener
     && currentDestination.id === "system"
+    && !visitedSystem
     && interactionMode === "compose"
     && !journeyTarget,
   );
@@ -267,6 +281,8 @@ export function App() {
     ? `FLYING TO ${cosmicDestination(journeyTarget).label}`
     : arrivalTarget
       ? `YOU ARE IN ${cosmicDestination(arrivalTarget).label}`
+    : visitedSystem
+      ? `PLAY THE ORBITS OF ${visitedSystem.name}`
     : isAwaitingCosmicScore
         ? "A SHARED UNIVERSE IS READY"
       : cosmicScale.id === "orbit" || cosmicScale.id === "system"
@@ -282,6 +298,8 @@ export function App() {
           ? "TOUCH A GLOWING ORBIT TO PLAY IT"
           : "HOLD THE STAR · PULL OUTWARD · RELEASE"
         : "TOUCH A BRIGHT REGION TO HEAR IT"
+    : visitedSystem
+      ? `${visitedSystem.system.worlds} REAL ORBITS · TOUCH TO PLAY THEIR PERIODS`
     : isAwaitingCosmicScore
         ? "LISTEN · THE CAMERA FOLLOWS EACH COSMIC VOICE"
       : cosmicScale.id === "orbit" || cosmicScale.id === "system"
@@ -628,6 +646,7 @@ export function App() {
     if (journeyTargetRef.current) return;
     cancelDirectGestures();
     const destination = cosmicDestination(targetId);
+    setVisitedSystemId(null);
     setSelectedBodyId(null);
     window.clearTimeout(arrivalTimeoutRef.current);
     setArrivalTarget(null);
@@ -744,10 +763,24 @@ export function App() {
     try {
       await startAudio(true);
       audioRef.current.playCosmicLandmark(landmark);
+      if (landmark.system) {
+        setVisitedSystemId(landmark.id);
+        setSelectedBodyId(null);
+        setCameraCommand((current) => ({
+          id: current.id + 1,
+          type: "focus-system",
+          landmarkId: landmark.id,
+        }));
+      }
       setIsPlaying(true);
       setDialogOpen(false);
       setRuntimeError(null);
-      announceSonicCue(`${landmark.name} · ${landmark.detail}`, 2800);
+      announceSonicCue(
+        landmark.system
+          ? `${landmark.name} · ${landmark.system.label}`
+          : `${landmark.name} · ${landmark.detail}`,
+        2800,
+      );
     } catch (error) {
       setAudioState("locked");
       setRuntimeError(error instanceof Error ? error.message : "The cosmic voice could not start");
@@ -770,6 +803,10 @@ export function App() {
         return;
       }
       if (dialogOpen) return;
+      if (visitedSystem) {
+        handleCosmicTravel("neighborhood");
+        return;
+      }
       if (currentDestination.id !== "system") handleCosmicTravel("system");
     };
     window.addEventListener("keydown", onEscape);
@@ -783,6 +820,7 @@ export function App() {
     handleCosmicTravel,
     lightOpen,
     utilityOpen,
+    visitedSystem,
   ]);
 
   const closeDialog = useCallback(async () => {
@@ -1137,6 +1175,7 @@ export function App() {
       data-audio-state={audioState}
       data-camera-scale={cameraScale}
       data-cosmic-scale={cosmicScale.id}
+      data-focused-system={visitedSystem?.id ?? ""}
       data-interaction-mode={interactionMode}
       data-journey-state={journeyTarget ? "travelling" : arrivalTarget ? "arrived" : "idle"}
       data-theremin-phase={thereminPhase}
@@ -1199,7 +1238,9 @@ export function App() {
 
       {!dialogOpen && storedScoreState === "idle" && !lightOpen && (
         <div className="instrument-topbar">
-          <span className="instrument-location">{currentDestination.label}</span>
+          <span className="instrument-location">
+            {visitedSystem?.name ?? currentDestination.label}
+          </span>
           <button
             type="button"
             className="instrument-menu-trigger"
@@ -1257,6 +1298,7 @@ export function App() {
               || Boolean(journeyTarget)
               || Boolean(arrivalTarget)
               || isAwaitingCosmicScore
+              || Boolean(visitedSystem)
               || currentDestination.id !== "system"
             ) && (
             <section className="instrument-guidance" aria-live="polite">
@@ -1279,7 +1321,7 @@ export function App() {
                 : <Play aria-hidden="true" weight="fill" />}
               <span>{playback.label}</span>
             </button>
-            {currentDestination.id === "system" ? (
+            {currentDestination.id === "system" && !visitedSystem ? (
               <button
                 type="button"
                 className="instrument-light"
@@ -1292,11 +1334,12 @@ export function App() {
               <button
                 type="button"
                 className="instrument-home"
-                onClick={() => handleCosmicTravel("system")}
+                aria-label={visitedSystem ? "Back to nearby stars" : "Return to my system"}
+                onClick={() => handleCosmicTravel(visitedSystem ? "neighborhood" : "system")}
                 disabled={Boolean(journeyTarget)}
               >
                 <House aria-hidden="true" weight="thin" />
-                <span>HOME</span>
+                <span>{visitedSystem ? "STARS" : "HOME"}</span>
               </button>
             )}
             {nextDestination && (
@@ -1308,7 +1351,7 @@ export function App() {
                   disabled={Boolean(journeyTarget)}
                 >
                   <NavigationArrow aria-hidden="true" weight="thin" />
-                  <span>{journeyTarget ? "FLYING" : "FLY"}</span>
+                  <span>{journeyTarget ? "FLYING" : flightLabel}</span>
                 </button>
             )}
           </nav>
@@ -1442,7 +1485,7 @@ export function App() {
                 <span>04</span>
                 <div>
                   <strong>PLAY WITH LIGHT OR FLY</strong>
-                  <p>Light opens the theremin. Fly moves to the next cosmic scale.</p>
+                  <p>Light opens the theremin. The named flight button and a pinch move through cosmic scales; touch a nearby star to enter it.</p>
                 </div>
               </li>
             </ol>

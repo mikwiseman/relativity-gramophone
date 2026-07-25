@@ -5,6 +5,7 @@ import {
   voiceParameters,
   voicePluckParameters,
 } from "./sonification.js";
+import { orbitalSonificationFrequency } from "./cosmicInstrument.js";
 
 const REVERB_SECONDS = 3.1;
 const AUDIO_CLOCK_PROBE_MS = 90;
@@ -1043,31 +1044,37 @@ export class AudioEngine {
     };
     const ratios = ratiosByScale[landmark.scale];
     if (!ratios) throw new Error(`Unknown cosmic landmark scale: ${landmark.scale}`);
+    const systemFrequencies = landmark.system?.bodies?.map((body) => (
+      orbitalSonificationFrequency(body.periodDays)
+    )) ?? [];
+    const frequencies = systemFrequencies.length > 0
+      ? systemFrequencies
+      : ratios.map((ratio) => landmark.frequency * ratio);
 
     const now = this.context.currentTime;
-    const duration = 1.7 + ratios.length * 0.26;
-    ratios.forEach((ratio, index) => {
+    const duration = 1.7 + frequencies.length * 0.2;
+    frequencies.forEach((frequency, index) => {
       const oscillator = this.context.createOscillator();
       const filter = this.context.createBiquadFilter();
       const gain = this.context.createGain();
       const panner = this.context.createStereoPanner();
       const reverbSend = this.context.createGain();
-      const onset = now + index * 0.055;
+      const onset = now + index * (systemFrequencies.length > 0 ? 0.09 : 0.055);
       const peak = 0.024 / (1 + index * 0.2);
 
       this.applyVoiceWave(oscillator, landmark.voice, COSMIC_VOICES[landmark.voice].waveform);
-      oscillator.frequency.setValueAtTime(landmark.frequency * ratio * 0.988, onset);
+      oscillator.frequency.setValueAtTime(frequency * 0.988, onset);
       oscillator.frequency.exponentialRampToValueAtTime(
-        landmark.frequency * ratio,
+        frequency,
         onset + 0.12,
       );
       filter.type = "lowpass";
       filter.frequency.setValueAtTime(980 + index * 720, onset);
       filter.frequency.exponentialRampToValueAtTime(420 + index * 260, onset + duration);
       filter.Q.value = 1.1 + index * 0.34;
-      panner.pan.value = ratios.length === 1
+      panner.pan.value = frequencies.length === 1
         ? 0
-        : -0.62 + (index / (ratios.length - 1)) * 1.24;
+        : -0.62 + (index / (frequencies.length - 1)) * 1.24;
       reverbSend.gain.value = 0.34 + index * 0.05;
 
       gain.gain.setValueAtTime(0.0001, onset);

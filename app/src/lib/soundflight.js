@@ -374,9 +374,16 @@ export function selectRenderProfile({
     throw new Error("Soundflight render profile requires finite device metrics");
   }
 
+  const compact = Math.min(width, height) < 620 || hardwareConcurrency <= 4;
+  const maxBackingPixels = compact ? 1_800_000 : 3_600_000;
+  const idealPixelRatio = Math.min(compact ? 2 : 1.5, Math.max(1, devicePixelRatio));
+  const budgetPixelRatio = Math.sqrt(maxBackingPixels / Math.max(1, width * height));
+  const pixelRatio = Math.min(idealPixelRatio, Math.max(1, budgetPixelRatio));
+
   if (reducedMotion) {
     return {
-      pixelRatio: 1,
+      pixelRatio,
+      maxBackingPixels,
       particleCount: 90,
       trailSamples: 40,
       bloomStrength: 0.72,
@@ -388,10 +395,10 @@ export function selectRenderProfile({
     };
   }
 
-  const compact = Math.min(width, height) < 620 || hardwareConcurrency <= 4;
   if (compact) {
     return {
-      pixelRatio: Math.min(1, Math.max(0.75, devicePixelRatio)),
+      pixelRatio,
+      maxBackingPixels,
       particleCount: 480,
       trailSamples: 96,
       bloomStrength: 0.92,
@@ -404,7 +411,8 @@ export function selectRenderProfile({
   }
 
   return {
-    pixelRatio: Math.min(1.5, Math.max(1, devicePixelRatio)),
+    pixelRatio,
+    maxBackingPixels,
     particleCount: 1100,
     trailSamples: 160,
     bloomStrength: 1.18,

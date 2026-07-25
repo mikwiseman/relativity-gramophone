@@ -7,6 +7,7 @@ import {
   cosmicLandmarkById,
   cosmicJourneyForScale,
   cosmicLandmarksForScale,
+  orbitalSonificationFrequency,
   cathedralIntensity,
   cosmicScaleForView,
   cosmicScaleForDistance,
@@ -144,22 +145,85 @@ test("every nearby star opens as a small real system instead of a decorative dot
     && landmark.system.worlds >= 1
     && landmark.system.worlds <= 7
     && landmark.system.label.length > 0
+    && landmark.system.worlds === landmark.system.bodies.length
+    && landmark.system.bodies.every((body) => (
+      body.id
+      && body.name
+      && ["planet", "star"].includes(body.kind)
+      && Number.isFinite(body.periodDays)
+      && body.periodDays > 0
+      && Number.isFinite(body.orbitAu)
+      && body.orbitAu > 0
+    ))
   )));
   assert.deepEqual(proxima.system, {
     kind: "planetary",
-    worlds: 1,
-    label: "PROXIMA b · 11.2 DAY YEAR",
+    worlds: 2,
+    label: "2 CONFIRMED WORLDS · 5.1–11.2 DAY YEARS",
+    bodies: [
+      {
+        id: "proxima-d",
+        name: "PROXIMA d",
+        kind: "planet",
+        periodDays: 5.12338,
+        orbitAu: 0.02881,
+        radiusEarth: 0.692,
+      },
+      {
+        id: "proxima-b",
+        name: "PROXIMA b",
+        kind: "planet",
+        periodDays: 11.18465,
+        orbitAu: 0.04848,
+        radiusEarth: 1.02,
+      },
+    ],
   });
   assert.deepEqual(sirius.system, {
     kind: "binary",
     worlds: 1,
-    label: "SIRIUS A + B · 50 YEAR ORBIT",
+    label: "SIRIUS A + B · 50 YEAR ORBIT · 19.7 AU",
+    bodies: [
+      {
+        id: "sirius-b",
+        name: "SIRIUS B",
+        kind: "star",
+        periodDays: 18262.5,
+        orbitAu: 19.7,
+        radiusEarth: 0.92,
+      },
+    ],
   });
-  assert.deepEqual(trappist.system, {
-    kind: "planetary",
-    worlds: 7,
-    label: "7 ROCKY WORLDS · 1.5–19 DAY YEARS",
-  });
+  assert.equal(trappist.system.kind, "planetary");
+  assert.equal(trappist.system.worlds, 7);
+  assert.equal(trappist.system.label, "7 ROCKY WORLDS · 1.5–18.8 DAY YEARS");
+  assert.deepEqual(
+    trappist.system.bodies.map(({ id, periodDays, orbitAu }) => ({ id, periodDays, orbitAu })),
+    [
+      { id: "trappist-1-b", periodDays: 1.510826, orbitAu: 0.01154 },
+      { id: "trappist-1-c", periodDays: 2.421937, orbitAu: 0.0158 },
+      { id: "trappist-1-d", periodDays: 4.049219, orbitAu: 0.02227 },
+      { id: "trappist-1-e", periodDays: 6.101013, orbitAu: 0.02925 },
+      { id: "trappist-1-f", periodDays: 9.20754, orbitAu: 0.03849 },
+      { id: "trappist-1-g", periodDays: 12.352446, orbitAu: 0.04683 },
+      { id: "trappist-1-h", periodDays: 18.772866, orbitAu: 0.06189 },
+    ],
+  );
+});
+
+test("real orbital periods become audible without changing their octave identity", () => {
+  for (const landmark of cosmicLandmarksForScale("neighborhood")) {
+    for (const body of landmark.system.bodies) {
+      const frequency = orbitalSonificationFrequency(body.periodDays);
+      const rawFrequency = 1 / (body.periodDays * 86_400);
+      const octaveShift = frequency / rawFrequency;
+      assert.ok(frequency >= 110 && frequency < 440);
+      assert.ok(
+        Math.abs(Math.log2(octaveShift) - Math.round(Math.log2(octaveShift))) < 1e-10,
+        `${body.name} must only be transposed by whole octaves`,
+      );
+    }
+  }
 });
 
 test("the gravitational theremin is continuous, monophonic, and safely bounded", () => {
