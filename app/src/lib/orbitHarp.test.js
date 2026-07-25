@@ -360,48 +360,89 @@ test("one contextual sentence teaches the next literal gesture", () => {
 });
 
 test("the child instrument lesson exposes one concrete gesture at a time", () => {
-  assert.equal(instrumentLesson({ planetCount: 0 }), null);
-  assert.deepEqual(instrumentLesson({ planetCount: 1 }), {
+  assert.deepEqual(instrumentLesson({
+    audioState: "locked",
+    planetCount: 0,
+  }), {
     step: 1,
-    total: 2,
+    total: 4,
+    label: "SOUND",
+    instruction: "TOUCH TO HEAR",
+    detail: "ONE TAP STARTS THE UNIVERSE",
+    showThereminPad: false,
+  });
+  assert.deepEqual(instrumentLesson({
+    audioState: "paused",
+    planetCount: 0,
+  }), {
+    step: 1,
+    total: 4,
+    label: "SOUND",
+    instruction: "TOUCH TO HEAR",
+    detail: "ONE TAP STARTS THE UNIVERSE",
+    showThereminPad: false,
+  });
+  assert.deepEqual(instrumentLesson({
+    audioState: "running",
+    planetCount: 0,
+  }), {
+    step: 2,
+    total: 4,
+    label: "MAKE A WORLD",
+    instruction: "DRAG THE STAR",
+    detail: "PULL OUTWARD · RELEASE",
+    showThereminPad: false,
+  });
+  assert.deepEqual(instrumentLesson({ planetCount: 1 }), {
+    step: 3,
+    total: 4,
     label: "ORBIT STRING",
     instruction: "SWIPE THE GLOWING LINE",
-    showBeacon: false,
+    detail: "THE ORBIT IS A MUSICAL STRING",
+    showThereminPad: false,
   });
   assert.deepEqual(instrumentLesson({
     planetCount: 1,
     hasPluckedOrbit: true,
   }), {
-    step: 2,
-    total: 2,
+    step: 4,
+    total: 4,
     label: "LIGHT THEREMIN",
-    instruction: "HOLD THE PULSING LIGHT",
-    showBeacon: true,
+    instruction: "HOLD THE LIGHT · THEN MOVE",
+    detail: "LEFT–RIGHT = PITCH · UP–DOWN = POWER",
+    showThereminPad: true,
   });
   assert.deepEqual(instrumentLesson({
     planetCount: 1,
     hasPluckedOrbit: true,
     thereminPhase: "arming",
   }), {
-    step: 2,
-    total: 2,
+    step: 4,
+    total: 4,
     label: "LIGHT THEREMIN",
     instruction: "KEEP HOLDING",
-    showBeacon: true,
+    detail: "THE NOTE IS FORMING",
+    showThereminPad: true,
   });
   assert.deepEqual(instrumentLesson({
     planetCount: 1,
     hasPluckedOrbit: true,
     thereminPhase: "active",
   }), {
-    step: 2,
-    total: 2,
+    step: 4,
+    total: 4,
     label: "LIGHT THEREMIN",
     instruction: "MOVE TO BEND THE NOTE",
-    showBeacon: false,
+    detail: "LEFT–RIGHT = PITCH · UP–DOWN = POWER",
+    showThereminPad: true,
   });
   assert.equal(instrumentLesson({
     planetCount: 1,
+    hasPluckedOrbit: true,
+    hasPlayedTheremin: true,
+  }), null);
+  assert.equal(instrumentLesson({
+    planetCount: 0,
     hasPluckedOrbit: true,
     hasPlayedTheremin: true,
   }), null);

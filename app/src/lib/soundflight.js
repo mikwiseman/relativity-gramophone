@@ -518,37 +518,65 @@ export function shouldCelebrateThereminEnd({ sounded }) {
 }
 
 export function instrumentLesson({
+  audioState = "running",
   planetCount,
   hasPluckedOrbit = false,
   thereminPhase = "idle",
   hasPlayedTheremin = false,
 }) {
+  if (!["locked", "paused", "running"].includes(audioState)) {
+    throw new Error(`Unknown instrument lesson audio state: ${audioState}`);
+  }
   if (!Number.isInteger(planetCount) || planetCount < 0) {
     throw new Error("Instrument lesson requires a planet count");
   }
   if (!["idle", "arming", "active"].includes(thereminPhase)) {
     throw new Error(`Unknown theremin lesson phase: ${thereminPhase}`);
   }
-  if (planetCount === 0 || hasPlayedTheremin) return null;
-  if (!hasPluckedOrbit) {
+  if (hasPlayedTheremin) return null;
+  if (audioState !== "running" && planetCount === 0) {
     return {
       step: 1,
-      total: 2,
+      total: 4,
+      label: "SOUND",
+      instruction: "TOUCH TO HEAR",
+      detail: "ONE TAP STARTS THE UNIVERSE",
+      showThereminPad: false,
+    };
+  }
+  if (planetCount === 0) {
+    return {
+      step: 2,
+      total: 4,
+      label: "MAKE A WORLD",
+      instruction: "DRAG THE STAR",
+      detail: "PULL OUTWARD · RELEASE",
+      showThereminPad: false,
+    };
+  }
+  if (!hasPluckedOrbit) {
+    return {
+      step: 3,
+      total: 4,
       label: "ORBIT STRING",
       instruction: "SWIPE THE GLOWING LINE",
-      showBeacon: false,
+      detail: "THE ORBIT IS A MUSICAL STRING",
+      showThereminPad: false,
     };
   }
   return {
-    step: 2,
-    total: 2,
+    step: 4,
+    total: 4,
     label: "LIGHT THEREMIN",
     instruction: thereminPhase === "active"
       ? "MOVE TO BEND THE NOTE"
       : thereminPhase === "arming"
         ? "KEEP HOLDING"
-        : "HOLD THE PULSING LIGHT",
-    showBeacon: thereminPhase !== "active",
+        : "HOLD THE LIGHT · THEN MOVE",
+    detail: thereminPhase === "arming"
+      ? "THE NOTE IS FORMING"
+      : "LEFT–RIGHT = PITCH · UP–DOWN = POWER",
+    showThereminPad: true,
   };
 }
 

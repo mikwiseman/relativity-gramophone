@@ -67,10 +67,12 @@ export class AudioEngine {
     if (!AudioContextClass) throw new Error("Web Audio API is not available in this browser");
 
     if (!this.context) this.createGraph();
+    const wasRunning = this.context.state === "running";
     if (this.context.state !== "running") await this.context.resume();
     const state = assertAudioContextRunning(this.context.state);
     this.setFieldActive(activateField);
     if (this.latestFrame) this.updateField(this.latestFrame);
+    if (!wasRunning) this.playUnlockChime();
     this.notifyState();
     return state;
   }
@@ -215,15 +217,15 @@ export class AudioEngine {
     fundamental.type = "sine";
     shimmer.type = "sine";
     fifth.type = "sine";
-    fundamental.frequency.value = 55;
-    shimmer.frequency.value = 55 * 1.0035;
-    fifth.frequency.value = 82.5;
-    shimmerGain.gain.value = 0.4;
-    fifthGain.gain.value = 0.12;
+    fundamental.frequency.value = 110;
+    shimmer.frequency.value = 220 * 1.0035;
+    fifth.frequency.value = 165;
+    shimmerGain.gain.value = 0.18;
+    fifthGain.gain.value = 0.16;
     filter.type = "lowpass";
-    filter.frequency.value = 420;
+    filter.frequency.value = 680;
     filter.Q.value = 0.72;
-    gain.gain.value = 0.026;
+    gain.gain.value = 0.032;
     reverbSend.gain.value = 0.12;
 
     fundamental.connect(filter);
@@ -236,6 +238,26 @@ export class AudioEngine {
     shimmer.start(now);
     fifth.start(now);
     this.drone = { fundamental, shimmer, shimmerGain, fifth, fifthGain, filter, gain, reverbSend };
+  }
+
+  playUnlockChime() {
+    const now = this.context.currentTime;
+    const frequencies = [440, 659.255, 880];
+    frequencies.forEach((frequency, index) => {
+      const oscillator = this.context.createOscillator();
+      const gain = this.context.createGain();
+      const start = now + index * 0.055;
+      const end = start + 0.72;
+      oscillator.type = index === 1 ? "triangle" : "sine";
+      oscillator.frequency.setValueAtTime(frequency, start);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.36 - index * 0.05, start + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, end);
+      oscillator.connect(gain).connect(this.master);
+      gain.connect(this.reverb);
+      oscillator.start(start);
+      oscillator.stop(end + 0.02);
+    });
   }
 
   createCosmicChoir() {

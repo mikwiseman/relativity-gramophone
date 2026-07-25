@@ -2251,6 +2251,10 @@ input:focus-visible {
   cursor: crosshair;
 }
 
+.app-shell[data-onboarding="step-1"] .soundflight-stage {
+  pointer-events: none;
+}
+
 .simple-title {
   top: clamp(var(--rg-space-5), 5vh, 48px);
   left: clamp(var(--rg-space-5), 4vw, 56px);
@@ -2494,11 +2498,53 @@ input:focus-visible {
   left: 70%;
   width: 148px;
   height: 148px;
+  padding: 0;
+  border: 0;
   color: var(--rg-cyan);
-  pointer-events: none;
+  background: transparent;
+  cursor: crosshair;
+  pointer-events: auto;
   text-align: center;
   text-shadow: 0 0 18px var(--rg-shadow-strong);
+  touch-action: none;
   transform: translate(-50%, -50%);
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.theremin-beacon:focus-visible {
+  border-radius: 50%;
+  outline: 2px solid var(--rg-cyan);
+  outline-offset: 6px;
+}
+
+.theremin-beacon:active > i::after,
+.app-shell[data-theremin-phase="active"] .theremin-beacon > i::after {
+  width: 20px;
+  height: 20px;
+  background: var(--rg-gold-bright);
+  box-shadow:
+    0 0 18px var(--rg-gold-bright),
+    0 0 44px var(--rg-cyan);
+}
+
+.theremin-beacon.is-compact {
+  top: auto;
+  right: clamp(var(--rg-space-5), 4vw, 56px);
+  bottom: clamp(128px, 16vh, 164px);
+  left: auto;
+  width: 104px;
+  height: 104px;
+  transform: none;
+}
+
+.theremin-beacon.is-compact > span {
+  top: calc(50% + 31px);
+}
+
+.theremin-beacon.is-compact b,
+.theremin-beacon.is-compact em {
+  display: none;
 }
 
 .theremin-beacon > i,
@@ -2644,6 +2690,19 @@ input:focus-visible {
   display: flex;
   align-items: center;
   gap: var(--rg-space-3);
+}
+
+.app-shell[data-onboarding="step-1"] .instrument-controls {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.app-shell[data-onboarding="step-1"] .instrument-play {
+  width: 112px;
+  height: 112px;
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--rg-cyan) 11%, transparent), transparent 68%),
+    var(--rg-panel);
 }
 
 .instrument-controls button,
@@ -3281,13 +3340,13 @@ input:focus-visible {
 
   .instrument-guidance strong {
     max-width: 23ch;
-    font-size: 19px;
+    font-size: 22px;
     letter-spacing: 0.075em;
   }
 
   .instrument-guidance span {
     max-width: 32ch;
-    font-size: 9px;
+    font-size: 11px;
     letter-spacing: 0.15em;
   }
 
@@ -3314,6 +3373,11 @@ input:focus-visible {
 
   .app-shell[data-audio-state="locked"] .instrument-play {
     width: 92px;
+  }
+
+  .app-shell[data-onboarding="step-1"] .instrument-play {
+    width: 104px;
+    height: 104px;
   }
 
   .app-shell[data-audio-state="locked"] .instrument-play span {
@@ -3477,14 +3541,24 @@ input:focus-visible {
   }
 
   .theremin-beacon {
-    top: 38%;
-    left: 74%;
-    width: 120px;
-    height: 120px;
+    top: auto;
+    right: 18px;
+    bottom: 112px;
+    left: auto;
+    width: 138px;
+    height: 138px;
+    transform: none;
   }
 
   .theremin-beacon > span {
     top: calc(50% + 34px);
+  }
+
+  .theremin-beacon.is-compact {
+    right: 14px;
+    bottom: 96px;
+    width: 100px;
+    height: 100px;
   }
 
   .runtime-message {

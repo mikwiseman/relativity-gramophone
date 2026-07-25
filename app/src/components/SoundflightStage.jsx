@@ -2701,7 +2701,6 @@ export function SoundflightStage(props) {
         if (!deferred) performPluck(stringHit, 0.62);
         return;
       }
-      armTheremin(event);
     };
 
     const onPointerMove = (event) => {
@@ -2766,7 +2765,9 @@ export function SoundflightStage(props) {
         const point = intersectPlane(event);
         if (!point) return;
         if (!runtime.moonBirth.active) {
-          capturePointer(event.pointerId);
+          if (runtime.moonBirth.pointerType !== "touch") {
+            capturePointer(event.pointerId);
+          }
           runtime.moonBirth.active = true;
           runtime.moonBirth.phase = "aiming";
           propsRef.current.onMoonPhase("aiming");
@@ -2787,7 +2788,9 @@ export function SoundflightStage(props) {
         if (!point) return;
         const world = stageToWorld(point);
         if (!runtime.birth.active) {
-          capturePointer(event.pointerId);
+          if (runtime.birth.pointerType !== "touch") {
+            capturePointer(event.pointerId);
+          }
           runtime.birth.active = true;
           runtime.birth.phase = "aiming";
           propsRef.current.onLaunchPhase("aiming");
