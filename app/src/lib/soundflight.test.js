@@ -16,6 +16,7 @@ import {
   launchGuidance,
   nextCameraDistance,
   playbackControl,
+  reconcileAudioState,
   audioUnlockPhase,
   reduceSoundflightState,
   selectRenderProfile,
@@ -61,6 +62,25 @@ test("the playback control never claims sound is playing before Web Audio is run
   assert.throws(
     () => playbackControl({ audioState: "mystery", isPlaying: true }),
     /unknown audio state/i,
+  );
+});
+
+test("an intentional pause wins when a browser wakes Web Audio by itself", () => {
+  assert.deepEqual(
+    reconcileAudioState({ engineState: "running", intentionalPause: true }),
+    { audioState: "paused", shouldSuspend: true },
+  );
+  assert.deepEqual(
+    reconcileAudioState({ engineState: "suspended", intentionalPause: true }),
+    { audioState: "paused", shouldSuspend: false },
+  );
+  assert.deepEqual(
+    reconcileAudioState({ engineState: "running", intentionalPause: false }),
+    { audioState: "running", shouldSuspend: false },
+  );
+  assert.deepEqual(
+    reconcileAudioState({ engineState: "interrupted", intentionalPause: false }),
+    { audioState: "locked", shouldSuspend: false },
   );
 });
 

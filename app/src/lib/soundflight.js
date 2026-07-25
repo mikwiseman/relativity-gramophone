@@ -4,6 +4,22 @@ const DEFAULT_STATE = Object.freeze({ mode: "compose", followingBodyId: null });
 export const INITIAL_PLAYBACK = true;
 export const INSTRUMENT_TITLE = "WAI GRAMOPHONE";
 
+export function reconcileAudioState({ engineState, intentionalPause }) {
+  if (typeof engineState !== "string" || typeof intentionalPause !== "boolean") {
+    throw new Error("Audio reconciliation requires engine state and intentional pause");
+  }
+  if (intentionalPause) {
+    return {
+      audioState: "paused",
+      shouldSuspend: engineState === "running",
+    };
+  }
+  return {
+    audioState: engineState === "running" ? "running" : "locked",
+    shouldSuspend: false,
+  };
+}
+
 export function playbackControl({ audioState, isPlaying }) {
   if (!["locked", "paused", "running"].includes(audioState)) {
     throw new Error(`Unknown audio state: ${audioState ?? "missing"}`);

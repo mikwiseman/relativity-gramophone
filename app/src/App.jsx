@@ -47,6 +47,7 @@ import {
   instrumentHint,
   instrumentLesson,
   playbackControl,
+  reconcileAudioState,
   shouldApplyGestationUpdate,
   shouldApplyThereminRelease,
   shouldCelebrateThereminEnd,
@@ -310,11 +311,14 @@ export function App() {
   }, [initial.storedId, loadStoredScore]);
 
   useEffect(() => audioRef.current.subscribeState((state) => {
-    if (state === "running") {
-      setAudioState("running");
-      return;
+    const reconciliation = reconcileAudioState({
+      engineState: state,
+      intentionalPause: intentionalPauseRef.current,
+    });
+    setAudioState(reconciliation.audioState);
+    if (reconciliation.shouldSuspend) {
+      audioRef.current.suspend().catch(() => setAudioState("locked"));
     }
-    setAudioState(state === "suspended" && intentionalPauseRef.current ? "paused" : "locked");
   }), []);
 
   useEffect(() => {
