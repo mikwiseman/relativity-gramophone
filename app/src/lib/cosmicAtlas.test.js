@@ -8,6 +8,7 @@ import {
   logSpiralRadius,
   planetAppearance,
   systemVoiceFrequencies,
+  systemWorldVoice,
 } from "./cosmicAtlas.js";
 
 function channels(hex) {
@@ -171,4 +172,35 @@ test("system voices refuse impossible periods", () => {
   assert.throws(() => systemVoiceFrequencies([]), /at least one period/i);
   assert.throws(() => systemVoiceFrequencies([0]), /positive period/i);
   assert.throws(() => systemVoiceFrequencies([Number.NaN]), /positive period/i);
+});
+
+test("a single world can be sounded out of its own system, at its own place in the chord", () => {
+  const system = {
+    star: { name: "TRAPPIST-1", temperature: 2566, radiusSolar: 0.1192, luminositySuns: 0.000553 },
+    bodies: [
+      { id: "trappist-1-b", name: "TRAPPIST-1 b", periodDays: 1.510826, orbitAu: 0.01154, radiusEarth: 1.116 },
+      { id: "trappist-1-e", name: "TRAPPIST-1 e", periodDays: 6.101013, orbitAu: 0.02925, radiusEarth: 0.92 },
+      { id: "trappist-1-h", name: "TRAPPIST-1 h", periodDays: 18.772866, orbitAu: 0.06189, radiusEarth: 0.755 },
+    ],
+  };
+  const chord = systemVoiceFrequencies(system.bodies.map((body) => body.periodDays));
+
+  const inner = systemWorldVoice({ system, planetId: "trappist-1-b" });
+  const outer = systemWorldVoice({ system, planetId: "trappist-1-h" });
+
+  // A world heard alone is the same pitch it contributes to the chord: one law,
+  // whether you touch one world or the whole system.
+  assert.equal(inner.frequency, chord[0]);
+  assert.equal(outer.frequency, chord[2]);
+  assert.equal(inner.index, 0);
+  assert.equal(outer.index, 2);
+  assert.ok(outer.frequency < inner.frequency, "the slower world is the deeper voice");
+  assert.equal(outer.planet.name, "TRAPPIST-1 h");
+  // 363 K at 0.0115 AU from a 0.00055-solar-luminosity dwarf: warm, not molten.
+  assert.equal(inner.appearance.label, "WARM ROCK");
+
+  assert.throws(
+    () => systemWorldVoice({ system, planetId: "nowhere" }),
+    /not a world of this system/i,
+  );
 });

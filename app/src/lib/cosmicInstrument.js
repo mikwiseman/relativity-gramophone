@@ -41,6 +41,43 @@ const SCALE_COPY = Object.freeze({
   }),
 });
 
+/**
+ * Where a scale's named landmarks actually land on the screen in front of you.
+ *
+ * Each arrangement is authored once, in unit slots: at the nearby stars our own
+ * Sun sits above, Sirius below, two systems out to each side. What cannot be
+ * authored once is how far apart they sit, because a 16:10 laptop and a
+ * portrait phone see completely different frames from the same camera. So the
+ * slots are stretched onto the frame the camera really has, and the real
+ * objects fill the sky on both instead of huddling into a knot in the middle
+ * of one.
+ *
+ * The camera looks nearly straight down +z at every scale that uses this, so a
+ * slot's `u` is world x and its `v` is world y; z is only the small authored
+ * depth that keeps the field from reading as flat card art.
+ */
+export function landmarkPlacement({ slot, aspect, fovDegrees, distance, fill = 0.62 }) {
+  if (!Array.isArray(slot) || slot.length !== 2 || !slot.every(Number.isFinite)) {
+    throw new Error("A landmark slot needs a finite [u, v] pair");
+  }
+  if (![aspect, fovDegrees, distance, fill].every(Number.isFinite)
+    || aspect <= 0 || fovDegrees <= 0 || distance <= 0) {
+    throw new Error("A landmark placement needs a real camera");
+  }
+  const halfHeight = Math.tan((fovDegrees * Math.PI) / 360) * distance;
+  const halfWidth = halfHeight * aspect;
+  // A portrait phone spends a third of its height on the title and the
+  // instruction above the sky, so the field has to start lower there or the
+  // first object sits inside the words. Names hang below their own object, so
+  // the sky always keeps more room underneath than above.
+  const portrait = aspect < 0.9;
+  return {
+    x: slot[0] * halfWidth * fill,
+    y: slot[1] * halfHeight * fill * (portrait ? 0.78 : 0.82)
+      - halfHeight * (portrait ? 0.14 : 0.075),
+  };
+}
+
 export const COSMIC_DESTINATIONS = Object.freeze({
   system: Object.freeze({
     id: "system",
@@ -55,8 +92,8 @@ export const COSMIC_DESTINATIONS = Object.freeze({
     ...SCALE_COPY.neighborhood,
     distance: 27,
     action: "FLY TO NEARBY STARS",
-    guidance: "TOUCH A STAR TO HEAR ITS SYSTEM",
-    guidanceDetail: "THE GOLDEN LIGHT AT THE CENTRE IS OUR SUN",
+    guidance: "TOUCH A STAR TO PLAY ITS WORLDS",
+    guidanceDetail: "SIX REAL SYSTEMS · YOURS IS IN THE MIDDLE",
   }),
   galaxy: Object.freeze({
     id: "galaxy",
@@ -107,6 +144,7 @@ const COSMIC_LANDMARKS = Object.freeze({
       frequency: 261.63,
       color: 0xfff4ea,
       position: Object.freeze([0, 4.4, 0.4]),
+      slot: Object.freeze([0, 1]),
       lesson: "EVERY YEAR YOU HAVE EVER HAD IS ONE LAP OF THE THIRD ORBIT",
       system: Object.freeze({
         kind: "planetary",
@@ -142,6 +180,7 @@ const COSMIC_LANDMARKS = Object.freeze({
       frequency: 220,
       color: 0xff8f74,
       position: Object.freeze([-2.25, -2.2, 0.6]),
+      slot: Object.freeze([-1, -0.44]),
       lesson: "THE NEAREST STAR TO THE SUN, AND FAR TOO FAINT TO SEE",
       system: Object.freeze({
         kind: "planetary",
@@ -171,6 +210,7 @@ const COSMIC_LANDMARKS = Object.freeze({
       frequency: 293.66,
       color: 0xbcecff,
       position: Object.freeze([0, -4.4, -0.5]),
+      slot: Object.freeze([0, -1]),
       lesson: "THE BRIGHTEST STAR IN OUR SKY, CIRCLED BY A DEAD ONE",
       system: Object.freeze({
         kind: "binary",
@@ -197,6 +237,7 @@ const COSMIC_LANDMARKS = Object.freeze({
       frequency: 174.61,
       color: 0xd98bff,
       position: Object.freeze([2.25, 2.2, -0.6]),
+      slot: Object.freeze([1, 0.44]),
       lesson: "SEVEN ROCKY WORLDS LOCKED INTO ONE RHYTHM",
       system: Object.freeze({
         kind: "planetary",
@@ -230,6 +271,7 @@ const COSMIC_LANDMARKS = Object.freeze({
       frequency: 196,
       color: 0xffb072,
       position: Object.freeze([2.25, -2.2, 0.8]),
+      slot: Object.freeze([1, -0.44]),
       lesson: "TWO OF ITS WORLDS SIT WHERE LIQUID WATER COULD SURVIVE",
       system: Object.freeze({
         kind: "planetary",
@@ -259,6 +301,7 @@ const COSMIC_LANDMARKS = Object.freeze({
       frequency: 146.83,
       color: 0xffe6a8,
       position: Object.freeze([-2.25, 2.2, -0.8]),
+      slot: Object.freeze([-1, 0.44]),
       lesson: "AS MANY PLANETS AS THE SUN HAS — ONE WAS FOUND BY A MACHINE",
       system: Object.freeze({
         kind: "planetary",
@@ -326,6 +369,8 @@ const COSMIC_LANDMARKS = Object.freeze({
       frequency: 98,
       color: 0x72edff,
       position: Object.freeze([-5.2, 0.2, 0]),
+      slot: Object.freeze([-0.25, -0.55]),
+      discRadius: 1.97,
       usesLivingGalaxy: true,
       lesson: "WE LIVE INSIDE IT, SO NOBODY CAN PHOTOGRAPH IT FROM OUTSIDE",
     }),
@@ -338,6 +383,8 @@ const COSMIC_LANDMARKS = Object.freeze({
       frequency: 130.81,
       color: 0x8edfff,
       position: Object.freeze([-9.2, 2.2, -7.4]),
+      slot: Object.freeze([-0.95, 0.6]),
+      discRadius: 2.6,
       lesson: "IN YOUR SKY IT IS SIX TIMES WIDER THAN THE FULL MOON",
       // A large unbarred Sb spiral, seen at an inclination near 77 degrees.
       galaxy: Object.freeze({
@@ -365,6 +412,8 @@ const COSMIC_LANDMARKS = Object.freeze({
       frequency: 164.81,
       color: 0xf0c97d,
       position: Object.freeze([8.2, -2, -6.2]),
+      slot: Object.freeze([0.88, 0.42]),
+      discRadius: 1.65,
       lesson: "THE FARTHEST THING A HUMAN EYE CAN SEE WITHOUT A TELESCOPE",
       // Scd: almost no bulge, loosely wound, and famously full of star birth.
       galaxy: Object.freeze({
@@ -392,6 +441,8 @@ const COSMIC_LANDMARKS = Object.freeze({
       frequency: 207.65,
       color: 0xd9a2ff,
       position: Object.freeze([4.8, -4.2, 3.6]),
+      slot: Object.freeze([0.5, -0.9]),
+      discRadius: 1.2,
       lesson: "A BOUND PAIR FALLING TOGETHER, TRAILING A RIBBON OF GAS",
       galaxy: Object.freeze({
         form: "irregular",
@@ -420,6 +471,7 @@ const COSMIC_LANDMARKS = Object.freeze({
       frequency: 82.41,
       color: 0xffc978,
       position: Object.freeze([-11.5, 4.2, -11.8]),
+      slot: Object.freeze([-0.94, 0.55]),
       lesson: "NOBODY HAS FINISHED COUNTING ITS GALAXIES",
       galaxy: Object.freeze({
         form: "cluster",
@@ -437,6 +489,7 @@ const COSMIC_LANDMARKS = Object.freeze({
       frequency: 110,
       color: 0x8ce7ff,
       position: Object.freeze([11.8, -4.7, -10.2]),
+      slot: Object.freeze([0.94, -0.34]),
       lesson: "A SMALL, TIDY CLUSTER — EASY TO STUDY WHOLE",
       galaxy: Object.freeze({
         form: "cluster",
@@ -454,6 +507,7 @@ const COSMIC_LANDMARKS = Object.freeze({
       frequency: 65.41,
       color: 0xd28cff,
       position: Object.freeze([2.6, 6.8, -16.4]),
+      slot: Object.freeze([0.2, 0.86]),
       lesson: "HERE ZWICKY FIRST NOTICED DARK MATTER, IN 1933",
       galaxy: Object.freeze({
         form: "cluster",
@@ -471,6 +525,7 @@ const COSMIC_LANDMARKS = Object.freeze({
       frequency: 146.83,
       color: 0xf4d79a,
       position: Object.freeze([-2.8, -6.2, -14.8]),
+      slot: Object.freeze([-0.4, -0.78]),
       lesson: "GRAVITY SPUN EVERY GALAXY INTO THREADS AROUND EMPTY BUBBLES",
       galaxy: Object.freeze({
         form: "cluster",

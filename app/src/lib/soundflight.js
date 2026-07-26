@@ -375,8 +375,14 @@ export function selectRenderProfile({
   }
 
   const compact = Math.min(width, height) < 620 || hardwareConcurrency <= 4;
-  const maxBackingPixels = compact ? 2_200_000 : 3_600_000;
-  const idealPixelRatio = Math.min(compact ? 2 : 1.5, Math.max(1, devicePixelRatio));
+  // The budget has to be large enough that an ordinary full-screen browser on a
+  // Retina laptop still draws at a real 2x — a canvas upscaled from 1.2x or 1.5x
+  // is precisely what the eye reads as "pixelated". Only a canvas far larger
+  // than a laptop screen gives any resolution back, and the adaptive quality
+  // ladder (`nextQualityLevel`) then trims the rest from measured frame cost
+  // rather than from a guess made before a single frame has been drawn.
+  const maxBackingPixels = compact ? 2_600_000 : 12_000_000;
+  const idealPixelRatio = Math.min(2, Math.max(1, devicePixelRatio));
   const budgetPixelRatio = Math.sqrt(maxBackingPixels / Math.max(1, width * height));
   const pixelRatio = Math.min(idealPixelRatio, Math.max(1, budgetPixelRatio));
 
@@ -425,6 +431,34 @@ export function selectRenderProfile({
     grain: true,
     autoDrift: false,
   };
+}
+
+/**
+ * The order in which GPU cost is surrendered when a machine cannot hold the
+ * full-resolution artwork at frame rate. Multisampling goes first, because a
+ * marginally softer line edge costs far less beauty than upscaling the whole
+ * image; resolution is only traded away after that, and gradually.
+ */
+export const QUALITY_LADDER = [
+  { pixelRatioScale: 1, samples: 4 },
+  { pixelRatioScale: 1, samples: 2 },
+  { pixelRatioScale: 0.84, samples: 2 },
+  { pixelRatioScale: 0.7, samples: 2 },
+  { pixelRatioScale: 0.58, samples: 0 },
+];
+
+/**
+ * One step of the adaptive ladder, from the median frame cost of a whole
+ * measurement window. Median rather than mean so a single stall — a texture
+ * upload, a garbage collection — never permanently dims the artwork.
+ */
+export function nextQualityLevel({ level, medianFrameMillis, slowMillis = 21, fastMillis = 13 }) {
+  if (!Number.isFinite(medianFrameMillis)) {
+    throw new Error("Adaptive quality needs a finite measured frame cost");
+  }
+  if (medianFrameMillis > slowMillis) return Math.min(QUALITY_LADDER.length - 1, level + 1);
+  if (medianFrameMillis < fastMillis) return Math.max(0, level - 1);
+  return level;
 }
 
 export function bodyToStage(body, scale = 10) {
@@ -490,6 +524,10 @@ export function cameraScaleLabel(distance) {
 
 const COSMIC_CAMERA_DIRECTIONS = Object.freeze({
   system: Object.freeze({ x: 0, y: 0.37, z: 0.929 }),
+  // A visited system is read, not composed in. Seven concentric orbits seen at
+  // the composition angle collapse into one another; lifted to about 38 degrees
+  // they separate into rings a child can aim at one at a time.
+  visitedSystem: Object.freeze({ x: 0, y: 0.62, z: 0.785 }),
   neighborhood: Object.freeze({ x: -0.08, y: 0.31, z: 0.948 }),
   galaxy: Object.freeze({ x: 0.06, y: 0.89, z: 0.45 }),
   localGroup: Object.freeze({ x: -0.08, y: 0.42, z: 0.904 }),
@@ -498,6 +536,7 @@ const COSMIC_CAMERA_DIRECTIONS = Object.freeze({
 
 const COSMIC_CAMERA_TARGET_OFFSETS = Object.freeze({
   system: Object.freeze({ x: 0, y: 0, z: 0 }),
+  visitedSystem: Object.freeze({ x: 0, y: 0, z: 0 }),
   neighborhood: Object.freeze({ x: 0, y: 0, z: 0 }),
   galaxy: Object.freeze({ x: -5.2, y: -0.7, z: 0 }),
   localGroup: Object.freeze({ x: -1, y: 0, z: -2.5 }),
@@ -540,6 +579,30 @@ export function editorialCameraDistance(systemRadius, aspect) {
   }
   const portraitPenalty = aspect < 0.8 ? 0.8 / aspect : 1;
   return clamp(Math.max(8.4, systemRadius * 2.05) * portraitPenalty, 8.4, 24);
+}
+
+/**
+ * How far back to stand so a whole visited system, and the names under its
+ * outermost worlds, are inside the frame.
+ *
+ * The player's own composition is framed by feel; a system you have travelled
+ * to has a known drawn radius, so its fit can be solved instead of guessed.
+ * Solving it is what stops a portrait phone from cutting two of TRAPPIST-1's
+ * seven worlds off the sides.
+ */
+export function visitedSystemCameraDistance(outerRadius, aspect) {
+  if (!Number.isFinite(outerRadius) || outerRadius <= 0
+    || !Number.isFinite(aspect) || aspect <= 0) {
+    throw new Error("A visited system fit requires a finite radius and aspect");
+  }
+  const halfFov = ((aspect < 0.8 ? 55 : 42) * Math.PI) / 360;
+  // Names hang below their world, and the orbits are seen at a tilt, so the
+  // vertical requirement is smaller than the horizontal one but not by the
+  // full cosine.
+  const needed = outerRadius * 1.26;
+  const forWidth = needed / (Math.tan(halfFov) * aspect);
+  const forHeight = (needed * 0.86) / Math.tan(halfFov);
+  return clamp(Math.max(forWidth, forHeight), 8.4, 34);
 }
 
 export function moonCameraDistance(haloRadius, aspect) {

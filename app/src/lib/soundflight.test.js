@@ -19,7 +19,10 @@ import {
   reconcileAudioState,
   audioUnlockPhase,
   reduceSoundflightState,
+  nextQualityLevel,
+  QUALITY_LADDER,
   selectRenderProfile,
+  visitedSystemCameraDistance,
   shouldApplyGestationUpdate,
   shouldApplyThereminRelease,
   shouldArmDirectMoon,
@@ -360,7 +363,9 @@ test("render profile preserves the artwork while bounding GPU cost", () => {
     hardwareConcurrency: 10,
     reducedMotion: false,
   });
-  assert.equal(desktop.pixelRatio, 1.5);
+  // A Retina desktop must draw at its real physical resolution. Anything less
+  // is upscaled, and upscaling is exactly what reads as "pixelated".
+  assert.equal(desktop.pixelRatio, 2);
   assert.equal(desktop.particleCount, 1100);
   assert.equal(desktop.trailSamples, 160);
   assert.equal(desktop.autoDrift, false);
@@ -415,6 +420,28 @@ test("render profile preserves the artwork while bounding GPU cost", () => {
     "large low-core screens stay sharp without exceeding the mobile GPU budget",
   );
 
+  // A full-screen browser on a Retina laptop is the ordinary case, not an
+  // extreme one: it has to stay at a real 2x.
+  const laptopFullScreen = selectRenderProfile({
+    width: 1728,
+    height: 1085,
+    devicePixelRatio: 2,
+    hardwareConcurrency: 10,
+    reducedMotion: false,
+  });
+  assert.equal(laptopFullScreen.pixelRatio, 2);
+
+  // Only a genuinely enormous canvas gives ground, and it gives it gradually.
+  const fiveK = selectRenderProfile({
+    width: 2560,
+    height: 1440,
+    devicePixelRatio: 2,
+    hardwareConcurrency: 10,
+    reducedMotion: false,
+  });
+  assert.ok(fiveK.pixelRatio < 2, "a 5K canvas trims the backing buffer");
+  assert.ok(fiveK.pixelRatio > 1.5, "…but never back down to a soft image");
+
   assert.throws(() => selectRenderProfile({
     width: 390,
     height: 844,
@@ -422,6 +449,54 @@ test("render profile preserves the artwork while bounding GPU cost", () => {
     hardwareConcurrency: 4,
     reducedMotion: false,
   }), /finite device metrics/i);
+});
+
+test("a visited system is framed so every one of its worlds stays on screen", () => {
+  const radius = 4.2;
+  for (const [aspect, fovDegrees] of [[1.6, 42], [390 / 844, 55], [844 / 390, 42], [1, 42]]) {
+    const distance = visitedSystemCameraDistance(radius, aspect);
+    const halfFov = (fovDegrees * Math.PI) / 360;
+    const halfWidth = Math.tan(halfFov) * distance * aspect;
+    assert.ok(
+      halfWidth >= radius * 1.2,
+      `an outermost orbit at ${aspect.toFixed(2)} stays inside the frame`,
+    );
+  }
+  // A tall frame has to stand further back than a wide one for the same system.
+  assert.ok(
+    visitedSystemCameraDistance(radius, 390 / 844) > visitedSystemCameraDistance(radius, 1.6),
+  );
+  assert.throws(
+    () => visitedSystemCameraDistance(0, 1.6),
+    /finite radius and aspect/i,
+  );
+});
+
+test("quality adapts to measured frame cost instead of guessing from device metrics", () => {
+  assert.equal(QUALITY_LADDER[0].pixelRatioScale, 1);
+  assert.equal(QUALITY_LADDER[0].samples, 4);
+  for (let index = 1; index < QUALITY_LADDER.length; index += 1) {
+    assert.ok(
+      QUALITY_LADDER[index].pixelRatioScale <= QUALITY_LADDER[index - 1].pixelRatioScale,
+      "the ladder only ever gets cheaper",
+    );
+  }
+  // Multisampling is surrendered before resolution: a slightly softer line edge
+  // costs less beauty than a whole upscaled image.
+  assert.ok(QUALITY_LADDER[1].pixelRatioScale === 1 && QUALITY_LADDER[1].samples < 4);
+
+  assert.equal(nextQualityLevel({ level: 0, medianFrameMillis: 30 }), 1);
+  assert.equal(nextQualityLevel({ level: 2, medianFrameMillis: 16.7 }), 2);
+  assert.equal(nextQualityLevel({ level: 2, medianFrameMillis: 8 }), 1);
+  assert.equal(nextQualityLevel({ level: 0, medianFrameMillis: 8 }), 0);
+  assert.equal(
+    nextQualityLevel({ level: QUALITY_LADDER.length - 1, medianFrameMillis: 90 }),
+    QUALITY_LADDER.length - 1,
+  );
+  assert.throws(
+    () => nextQualityLevel({ level: 0, medianFrameMillis: Number.NaN }),
+    /finite/i,
+  );
 });
 
 test("orbit lines are multisampled, because alpha-to-coverage needs real samples", () => {
@@ -539,9 +614,15 @@ test("semantic camera directions reveal the form of each world without twisting 
   const localGroup = cosmicCameraDirection("localGroup");
 
   assert.ok(system.z > system.y, "the orbit harp stays in its familiar editorial angle");
+  const visited = cosmicCameraDirection("visitedSystem");
+  assert.ok(
+    visited.y > system.y,
+    "a system you are only reading opens further, so its orbits separate",
+  );
+  assert.ok(visited.z > visited.y, "…without tipping into a flat map from above");
   assert.ok(galaxy.y > galaxy.z, "the Milky Way opens toward a legible face-on spiral");
   assert.ok(localGroup.z > localGroup.y, "the Local Group regains spatial depth");
-  assert.ok(["system", "neighborhood", "galaxy", "localGroup", "universe"].every((id) => {
+  assert.ok(["system", "visitedSystem", "neighborhood", "galaxy", "localGroup", "universe"].every((id) => {
     const direction = cosmicCameraDirection(id);
     return Math.abs(Math.hypot(direction.x, direction.y, direction.z) - 1) < 1e-9;
   }));

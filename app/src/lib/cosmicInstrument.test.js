@@ -13,6 +13,7 @@ import {
   cosmicScaleForView,
   cosmicScaleForDistance,
   memoryCometEnvelope,
+  landmarkPlacement,
   thereminParameters,
 } from "./cosmicInstrument.js";
 
@@ -99,6 +100,53 @@ test("the child-facing journey always exposes one next world and one way home", 
   assert.throws(() => cosmicJourneyForScale("nowhere"), /unknown cosmic scale/i);
 });
 
+test("every named field fills the frame the camera really has, on a laptop and on a phone", () => {
+  for (const scaleId of ["neighborhood", "localGroup", "universe"]) {
+  const neighborhood = cosmicLandmarksForScale(scaleId);
+  const distance = COSMIC_DESTINATIONS[scaleId].distance;
+
+  for (const [aspect, fovDegrees] of [[1.6, 42], [390 / 844, 55], [1, 42]]) {
+    const halfHeight = Math.tan((fovDegrees * Math.PI) / 360) * distance;
+    const halfWidth = halfHeight * aspect;
+    const placed = neighborhood.map((landmark) => landmarkPlacement({
+      slot: landmark.slot,
+      aspect,
+      fovDegrees,
+      distance,
+    }));
+
+    for (const point of placed) {
+      assert.ok(Math.abs(point.x) <= halfWidth * 0.94, "no system is pushed off the side");
+      assert.ok(Math.abs(point.y) <= halfHeight * 0.9, "no system is pushed off the top or bottom");
+    }
+    // Filling the frame is the whole point: a layout that leaves most of a wide
+    // screen empty is what made six real systems read as one cramped knot.
+    const widest = Math.max(...placed.map((point) => Math.abs(point.x)));
+    const tallest = Math.max(...placed.map((point) => Math.abs(point.y)));
+    assert.ok(widest > halfWidth * 0.45, "the arrangement uses the width it is given");
+    assert.ok(tallest > halfHeight * 0.4, "the arrangement uses the height it is given");
+
+    // Two systems must never land on top of each other, whatever the frame.
+    for (let a = 0; a < placed.length; a += 1) {
+      for (let b = a + 1; b < placed.length; b += 1) {
+        const gap = Math.hypot(placed[a].x - placed[b].x, placed[a].y - placed[b].y);
+        assert.ok(gap > 3.4, `${neighborhood[a].id} and ${neighborhood[b].id} stay apart`);
+      }
+    }
+  }
+
+  }
+
+  assert.throws(
+    () => landmarkPlacement({ slot: [0, 1], aspect: 0, fovDegrees: 42, distance: 27 }),
+    /real camera/i,
+  );
+  assert.throws(
+    () => landmarkPlacement({ slot: [0], aspect: 1.6, fovDegrees: 42, distance: 27 }),
+    /finite \[u, v\] pair/i,
+  );
+});
+
 test("real cosmic landmarks are sparse, playable, and bound to one semantic world", () => {
   const neighborhood = cosmicLandmarksForScale("neighborhood");
   const galaxy = cosmicLandmarksForScale("galaxy");
@@ -116,8 +164,8 @@ test("real cosmic landmarks are sparse, playable, and bound to one semantic worl
     "a scale stays readable: never more than six named destinations at once",
   );
   assert.ok(
-    neighborhood.every((landmark) => Math.hypot(landmark.position[0], landmark.position[2]) <= 6.2),
-    "nearby stars must remain playable in a narrow portrait viewport",
+    neighborhood.every((landmark) => Array.isArray(landmark.slot) && landmark.slot.length === 2),
+    "every nearby star owns a slot in the authored arrangement",
   );
   assert.ok(
     neighborhood.some((landmark) => landmark.id === "solar-system"),

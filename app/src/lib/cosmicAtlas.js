@@ -195,6 +195,33 @@ const VOICE_HIGHEST = 1760;
  * the register — the Solar System spans nine octaves — has its extremes folded,
  * and folding is always a whole number of octaves, so the interval survives.
  */
+/**
+ * One world of a system, sounded alone. The pitch is exactly the one that world
+ * contributes to its system's chord, so touching seven worlds one at a time and
+ * touching the star once are the same music heard two ways.
+ */
+export function systemWorldVoice({ system, planetId }) {
+  const bodies = system?.bodies;
+  if (!Array.isArray(bodies) || bodies.length === 0) {
+    throw new Error("A system world voice needs a system with bodies");
+  }
+  const index = bodies.findIndex((body) => body.id === planetId);
+  if (index < 0) throw new Error(`${planetId} is not a world of this system`);
+
+  const frequencies = systemVoiceFrequencies(bodies.map((body) => body.periodDays));
+  const planet = bodies[index];
+  return {
+    index,
+    planet,
+    frequency: frequencies[index],
+    appearance: planetAppearance({
+      radiusEarth: planet.radiusEarth,
+      orbitAu: planet.orbitAu,
+      luminositySuns: system.star.luminositySuns,
+    }),
+  };
+}
+
 export function systemVoiceFrequencies(periodsDays) {
   if (!Array.isArray(periodsDays) || periodsDays.length === 0) {
     throw new Error("A system voice needs at least one period");

@@ -5,7 +5,7 @@ import {
   voiceParameters,
   voicePluckParameters,
 } from "./sonification.js";
-import { systemVoiceFrequencies } from "./cosmicAtlas.js";
+import { systemVoiceFrequencies, systemWorldVoice } from "./cosmicAtlas.js";
 
 const REVERB_SECONDS = 3.1;
 const AUDIO_CLOCK_PROBE_MS = 90;
@@ -1090,6 +1090,51 @@ export class AudioEngine {
       oscillator.start(onset);
       oscillator.stop(onset + duration + 0.08);
     });
+  }
+
+  /**
+   * One world of a visited system, sounded alone at its own place in that
+   * system's chord. Longer and softer than the whole-system strike, so a child
+   * can walk the seven worlds of TRAPPIST-1 one at a time and hear the chain.
+   */
+  playSystemWorld(landmark, planetId) {
+    if (!this.context || this.context.state !== "running") return null;
+    if (!landmark?.system || !COSMIC_VOICES[landmark.voice]) {
+      throw new Error("A system world requires a landmark with a playable voice");
+    }
+    const voice = systemWorldVoice({ system: landmark.system, planetId });
+
+    const now = this.context.currentTime;
+    const duration = 2.6;
+    const oscillator = this.context.createOscillator();
+    const filter = this.context.createBiquadFilter();
+    const gain = this.context.createGain();
+    const panner = this.context.createStereoPanner();
+    const reverbSend = this.context.createGain();
+    const count = landmark.system.bodies.length;
+
+    this.applyVoiceWave(oscillator, landmark.voice, COSMIC_VOICES[landmark.voice].waveform);
+    oscillator.frequency.setValueAtTime(voice.frequency * 0.984, now);
+    oscillator.frequency.exponentialRampToValueAtTime(voice.frequency, now + 0.14);
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(2600, now);
+    filter.frequency.exponentialRampToValueAtTime(560, now + duration);
+    filter.Q.value = 1.4;
+    // A world's place in its own system is where it sits in the stereo field:
+    // the innermost world on the left, the outermost on the right.
+    panner.pan.value = count > 1 ? -0.6 + (voice.index / (count - 1)) * 1.2 : 0;
+    reverbSend.gain.value = 0.42;
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.05, now + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.02, now + 0.7);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    oscillator.connect(filter).connect(gain).connect(panner).connect(this.master);
+    panner.connect(reverbSend).connect(this.reverb);
+    oscillator.start(now);
+    oscillator.stop(now + duration + 0.08);
+    return voice;
   }
 
   playChallengeSuccess() {

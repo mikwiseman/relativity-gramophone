@@ -33,7 +33,10 @@ import {
   editorialCameraDistance,
   nextCameraDistance,
   orbitStringStyle,
+  nextQualityLevel,
+  QUALITY_LADDER,
   selectRenderProfile,
+  visitedSystemCameraDistance,
   shouldAutoSoundBody,
   shouldAdvancePhysics,
   shouldArmDirectMoon,
@@ -50,7 +53,11 @@ import {
 import { nearestStringPoint } from "../lib/harpStrings.js";
 import { MILKY_WAY } from "../lib/cosmicAtlas.js";
 import { galaxyArmGeometry } from "../lib/galaxyShape.js";
-import { createGalaxyObject, createStarSystemObject } from "./cosmicScenery.js";
+import {
+  createGalaxyObject,
+  createStarSystemObject,
+  VISITED_SYSTEM_OUTER_RADIUS,
+} from "./cosmicScenery.js";
 import {
   birthSatelliteFromRadialLaunch,
   satelliteStabilityBand,
@@ -64,6 +71,7 @@ import {
   cosmicScaleForDistance,
   cosmicScaleForView,
   memoryCometEnvelope,
+  landmarkPlacement,
   thereminParameters,
 } from "../lib/cosmicInstrument.js";
 
@@ -155,17 +163,35 @@ function seededRandom(seed) {
 }
 
 function createRadialTexture() {
+  const size = 256;
   const canvas = document.createElement("canvas");
-  canvas.width = 256;
-  canvas.height = 256;
+  canvas.width = size;
+  canvas.height = size;
   const context = canvas.getContext("2d");
-  const gradient = context.createRadialGradient(128, 128, 0, 128, 128, 128);
-  gradient.addColorStop(0, "rgba(255,247,215,1)");
-  gradient.addColorStop(0.16, "rgba(255,190,88,0.82)");
-  gradient.addColorStop(0.48, "rgba(255,126,76,0.18)");
-  gradient.addColorStop(1, "rgba(0,0,0,0)");
+  const gradient = context.createRadialGradient(
+    size / 2, size / 2, 0,
+    size / 2, size / 2, size / 2,
+  );
+  // Many stops rather than four. A four-stop ramp ends with a kink in its own
+  // derivative, and on a black sky the eye reads that kink as a drawn circle —
+  // a hairline ring around every glowing thing in the scene. Sampling a smooth
+  // falloff densely removes the kink and with it the ring.
+  const STOPS = 32;
+  for (let index = 0; index <= STOPS; index += 1) {
+    const radius = index / STOPS;
+    const core = Math.exp(-((radius / 0.15) ** 2)) * 0.94;
+    const skirt = Math.exp(-((radius / 0.44) ** 2)) * 0.3;
+    // The envelope reaches zero with a zero slope. A falloff that merely hits
+    // zero still leaves a kink, and a kink on a black sky is a drawn circle.
+    const alpha = Math.min(1, core + skirt) * (1 - radius * radius) ** 2.6;
+    const warmth = 1 - radius;
+    const red = 255;
+    const green = Math.round(150 + 100 * warmth);
+    const blue = Math.round(70 + 150 * warmth ** 2);
+    gradient.addColorStop(radius, `rgba(${red},${green},${blue},${alpha.toFixed(4)})`);
+  }
   context.fillStyle = gradient;
-  context.fillRect(0, 0, 256, 256);
+  context.fillRect(0, 0, size, size);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
@@ -180,11 +206,16 @@ function createStarGloryTexture() {
   const context = canvas.getContext("2d");
 
   const core = context.createRadialGradient(half, half, 0, half, half, half);
-  core.addColorStop(0, "rgba(255,250,232,1)");
-  core.addColorStop(0.1, "rgba(255,214,132,0.9)");
-  core.addColorStop(0.3, "rgba(255,150,70,0.3)");
-  core.addColorStop(0.62, "rgba(255,112,58,0.07)");
-  core.addColorStop(1, "rgba(0,0,0,0)");
+  const STOPS = 32;
+  for (let index = 0; index <= STOPS; index += 1) {
+    const radius = index / STOPS;
+    const alpha = (Math.exp(-((radius / 0.11) ** 1.7)) * 0.94
+      + Math.exp(-((radius / 0.4) ** 2)) * 0.17)
+      * (1 - radius * radius) ** 2.4;
+    const green = Math.round(120 + 130 * (1 - radius) ** 1.4);
+    const blue = Math.round(58 + 174 * (1 - radius) ** 2.4);
+    core.addColorStop(radius, `rgba(255,${green},${blue},${Math.min(1, alpha).toFixed(4)})`);
+  }
   context.fillStyle = core;
   context.fillRect(0, 0, size, size);
 
@@ -203,13 +234,6 @@ function createStarGloryTexture() {
     context.beginPath();
     context.moveTo(0, 0);
     context.lineTo(Math.cos(angle) * reach, Math.sin(angle) * reach);
-    context.stroke();
-  }
-  for (const [ringRadius, alpha] of [[0.58, 0.05], [0.78, 0.03]]) {
-    context.strokeStyle = `rgba(255,196,120,${alpha})`;
-    context.lineWidth = 1.6;
-    context.beginPath();
-    context.arc(0, 0, half * ringRadius, 0, Math.PI * 2);
     context.stroke();
   }
   context.setTransform(1, 0, 0, 1, 0, 0);
@@ -433,7 +457,7 @@ function createOrbitString(color, { opacity = 0.2, linewidth = 1.35 } = {}) {
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     toneMapped: false,
-    alphaToCoverage: true,
+    alphaToCoverage: false,
   });
   const line = new Line2(geometry, material);
   line.frustumCulled = false;
@@ -525,7 +549,7 @@ function createRibbonTrail() {
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       toneMapped: false,
-      alphaToCoverage: true,
+      alphaToCoverage: false,
     });
     const line = new Line2(geometry, material);
     line.frustumCulled = false;
@@ -716,6 +740,24 @@ function createStarVisual(solarTexture, radialTexture) {
   ambientHalo.scale.set(11, 11, 1);
   group.add(ambientHalo);
 
+  // Out among the nearby stars your own sun is one light in a named field, and
+  // an unnamed light in a field of named ones reads as a bug. This is the only
+  // place it needs a name, so the label lives with the star and appears there.
+  const homeLabel = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: createLandmarkLabelTexture({
+      name: "YOUR STAR",
+      detail: "THE SYSTEM YOU ARE MAKING",
+    }),
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    depthTest: false,
+    toneMapped: false,
+  }));
+  homeLabel.scale.set(4.9, 1.02, 1);
+  homeLabel.position.y = -1.24;
+  group.add(homeLabel);
+
   const light = new THREE.PointLight(0xffb25b, 4.8, 36, 1.7);
   group.add(light);
   return {
@@ -726,6 +768,7 @@ function createStarVisual(solarTexture, radialTexture) {
     corona,
     outerCorona,
     ambientHalo,
+    homeLabel,
     impulse: 0,
   };
 }
@@ -869,7 +912,7 @@ function createHarmonicKnot() {
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     toneMapped: false,
-    alphaToCoverage: true,
+    alphaToCoverage: false,
   });
   const line = new Line2(geometry, material);
   line.frustumCulled = false;
@@ -992,7 +1035,10 @@ function createCosmicLandmarkVisual(landmark, radialTexture) {
 
   const cluster = !landmark.usesLivingGalaxy && landmark.galaxy
     ? createGalaxyObject(landmark.galaxy, {
-        radius: landmark.scale === "universe" ? 2.9 : 2.3,
+        // A galaxy's drawn size is the square root of its real stellar
+        // diameter: order- and ratio-preserving under one stated compression,
+        // and still large enough on a phone to aim at.
+        radius: landmark.discRadius ?? (landmark.scale === "universe" ? 2.9 : 2.3),
         starCount: landmark.scale === "universe" ? 2600 : 3400,
         seed: landmark.id,
       })
@@ -1060,6 +1106,8 @@ function createCosmicWeb(visuals, radialTexture) {
     mote.scale.setScalar(0.72);
     group.add(mote);
     return {
+      fromId,
+      toId,
       curve,
       line,
       mote,
@@ -1068,7 +1116,29 @@ function createCosmicWeb(visuals, radialTexture) {
     };
   });
   group.visible = false;
-  return { group, paths, elapsed: 0 };
+  return {
+    group,
+    paths,
+    elapsed: 0,
+    /**
+     * The filaments join real clusters, so they have to be re-drawn whenever
+     * the clusters are re-laid-out for a new viewport. Left stale they stop
+     * touching anything and read as loops of coloured wire in empty space.
+     */
+    rebuild() {
+      for (const [index, path] of paths.entries()) {
+        const from = byId.get(path.fromId)?.group.position.clone();
+        const to = byId.get(path.toId)?.group.position.clone();
+        if (!from || !to) continue;
+        const midpoint = from.clone().lerp(to, 0.5);
+        midpoint.y += index % 2 === 0 ? 3.2 : -2.6;
+        midpoint.z += index % 2 === 0 ? 1.8 : -1.4;
+        path.curve = new THREE.QuadraticBezierCurve3(from, midpoint, to);
+        path.line.geometry.dispose();
+        path.line.geometry = new THREE.BufferGeometry().setFromPoints(path.curve.getPoints(48));
+      }
+    },
+  };
 }
 
 function createCosmicLandmarkField(radialTexture) {
@@ -1098,6 +1168,7 @@ function updateCosmicLandmarkField(
   delta,
   reducedMotion,
   focusedSystemId = null,
+  worldsMoving = true,
 ) {
   const mixes = {
     neighborhood: scale.neighborhoodMix,
@@ -1132,8 +1203,14 @@ function updateCosmicLandmarkField(
     }
     if (visual.nearbySystem) {
       const systemOpacity = opacity * (isFocusedSystem || focused ? 1 : 0.06);
-      visual.nearbySystem.setOpacity(systemOpacity);
-      if (!reducedMotion) visual.nearbySystem.advance(delta);
+      // Names, years and touch targets belong to the system you have actually
+      // arrived in. From across the neighbourhood a system is one light.
+      visual.nearbySystem.setOpacity(systemOpacity, isFocusedSystem ? 1 : 0);
+      // Pause has to hold a visited system too — worlds that keep circling
+      // under a paused transport make the button read as broken — but a system
+      // entered while already paused still has to place its worlds once, or
+      // all seven sit stacked on top of their star.
+      visual.nearbySystem.advance(!reducedMotion && worldsMoving ? delta : 0);
       visual.nearbySystem.group.scale.setScalar(
         (isFocusedSystem ? 1 : 0.26) * (1 + visual.impulse * 0.08),
       );
@@ -1322,7 +1399,7 @@ function createLivingGalaxy() {
   };
 }
 
-function updateLivingGalaxy(galaxy, scale, resolution, delta, reducedMotion, cathedral) {
+function updateLivingGalaxy(galaxy, scale, resolution, delta, reducedMotion, cathedral, home) {
   const quieting = 1 - cathedral * 0.68;
   galaxy.group.visible = scale.galaxyMix > 0.012;
   galaxy.universeGroup.visible = scale.universeMix > 0.012;
@@ -1331,12 +1408,17 @@ function updateLivingGalaxy(galaxy, scale, resolution, delta, reducedMotion, cat
     : scale.id === "localGroup"
       ? 0.62
       : scale.id === "universe"
-        ? 0.18
+        // At the scale of clusters our whole galaxy is smaller than one dot of
+        // a cluster's point cloud. It should read as that, not as a lamp.
+        ? 0.05
         : 0.3;
+  // Among its family our galaxy is a peer, not the backdrop: at 26.8 kpc it is
+  // smaller than Andromeda and only a little larger than Triangulum, and the
+  // drawn radius says so.
   const presentationScale = scale.id === "localGroup"
-    ? 0.46
+    ? 0.205
     : scale.id === "universe"
-      ? 0.22
+      ? 0.05
       : 1;
   const easedScale = THREE.MathUtils.lerp(
     galaxy.group.scale.x,
@@ -1344,9 +1426,18 @@ function updateLivingGalaxy(galaxy, scale, resolution, delta, reducedMotion, cat
     1 - Math.exp(-delta * 3.4),
   );
   galaxy.group.scale.setScalar(easedScale);
+  // Our own galaxy is drawn by the living spiral but named by a landmark, so
+  // the two have to stand in the same place or the name is orphaned.
+  if (home) {
+    galaxy.group.position.lerp(home, 1 - Math.exp(-delta * 3.4));
+  } else if (galaxy.group.position.lengthSq() > 1e-6) {
+    galaxy.group.position.multiplyScalar(Math.exp(-delta * 3.4));
+  }
   const galaxyOpacity = scale.galaxyMix * 0.9 * quieting * contextGain;
   galaxy.galaxyObject.setOpacity(galaxyOpacity);
-  galaxy.halo.material.opacity = galaxyOpacity * 0.34;
+  // The unresolved halo is the subject when the galaxy fills the screen and a
+  // blur when it is one of four; among peers our galaxy must read as a disc.
+  galaxy.halo.material.opacity = galaxyOpacity * 0.34 * (scale.id === "galaxy" ? 1 : 0.4);
   galaxy.sunMarker.material.opacity = galaxyOpacity * 0.85;
   galaxy.sagittariusA.material.opacity = galaxyOpacity * 0.5;
   galaxy.distant.material.opacity = scale.universeMix * 0.58 * quieting;
@@ -1644,11 +1735,21 @@ function updateHarmonicKnot(line, resonance, physicalBodies, bodiesById, resolut
   const dx = second.x - first.x;
   const dz = second.z - first.z;
   const distance = Math.max(0.001, Math.hypot(dx, dz));
-  for (let index = 0; index <= 72; index += 1) {
-    const progress = index / 72;
-    const wave = Math.sin(progress * Math.PI * definition.numerator * 2)
+  // The bridge draws the ratio itself as a standing wave, so it needs enough
+  // samples per period to be a wave. A 21:13 resonance across 72 samples is
+  // three samples per cycle, and three samples per cycle is a staircase, not a
+  // string. Cap the visible harmonic and sample it densely.
+  const cycles = clamp(definition.numerator, 1, 6);
+  const SAMPLES = 192;
+  for (let index = 0; index <= SAMPLES; index += 1) {
+    const progress = index / SAMPLES;
+    // A standing wave is pinned at both ends: the envelope has to die at the
+    // two worlds or the bridge appears to grow out of the side of a planet.
+    const envelope = Math.sin(progress * Math.PI) ** 0.7;
+    const wave = Math.sin(progress * Math.PI * cycles * 2)
       * Math.min(0.24, distance * 0.075)
-      * definition.strength;
+      * definition.strength
+      * envelope;
     positions.push(
       THREE.MathUtils.lerp(first.x, second.x, progress) - (dz / distance) * wave,
       0.12 + Math.sin(progress * Math.PI) * 0.08,
@@ -1660,8 +1761,8 @@ function updateHarmonicKnot(line, resonance, physicalBodies, bodiesById, resolut
   line.geometry.setPositions(positions);
   line.geometry.setColors(colors);
   line.computeLineDistances();
-  line.material.opacity = 0.18 + definition.strength * 0.64;
-  line.material.linewidth = 1.3 + definition.strength * 2.2;
+  line.material.opacity = 0.12 + definition.strength * 0.4;
+  line.material.linewidth = 1.1 + definition.strength * 1.4;
   line.material.resolution.set(resolution.width, resolution.height);
   line.visible = true;
 }
@@ -1801,10 +1902,9 @@ export function SoundflightStage(props) {
     controls.listenToKeyEvents(window);
     controls.update();
 
-    // Orbit strings are Line2 quads with `alphaToCoverage`, which only produces a
-    // smooth edge when the target it draws into actually has samples. Without this
-    // the composer would silently render every line and silhouette at one sample,
-    // which is exactly what reads as "pixelated" on a phone.
+    // Orbit strings are Line2 quads drawn into a multisampled target. Without
+    // real samples the composer resolves every line and silhouette at one
+    // sample, which is exactly what reads as "pixelated" on a phone.
     const maxSamples = renderer.capabilities.maxSamples ?? 0;
     const composerTarget = new THREE.WebGLRenderTarget(1, 1, {
       type: THREE.HalfFloatType,
@@ -1820,7 +1920,10 @@ export function SoundflightStage(props) {
       }
     };
     composer.addPass(new RenderPass(scene, camera));
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 1.08, 0.68, 0.52);
+    // The threshold has to sit above a bright world's lit face and below a
+    // star's. At 0.52 an ice world reflecting 90% of its starlight blooms into
+    // a featureless white ball and loses the terminator that makes it a sphere.
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 1.08, 0.68, 0.68);
     composer.addPass(bloomPass);
     const finishingPass = new ShaderPass(FinishingShader);
     composer.addPass(finishingPass);
@@ -1921,6 +2024,9 @@ export function SoundflightStage(props) {
       pendingOrbitPulses: new Map(),
       selectedBodyId: props.selectedBodyId,
       profile: null,
+      qualityLevel: 0,
+      frameCosts: [],
+      lastQualityChange: -Infinity,
       selectedHistory: [],
       starBreath: 0.5,
       lastParticleUpdate: -Infinity,
@@ -1950,6 +2056,7 @@ export function SoundflightStage(props) {
       theremin: null,
       pendingBodyTap: null,
       pendingCosmicTap: null,
+      pendingSystemWorldTap: null,
       activeTouchPointers: new Set(),
       cancelledPointerIds: new Set(),
       cosmicScale: cosmicScaleForDistance(camera.position.distanceTo(controls.target)),
@@ -1966,6 +2073,16 @@ export function SoundflightStage(props) {
         controls.target.copy(runtime.editorialCameraTarget);
         controls.update(0);
         return camera.position.distanceTo(controls.target);
+      };
+      mount.__rgScene = scene;
+      mount.__rgCamera = camera;
+      // A hidden QA tab throttles requestAnimationFrame to nothing, so visual
+      // QA needs a way to advance the world by hand.
+      mount.__rgStep = (frames = 1, frameMillis = 16.7) => {
+        for (let index = 0; index < frames; index += 1) {
+          animate(previousFrameRef.current + frameMillis);
+        }
+        return previousFrameRef.current;
       };
       mount.__rgDebugState = () => {
         const rect = mount.getBoundingClientRect();
@@ -2025,16 +2142,33 @@ export function SoundflightStage(props) {
         hardwareConcurrency: navigator.hardwareConcurrency,
         reducedMotion: reducedMotionQuery.matches,
       });
+      const quality = QUALITY_LADDER[runtime.qualityLevel] ?? QUALITY_LADDER[0];
+      profile.pixelRatio = Math.max(1, profile.pixelRatio * quality.pixelRatioScale);
+      profile.samples = Math.min(profile.samples, quality.samples);
       runtime.profile = profile;
       livingGalaxy.points.geometry.setDrawRange(
         0,
         Math.min(16_000, Math.max(5200, Math.floor(profile.starCount * 6.2))),
       );
       livingGalaxy.galaxyObject.setPixelRatio(profile.pixelRatio);
+      const aspect = rect.width / Math.max(1, rect.height);
+      const landmarkFov = aspect < 0.8 ? 55 : 42;
       for (const visual of cosmicLandmarkField.visuals) {
         visual.cluster?.setPixelRatio(profile.pixelRatio);
         visual.nearbySystem?.setResolution(rect.width, rect.height);
+        // Every named field is laid out in the frame the camera actually has,
+        // so six systems or four galaxies fill a wide laptop and a tall phone
+        // equally well instead of huddling into the middle of one of them.
+        if (!visual.landmark.slot) continue;
+        const placement = landmarkPlacement({
+          slot: visual.landmark.slot,
+          aspect,
+          fovDegrees: landmarkFov,
+          distance: COSMIC_DESTINATIONS[visual.landmark.scale].distance,
+        });
+        visual.group.position.set(placement.x, placement.y, visual.landmark.position[2] * 0.5);
       }
+      cosmicLandmarkField.web.rebuild();
       livingGalaxy.distant.geometry.setDrawRange(
         0,
         Math.min(
@@ -2111,6 +2245,28 @@ export function SoundflightStage(props) {
         false,
       )[0];
       return starHit?.object?.userData?.bodyId ?? null;
+    };
+
+    // Inside a visited system every world is its own key. This has to be tried
+    // before the system's own light, or the star would swallow every touch and
+    // "touch a world to hear its year" would be a lie.
+    const hitSystemWorld = (event) => {
+      if (!runtime.focusedSystemId) return null;
+      const visual = cosmicLandmarkField.byId.get(runtime.focusedSystemId);
+      const system = visual?.nearbySystem;
+      if (!system) return null;
+      const point = eventPoint(event, renderer.domElement);
+      runtime.pointer.set((point.x / point.width) * 2 - 1, -(point.y / point.height) * 2 + 1);
+      runtime.raycaster.setFromCamera(runtime.pointer, camera);
+      const hit = runtime.raycaster.intersectObjects(system.touchAreas, false)[0];
+      const planetId = hit?.object?.userData?.systemPlanetId;
+      if (!planetId) return null;
+      return { landmark: visual.landmark, planetId, system };
+    };
+
+    const performSystemWorldAudition = ({ landmark, planetId, system }) => {
+      system.strike(planetId);
+      propsRef.current.onSystemWorldAudition({ landmark, planetId });
     };
 
     const hitCosmicLandmark = (event) => {
@@ -2501,6 +2657,7 @@ export function SoundflightStage(props) {
       runtime.pluck = null;
       runtime.pendingBodyTap = null;
       runtime.pendingCosmicTap = null;
+      runtime.pendingSystemWorldTap = null;
       directPointerIds.forEach(releaseCapturedPointer);
       controls.enabled = true;
     };
@@ -2530,6 +2687,21 @@ export function SoundflightStage(props) {
           cancelDirectManipulation({ rememberPointers: true });
           return;
         }
+      }
+      const systemWorld = hitSystemWorld(event);
+      if (systemWorld) {
+        if (deferAudio) {
+          runtime.pendingSystemWorldTap = {
+            pointerId: event.pointerId,
+            pointerType: event.pointerType,
+            world: systemWorld,
+            startScreen: eventPoint(event, renderer.domElement),
+          };
+        } else {
+          event.stopImmediatePropagation();
+          performSystemWorldAudition(systemWorld);
+        }
+        return;
       }
       const cosmicLandmark = hitCosmicLandmark(event);
       if (cosmicLandmark) {
@@ -2651,7 +2823,7 @@ export function SoundflightStage(props) {
     const onPointerMove = (event) => {
       if (applyPendingInteractionCancel()
         || runtime.cancelledPointerIds.has(event.pointerId)) return;
-      for (const pendingKey of ["pendingBodyTap", "pendingCosmicTap"]) {
+      for (const pendingKey of ["pendingBodyTap", "pendingCosmicTap", "pendingSystemWorldTap"]) {
         const pending = runtime[pendingKey];
         if (!pending || pending.pointerId !== event.pointerId) continue;
         const screen = eventPoint(event, renderer.domElement);
@@ -2832,6 +3004,13 @@ export function SoundflightStage(props) {
             parameters: releaseParameters,
           });
         }
+        return;
+      }
+      if (runtime.pendingSystemWorldTap?.pointerId === event.pointerId) {
+        const { world } = runtime.pendingSystemWorldTap;
+        runtime.pendingSystemWorldTap = null;
+        performSystemWorldAudition(world);
+        releaseCapturedPointer(event.pointerId);
         return;
       }
       if (runtime.pendingCosmicTap?.pointerId === event.pointerId) {
@@ -3115,6 +3294,28 @@ export function SoundflightStage(props) {
           ) * (0.3 + systemMix * 0.7);
           starVisual.glory.material.rotation += delta * 0.016;
           starVisual.outerCorona.scale.setScalar(3.7 * (1 + Math.sin(snapshot.time * 0.42) * 0.05));
+          // The widest skirt belongs to the system scale. Out among the nearby
+          // stars it becomes a faint grey disc a hundred pixels across with a
+          // visible edge, sitting on top of the systems you came to look at.
+          // The two widest skirts belong to the system scale and must reach
+          // exactly zero outside it, not merely a small number: a wide, faint,
+          // evenly-lit disc on an absolutely black sky is read by the eye as a
+          // drawn circle even at a third of one percent brightness.
+          const skirtMix = clamp((systemMix - 0.55) / 0.45, 0, 1);
+          starVisual.ambientHalo.material.opacity = 0.05 * skirtMix;
+          starVisual.ambientHalo.visible = skirtMix > 0.02;
+          starVisual.outerCorona.material.opacity = 0.1 * skirtMix;
+          starVisual.outerCorona.visible = skirtMix > 0.02;
+          starVisual.homeLabel.material.opacity = clamp(
+            (runtime.cosmicScale?.neighborhoodMix ?? 0) * 0.92 - systemMix * 0.9,
+            0,
+            1,
+          );
+          starVisual.homeLabel.visible = starVisual.homeLabel.material.opacity > 0.02;
+          // The star group shrinks as you leave; its name must not shrink with it.
+          const labelScale = 1 / Math.max(0.01, starVisual.group.scale.x);
+          starVisual.homeLabel.scale.set(4.9 * labelScale, 1.02 * labelScale, 1);
+          starVisual.homeLabel.position.y = -1.32 * labelScale;
           starVisual.mesh.rotation.y += delta * 0.07;
           runtime.starBreath = 0.5 + breathPhase * 0.5;
           continue;
@@ -3279,6 +3480,9 @@ export function SoundflightStage(props) {
         delta,
         reducedMotionQuery.matches,
         cathedralLevel,
+        runtime.cosmicScale.id === "localGroup"
+          ? cosmicLandmarkField.byId.get("milky-way")?.group.position
+          : null,
       );
       updateCosmicLandmarkField(
         cosmicLandmarkField,
@@ -3286,6 +3490,7 @@ export function SoundflightStage(props) {
         delta,
         reducedMotionQuery.matches,
         runtime.focusedSystemId,
+        propsRef.current.isPlaying,
       );
       updateMemoryComet(memoryComet, runtime.bodyVisuals, now, resolution);
       if (runtime.starfield) {
@@ -3309,12 +3514,22 @@ export function SoundflightStage(props) {
       const projectedStar = starStage.clone().project(camera);
       timeNeedle.style.left = `${clamp((projectedStar.x * 0.5 + 0.5) * 100, 8, 92)}%`;
       timeNeedle.style.opacity = `${clamp(systemMix * 1.18 - 0.14, 0, 1)}`;
-      runtime.systemRadius = systemRadius;
       const focusedSystemVisual = runtime.focusedSystemId
         ? cosmicLandmarkField.byId.get(runtime.focusedSystemId)
         : null;
+      // Inside a visited system the thing that has to fit on screen is that
+      // system, not the player's own. Its outermost drawn orbit is what the
+      // editorial fit has to clear, or a portrait phone cuts two worlds off.
+      runtime.systemRadius = focusedSystemVisual
+        ? VISITED_SYSTEM_OUTER_RADIUS
+        : systemRadius;
       const semanticScaleId = runtime.authoredScaleId
         ?? (runtime.cosmicScale.id === "orbit" ? "system" : runtime.cosmicScale.id);
+      if (focusedSystemVisual?.nearbySystem) {
+        focusedSystemVisual.nearbySystem.setLabelScale(
+          camera.position.distanceTo(controls.target) / 12.7,
+        );
+      }
       const authoredTarget = focusedSystemVisual
         ? focusedSystemVisual.group.position
         : cosmicCameraTarget(semanticScaleId, starStage);
@@ -3325,10 +3540,36 @@ export function SoundflightStage(props) {
       );
     };
 
+    // Adaptive quality: the profile chosen from device metrics is only an
+    // opening bid. What the machine can actually hold is measured here, and the
+    // ladder gives up multisampling before it gives up resolution.
+    const QUALITY_WINDOW = 90;
+    const measureQuality = (milliseconds, frameMillis) => {
+      if (!(frameMillis > 0) || frameMillis > 400) return;
+      runtime.frameCosts.push(frameMillis);
+      if (runtime.frameCosts.length < QUALITY_WINDOW) return;
+      const sorted = [...runtime.frameCosts].sort((a, b) => a - b);
+      runtime.frameCosts.length = 0;
+      // A hidden tab is throttled to a crawl; measuring it would dim the
+      // artwork for a screen nobody is looking at.
+      if (document.visibilityState !== "visible") return;
+      if (milliseconds - runtime.lastQualityChange < 2500) return;
+      const level = nextQualityLevel({
+        level: runtime.qualityLevel,
+        medianFrameMillis: sorted[Math.floor(sorted.length / 2)],
+      });
+      if (level === runtime.qualityLevel) return;
+      runtime.qualityLevel = level;
+      runtime.lastQualityChange = milliseconds;
+      measure();
+    };
+
     const animate = (milliseconds) => {
       const now = milliseconds / 1000;
-      const delta = Math.min(MAX_FRAME_DELTA, Math.max(0, (milliseconds - previousFrameRef.current) / 1000));
+      const frameMillis = milliseconds - previousFrameRef.current;
+      const delta = Math.min(MAX_FRAME_DELTA, Math.max(0, frameMillis / 1000));
       previousFrameRef.current = milliseconds;
+      measureQuality(milliseconds, frameMillis);
       const currentProps = propsRef.current;
       applyPendingInteractionCancel();
       const exploring = currentProps.interactionMode === "explore";
@@ -3445,7 +3686,9 @@ export function SoundflightStage(props) {
         }
       }
       if (!exploring && !runtime.userControllingCamera) {
-        const fitDistance = editorialCameraDistance(runtime.systemRadius ?? 4, camera.aspect);
+        const fitDistance = runtime.focusedSystemId
+          ? visitedSystemCameraDistance(VISITED_SYSTEM_OUTER_RADIUS, camera.aspect)
+          : editorialCameraDistance(runtime.systemRadius ?? 4, camera.aspect);
         runtime.lastFitDistance = fitDistance;
         const authoredDistance = runtime.authoredCameraDistance === null
           ? null
@@ -3459,7 +3702,9 @@ export function SoundflightStage(props) {
         );
         const semanticScaleId = runtime.authoredScaleId
           ?? (runtime.cosmicScale.id === "orbit" ? "system" : runtime.cosmicScale.id);
-        const direction = cosmicCameraDirection(semanticScaleId);
+        const direction = cosmicCameraDirection(
+          runtime.focusedSystemId ? "visitedSystem" : semanticScaleId,
+        );
         const viewDirection = new THREE.Vector3(direction.x, direction.y, direction.z);
         runtime.editorialCameraPosition.copy(runtime.editorialCameraTarget).addScaledVector(viewDirection, desiredDistance);
         const easing = 1 - Math.exp(-delta * (runtime.resettingCamera ? 6.5 : 2.8));
@@ -3500,7 +3745,20 @@ export function SoundflightStage(props) {
       starVisual.group.visible = ownSystemVisible;
       for (const visual of runtime.bodyVisuals.values()) {
         visual.group.visible = ownSystemVisible;
-        if (!ownSystemVisible) visual.orbitString.visible = false;
+        if (!ownSystemVisible) {
+          visual.orbitString.visible = false;
+          visual.notePulse.visible = false;
+        }
+      }
+      // Everything the player's own composition draws belongs to the player's
+      // own system. Left on, a resonance bridge and two orbit strings hang
+      // across the Milky Way as ghost geometry from a scale you have left.
+      if (!ownSystemVisible) {
+        harmonicKnot.visible = false;
+        ribbonTrail.group.visible = false;
+        particleCloud.visible = false;
+        launchPreview.group.visible = false;
+        moonPreview.group.visible = false;
       }
 
       composer.render(delta);
@@ -3528,6 +3786,7 @@ export function SoundflightStage(props) {
       solarTexture.dispose();
       sharedRadialTexture.dispose();
       for (const visual of cosmicLandmarkField.visuals) visual.labelTexture.dispose();
+      starVisual.homeLabel.material.map.dispose();
       scene.environment?.dispose();
       disposeObject(scene);
       renderer.dispose();
@@ -3536,6 +3795,9 @@ export function SoundflightStage(props) {
       delete mount.__rgDebugState;
       delete mount.__rgSnapCamera;
       delete mount.__rgTrailPaths;
+      delete mount.__rgStep;
+      delete mount.__rgScene;
+      delete mount.__rgCamera;
       visualRuntimeRef.current = null;
     };
   }, []);

@@ -282,7 +282,7 @@ export function App() {
     : arrivalTarget
       ? `YOU ARE IN ${cosmicDestination(arrivalTarget).label}`
     : visitedSystem
-      ? `PLAY THE ORBITS OF ${visitedSystem.name}`
+      ? visitedSystem.name
     : isAwaitingCosmicScore
         ? "A SHARED UNIVERSE IS READY"
       : cosmicScale.id === "orbit" || cosmicScale.id === "system"
@@ -299,7 +299,7 @@ export function App() {
           : "HOLD THE STAR · PULL OUTWARD · RELEASE"
         : "TOUCH A BRIGHT REGION TO HEAR IT"
     : visitedSystem
-      ? `${visitedSystem.system.worlds} REAL ORBITS · TOUCH TO PLAY THEIR PERIODS`
+      ? `TOUCH A WORLD TO HEAR ITS YEAR · TOUCH THE STAR FOR ALL ${visitedSystem.system.worlds}`
     : isAwaitingCosmicScore
         ? "LISTEN · THE CAMERA FOLLOWS EACH COSMIC VOICE"
       : cosmicScale.id === "orbit" || cosmicScale.id === "system"
@@ -466,6 +466,13 @@ export function App() {
   const startAudio = useCallback((activateField = true) => {
     intentionalPauseRef.current = false;
     if (audioStartPromiseRef.current) return audioStartPromiseRef.current;
+    // Sound that is already running does not need to be started again, and
+    // re-running the gesture handshake would put its clock-verification probe
+    // in front of every single note. An instrument has to answer immediately.
+    if (audioRef.current.getState() === "running") {
+      audioRef.current.setFieldActive(activateField);
+      return Promise.resolve("running");
+    }
     let request;
     request = audioRef.current.activateFromGesture(activateField)
       .then((state) => {
@@ -786,6 +793,27 @@ export function App() {
       setRuntimeError(error instanceof Error ? error.message : "The cosmic voice could not start");
     }
   }, [announceSonicCue, startAudio]);
+
+  /** One world of a visited system, touched on its own. */
+  const handleSystemWorldAudition = useCallback(async ({ landmark, planetId }) => {
+    try {
+      await startAudio(true);
+      const voice = audioRef.current.playSystemWorld(landmark, planetId);
+      if (!voice) return;
+      const days = voice.planet.periodDays;
+      const year = days >= 365
+        ? `${(days / 365.25).toFixed(days / 365.25 >= 10 ? 0 : 1)} YEARS`
+        : `${days >= 10 ? days.toFixed(0) : days.toFixed(1)} DAYS`;
+      announceSonicCue(
+        `${voice.planet.name.toUpperCase()} · ${year} · ${voice.appearance.label}`,
+        2600,
+      );
+      performHaptic({ kind: "audition", strength: 0.7 });
+    } catch (error) {
+      setAudioState("locked");
+      setRuntimeError(error instanceof Error ? error.message : "That world could not sound");
+    }
+  }, [announceSonicCue, performHaptic, startAudio]);
 
   useEffect(() => {
     const onEscape = (event) => {
@@ -1212,6 +1240,7 @@ export function App() {
         onCameraNavigate={handleCameraNavigate}
         onCameraScale={setCameraScale}
         onCosmicAudition={handleCosmicAudition}
+        onSystemWorldAudition={handleSystemWorldAudition}
         onCosmicScale={handleCosmicScale}
         onConsumptionBloom={handleConsumptionBloom}
         onElapsed={handleElapsed}
