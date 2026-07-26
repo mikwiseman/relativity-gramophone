@@ -424,6 +424,34 @@ test("render profile preserves the artwork while bounding GPU cost", () => {
   }), /finite device metrics/i);
 });
 
+test("orbit lines are multisampled, because alpha-to-coverage needs real samples", () => {
+  const desktop = selectRenderProfile({
+    width: 1440,
+    height: 1024,
+    devicePixelRatio: 2,
+    hardwareConcurrency: 10,
+    reducedMotion: false,
+  });
+  const compact = selectRenderProfile({
+    width: 390,
+    height: 844,
+    devicePixelRatio: 3,
+    hardwareConcurrency: 4,
+    reducedMotion: false,
+  });
+  const reduced = selectRenderProfile({
+    width: 390,
+    height: 844,
+    devicePixelRatio: 3,
+    hardwareConcurrency: 4,
+    reducedMotion: true,
+  });
+
+  assert.equal(desktop.samples, 4);
+  assert.equal(compact.samples, 4);
+  assert.equal(reduced.samples, 0, "reduced motion trades edge quality for battery");
+});
+
 test("voice colors are stable, named, and never rely on color alone", () => {
   assert.deepEqual(voiceVisual("earth"), { label: "EARTH", colorName: "CYAN", color: 0x72edff });
   assert.deepEqual(voiceVisual("moon"), { label: "MOON", colorName: "AMBER", color: 0xffc66d });

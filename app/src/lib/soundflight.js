@@ -375,7 +375,7 @@ export function selectRenderProfile({
   }
 
   const compact = Math.min(width, height) < 620 || hardwareConcurrency <= 4;
-  const maxBackingPixels = compact ? 1_800_000 : 3_600_000;
+  const maxBackingPixels = compact ? 2_200_000 : 3_600_000;
   const idealPixelRatio = Math.min(compact ? 2 : 1.5, Math.max(1, devicePixelRatio));
   const budgetPixelRatio = Math.sqrt(maxBackingPixels / Math.max(1, width * height));
   const pixelRatio = Math.min(idealPixelRatio, Math.max(1, budgetPixelRatio));
@@ -384,6 +384,7 @@ export function selectRenderProfile({
     return {
       pixelRatio,
       maxBackingPixels,
+      samples: 0,
       particleCount: 90,
       trailSamples: 40,
       bloomStrength: 0.72,
@@ -399,6 +400,7 @@ export function selectRenderProfile({
     return {
       pixelRatio,
       maxBackingPixels,
+      samples: 4,
       particleCount: 480,
       trailSamples: 96,
       bloomStrength: 0.92,
@@ -413,6 +415,7 @@ export function selectRenderProfile({
   return {
     pixelRatio,
     maxBackingPixels,
+    samples: 4,
     particleCount: 1100,
     trailSamples: 160,
     bloomStrength: 1.18,

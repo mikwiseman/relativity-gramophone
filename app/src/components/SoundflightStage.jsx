@@ -48,6 +48,9 @@ import {
   voiceVisual,
 } from "../lib/soundflight.js";
 import { nearestStringPoint } from "../lib/harpStrings.js";
+import { MILKY_WAY } from "../lib/cosmicAtlas.js";
+import { galaxyArmGeometry } from "../lib/galaxyShape.js";
+import { createGalaxyObject, createStarSystemObject } from "./cosmicScenery.js";
 import {
   birthSatelliteFromRadialLaunch,
   satelliteStabilityBand,
@@ -908,116 +911,6 @@ function createLandmarkLabelTexture(landmark) {
   return texture;
 }
 
-function createMiniGalaxy(landmark) {
-  const random = seededRandom(stringSeed(landmark.id));
-  const count = landmark.scale === "universe" ? 54 : 84;
-  const positions = new Float32Array(count * 3);
-  const colors = new Float32Array(count * 3);
-  const color = new THREE.Color(landmark.color);
-  for (let index = 0; index < count; index += 1) {
-    const arm = index % 2;
-    const radius = 0.12 + Math.pow(random(), 0.72) * (landmark.scale === "universe" ? 1.25 : 1.7);
-    const angle = arm * Math.PI + radius * 3.2 + (random() - 0.5) * 0.5;
-    positions[index * 3] = Math.cos(angle) * radius;
-    positions[index * 3 + 1] = (random() - 0.5) * 0.12;
-    positions[index * 3 + 2] = Math.sin(angle) * radius * 0.42;
-    const brightness = 0.42 + random() * 0.58;
-    colors[index * 3] = color.r * brightness;
-    colors[index * 3 + 1] = color.g * brightness;
-    colors[index * 3 + 2] = color.b * brightness;
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  const material = new THREE.PointsMaterial({
-    size: landmark.scale === "universe" ? 1.75 : 2.15,
-    sizeAttenuation: false,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    toneMapped: false,
-  });
-  const points = new THREE.Points(geometry, material);
-  points.rotation.x = -0.42 + random() * 0.84;
-  points.rotation.z = random() * Math.PI;
-  points.scale.setScalar(landmark.scale === "universe" ? 2.55 : 2.15);
-  return points;
-}
-
-function createNearbySystem(landmark, radialTexture) {
-  if (!landmark.system) return null;
-  const group = new THREE.Group();
-  const rings = [];
-  const worlds = [];
-  const isBinary = landmark.system.kind === "binary";
-  const systemBodies = landmark.system.bodies;
-  const orbitValues = systemBodies.map((body) => Math.log(body.orbitAu));
-  const minimumOrbit = Math.min(...orbitValues);
-  const maximumOrbit = Math.max(...orbitValues);
-  const minimumPeriod = Math.min(...systemBodies.map((body) => body.periodDays));
-  for (let index = 0; index < systemBodies.length; index += 1) {
-    const systemBody = systemBodies[index];
-    const progress = maximumOrbit === minimumOrbit
-      ? 0.5
-      : (Math.log(systemBody.orbitAu) - minimumOrbit) / (maximumOrbit - minimumOrbit);
-    const radius = isBinary ? 0.86 : 0.36 + progress * 0.94;
-    const geometry = new THREE.RingGeometry(
-      Math.max(0.02, radius - 0.008),
-      radius + 0.008,
-      72,
-    );
-    const material = new THREE.MeshBasicMaterial({
-      color: index % 3 === 1 ? 0xf0c97d : landmark.color,
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-      toneMapped: false,
-    });
-    const ring = new THREE.Mesh(geometry, material);
-    ring.rotation.x = -Math.PI / 2;
-    group.add(ring);
-    rings.push(ring);
-
-    const body = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: radialTexture,
-      color: isBinary ? 0xf4e5c2 : index % 2 === 0 ? landmark.color : 0xf0c97d,
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      toneMapped: false,
-    }));
-    body.scale.setScalar(
-      systemBody.kind === "star"
-        ? 0.31
-        : 0.09 + Math.min(1.2, systemBody.radiusEarth ?? 1) * 0.025,
-    );
-    body.userData.cosmicLandmarkId = landmark.id;
-    group.add(body);
-    worlds.push({
-      body,
-      systemBody,
-      phase: index * 2.39996 + (isBinary ? Math.PI : 0),
-      radius,
-      speed: (Math.PI * 2) / (
-        8 * Math.max(1, systemBody.periodDays / minimumPeriod)
-      ),
-    });
-  }
-  group.position.y = 0.035;
-  group.visible = false;
-  return {
-    group,
-    rings,
-    worlds,
-    elapsed: 0,
-  };
-}
-
 function createCosmicLandmarkVisual(landmark, radialTexture) {
   const group = new THREE.Group();
   group.position.fromArray(landmark.position);
@@ -1033,10 +926,10 @@ function createCosmicLandmarkVisual(landmark, radialTexture) {
     toneMapped: false,
   }));
   const coreScale = {
-    neighborhood: 1.05,
+    neighborhood: 0.62,
     galaxy: 1.35,
-    localGroup: 2.2,
-    universe: 2.45,
+    localGroup: 1.5,
+    universe: 1.7,
   }[landmark.scale];
   glow.scale.set(coreScale, coreScale, 1);
   glow.userData.cosmicLandmarkId = landmark.id;
@@ -1076,17 +969,19 @@ function createCosmicLandmarkVisual(landmark, radialTexture) {
     depthTest: false,
     toneMapped: false,
   }));
+  // A name sits directly under its object and stays small. Big floating labels
+  // above each light is what made six real systems unreadable on one screen.
   const labelHeight = {
-    neighborhood: 2.5,
-    galaxy: 2.35,
-    localGroup: 2.85,
-    universe: 3.35,
+    neighborhood: 1.02,
+    galaxy: 1.5,
+    localGroup: 1.62,
+    universe: 1.8,
   }[landmark.scale];
-  label.position.y = {
-    neighborhood: 1.75,
-    galaxy: 1.9,
-    localGroup: 3.2,
-    universe: 3.85,
+  label.position.y = landmark.labelOffset ?? {
+    neighborhood: -1.24,
+    galaxy: -1.85,
+    localGroup: -2.75,
+    universe: -3.1,
   }[landmark.scale];
   label.scale.set(
     labelHeight * 4.8,
@@ -1095,13 +990,18 @@ function createCosmicLandmarkVisual(landmark, radialTexture) {
   );
   group.add(label);
 
-  const cluster = !landmark.usesLivingGalaxy
-    && (landmark.scale === "localGroup" || landmark.scale === "universe")
-    ? createMiniGalaxy(landmark)
+  const cluster = !landmark.usesLivingGalaxy && landmark.galaxy
+    ? createGalaxyObject(landmark.galaxy, {
+        radius: landmark.scale === "universe" ? 2.9 : 2.3,
+        starCount: landmark.scale === "universe" ? 2600 : 3400,
+        seed: landmark.id,
+      })
     : null;
-  if (cluster) group.add(cluster);
-  const nearbySystem = landmark.scale === "neighborhood"
-    ? createNearbySystem(landmark, radialTexture)
+  if (cluster) group.add(cluster.group);
+  // A visitable system is built once at full size and scaled down until the
+  // traveller actually arrives, so its proportions never change on the way in.
+  const nearbySystem = landmark.scale === "neighborhood" && landmark.system?.star
+    ? createStarSystemObject(landmark.system, { radialTexture })
     : null;
   if (nearbySystem) group.add(nearbySystem.group);
 
@@ -1219,35 +1119,23 @@ function updateCosmicLandmarkField(
     visual.glow.material.opacity = opacity * (
       isFocusedSystem ? 0.5 + visual.impulse * 0.42 : 0.34 + visual.impulse * 0.56
     );
-    visual.label.material.opacity = isFocusedSystem
-      ? 0
-      : opacity * (focused ? 0.82 : 0.12);
+    // A name belongs to its own scale. Letting it bleed through from a
+    // neighbouring scale is what made the sky unreadable.
+    visual.label.material.opacity = isFocusedSystem || !focused ? 0 : opacity * 0.82;
     visual.hitArea.visible = (isFocusedSystem || focused) && opacity > 0.45;
     visual.pulse.material.opacity = opacity * visual.impulse * 0.62;
     const pulseScale = 1 + (1 - visual.impulse) * 1.8;
     visual.pulse.scale.setScalar(visual.coreScale * pulseScale);
     if (visual.cluster) {
-      visual.cluster.material.opacity = opacity * (0.72 + visual.impulse * 0.28);
-      if (!reducedMotion) visual.cluster.rotation.y += delta * 0.035;
+      visual.cluster.setOpacity(opacity * (0.85 + visual.impulse * 0.15));
+      if (!reducedMotion) visual.cluster.group.rotation.y += delta * 0.022;
     }
     if (visual.nearbySystem) {
       const systemOpacity = opacity * (isFocusedSystem || focused ? 1 : 0.06);
-      visual.nearbySystem.group.visible = systemOpacity > 0.03;
-      if (!reducedMotion) visual.nearbySystem.elapsed += delta;
-      for (const ring of visual.nearbySystem.rings) {
-        ring.material.opacity = systemOpacity * (0.18 + visual.impulse * 0.26);
-      }
-      for (const world of visual.nearbySystem.worlds) {
-        const angle = world.phase + visual.nearbySystem.elapsed * world.speed;
-        world.body.position.set(
-          Math.cos(angle) * world.radius,
-          0.075,
-          Math.sin(angle) * world.radius,
-        );
-        world.body.material.opacity = systemOpacity * (0.64 + visual.impulse * 0.32);
-      }
+      visual.nearbySystem.setOpacity(systemOpacity);
+      if (!reducedMotion) visual.nearbySystem.advance(delta);
       visual.nearbySystem.group.scale.setScalar(
-        (isFocusedSystem ? 3.7 : 1) * (1 + visual.impulse * 0.12),
+        (isFocusedSystem ? 1 : 0.26) * (1 + visual.impulse * 0.08),
       );
     }
     visual.impulse *= Math.exp(-delta * 2.4);
@@ -1268,19 +1156,34 @@ function triggerCosmicLandmark(field, landmarkId) {
   if (visual) visual.impulse = 1;
 }
 
+const GALAXY_DISC_RADIUS = 9.6;
+
+// The record grooves are the real arms: one logarithmic spiral per arm, opening
+// at the measured pitch angle and springing from the ends of the bar.
 function galaxySpiralArmPoints(armIndex, samples = 220) {
+  const { innerRadius, tangent, armSpacing } = galaxyArmGeometry(MILKY_WAY);
   const points = [];
+  const maximumTheta = Math.log(1 / innerRadius) / tangent;
   for (let index = 0; index < samples; index += 1) {
     const progress = index / (samples - 1);
-    const radius = 0.72 + progress * 9.2;
-    const angle = armIndex * ((Math.PI * 2) / 3) + radius * 0.28;
+    const theta = progress * maximumTheta;
+    const radius = innerRadius * Math.exp(theta * tangent) * GALAXY_DISC_RADIUS;
+    const angle = theta + armIndex * armSpacing;
     points.push(
       Math.cos(angle) * radius,
-      -0.055 + Math.sin(progress * Math.PI) * 0.035,
+      -0.05 + Math.sin(progress * Math.PI) * 0.03,
       Math.sin(angle) * radius,
     );
   }
   return points;
+}
+
+// Where the Sun actually is: 26,700 light-years out in the Orion Spur.
+function sunPositionInGalaxy() {
+  const { innerRadius, tangent } = galaxyArmGeometry(MILKY_WAY);
+  const theta = Math.log(MILKY_WAY.sunRadius / innerRadius) / tangent + MILKY_WAY.sunAngle;
+  const radius = MILKY_WAY.sunRadius * GALAXY_DISC_RADIUS;
+  return new THREE.Vector3(Math.cos(theta) * radius, 0.02, Math.sin(theta) * radius);
 }
 
 function createLivingGalaxy() {
@@ -1289,52 +1192,19 @@ function createLivingGalaxy() {
   group.position.set(GALAXY_CENTER.x, GALAXY_CENTER.y, GALAXY_CENTER.z);
   group.renderOrder = -8;
 
-  const pointCount = 1900;
-  const positions = new Float32Array(pointCount * 3);
-  const colors = new Float32Array(pointCount * 3);
-  const gold = new THREE.Color(0xe7bd72);
-  const cyan = new THREE.Color(0x72edff);
-  const opal = new THREE.Color(0xe9eee8);
-  const mixed = new THREE.Color();
-  for (let index = 0; index < pointCount; index += 1) {
-    const arm = index % 3;
-    const radius = 0.72 + Math.pow(random(), 0.72) * 9.35;
-    const angle = arm * ((Math.PI * 2) / 3)
-      + radius * 0.28
-      + (random() - 0.5) * (0.18 + radius * 0.026);
-    const armWidth = (random() - 0.5) * (0.18 + radius * 0.046);
-    positions[index * 3] = Math.cos(angle) * (radius + armWidth);
-    positions[index * 3 + 1] = (random() - 0.5) * (0.12 + radius * 0.028);
-    positions[index * 3 + 2] = Math.sin(angle) * (radius + armWidth);
-    const memoryThread = arm === 1 && index % 5 === 1;
-    const base = memoryThread ? cyan : random() < 0.15 ? opal : gold;
-    const brightness = 0.28 + random() * 0.68;
-    mixed.copy(base).multiplyScalar(brightness);
-    colors[index * 3] = mixed.r;
-    colors[index * 3 + 1] = mixed.g;
-    colors[index * 3 + 2] = mixed.b;
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  const material = new THREE.PointsMaterial({
-    color: 0xffffff,
-    size: 0.105,
-    sizeAttenuation: true,
-    vertexColors: true,
-    transparent: true,
-    opacity: 0,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    toneMapped: false,
+  const galaxyObject = createGalaxyObject(MILKY_WAY, {
+    radius: GALAXY_DISC_RADIUS,
+    starCount: 16_000,
+    seed: "milky-way",
   });
-  const points = new THREE.Points(geometry, material);
-  points.frustumCulled = false;
-  group.add(points);
+  // The disc lies in the stage plane; the atlas builds it flat already.
+  galaxyObject.group.rotation.set(0, 0, 0);
+  group.add(galaxyObject.group);
+  const points = galaxyObject.points;
 
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({
     map: createRadialTexture(),
-    color: 0xf1ad63,
+    color: 0xffbe74,
     transparent: true,
     opacity: 0,
     depthWrite: false,
@@ -1346,50 +1216,49 @@ function createLivingGalaxy() {
   halo.renderOrder = -9;
   group.add(halo);
 
-  const grooves = [0, 1, 2].map((armIndex) => {
-    const groove = createOrbitString(armIndex === 1 ? 0x72edff : 0xd9ae64, {
-      opacity: 0,
-      linewidth: armIndex === 1 ? 1.05 : 0.68,
-    });
-    groove.geometry.setPositions(galaxySpiralArmPoints(armIndex));
+  // One groove per real arm; the Sun's own spur stays the cyan memory thread.
+  const grooves = MILKY_WAY.arms.map((arm) => {
+    const groove = createOrbitString(0xd9ae64, { opacity: 0, linewidth: 0.72 });
+    groove.geometry.setPositions(galaxySpiralArmPoints(arm.index));
     groove.computeLineDistances();
     group.add(groove);
     return groove;
   });
 
-  const core = new THREE.Mesh(
-    new THREE.RingGeometry(0.48, 1.05, 64),
-    new THREE.MeshBasicMaterial({
-      color: 0x050403,
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    }),
-  );
-  core.rotation.x = -Math.PI / 2;
-  core.position.y = 0.03;
-  group.add(core);
+  const sunMarker = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: createRadialTexture(),
+    color: 0x9ef2ff,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  }));
+  sunMarker.position.copy(sunPositionInGalaxy());
+  sunMarker.scale.setScalar(1.15);
+  group.add(sunMarker);
 
-  const bar = new THREE.Mesh(
-    new THREE.BoxGeometry(4.2, 0.045, 0.38),
-    new THREE.MeshBasicMaterial({
-      color: 0xe8a75f,
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      toneMapped: false,
-    }),
-  );
-  bar.rotation.y = -0.24;
-  bar.position.y = -0.015;
-  group.add(bar);
+  const sagittariusA = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: createRadialTexture(),
+    color: 0xffd6a0,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  }));
+  sagittariusA.scale.setScalar(1.6);
+  group.add(sagittariusA);
 
   const universeGroup = new THREE.Group();
   universeGroup.renderOrder = -9;
   const distantPositions = [];
   const distantColors = [];
+  // Faint field galaxies far beyond the Local Group: old ellipticals read warm,
+  // star-forming discs read blue-white, the rest pale.
+  const cyan = new THREE.Color(0x9dc2ff);
+  const gold = new THREE.Color(0xf7e1b5);
+  const opal = new THREE.Color(0xe8e4d8);
   const centers = [
     [-15, 4, -14],
     [13, -3, -15],
@@ -1443,10 +1312,11 @@ function createLivingGalaxy() {
   return {
     group,
     points,
+    galaxyObject,
     halo,
     grooves,
-    core,
-    bar,
+    sunMarker,
+    sagittariusA,
     universeGroup,
     distant,
   };
@@ -1474,18 +1344,15 @@ function updateLivingGalaxy(galaxy, scale, resolution, delta, reducedMotion, cat
     1 - Math.exp(-delta * 3.4),
   );
   galaxy.group.scale.setScalar(easedScale);
-  galaxy.points.material.opacity = scale.galaxyMix * 0.84 * quieting * contextGain;
-  galaxy.halo.material.opacity = scale.galaxyMix * 0.42 * quieting * contextGain;
-  galaxy.core.material.opacity = scale.galaxyMix * 0.9 * quieting * contextGain;
-  galaxy.bar.material.opacity = scale.galaxyMix * 0.22 * quieting * contextGain;
+  const galaxyOpacity = scale.galaxyMix * 0.9 * quieting * contextGain;
+  galaxy.galaxyObject.setOpacity(galaxyOpacity);
+  galaxy.halo.material.opacity = galaxyOpacity * 0.34;
+  galaxy.sunMarker.material.opacity = galaxyOpacity * 0.85;
+  galaxy.sagittariusA.material.opacity = galaxyOpacity * 0.5;
   galaxy.distant.material.opacity = scale.universeMix * 0.58 * quieting;
-  for (let index = 0; index < galaxy.grooves.length; index += 1) {
-    const groove = galaxy.grooves[index];
+  for (const groove of galaxy.grooves) {
     groove.material.resolution.set(resolution.width, resolution.height);
-    groove.material.opacity = scale.galaxyMix
-      * (index === 1 ? 0.14 : 0.055)
-      * quieting
-      * contextGain;
+    groove.material.opacity = scale.galaxyMix * 0.07 * quieting * contextGain;
   }
   if (!reducedMotion) {
     galaxy.group.rotation.y += delta * (0.0022 + scale.galaxyMix * 0.0028);
@@ -1932,7 +1799,24 @@ export function SoundflightStage(props) {
     controls.listenToKeyEvents(window);
     controls.update();
 
-    const composer = new EffectComposer(renderer);
+    // Orbit strings are Line2 quads with `alphaToCoverage`, which only produces a
+    // smooth edge when the target it draws into actually has samples. Without this
+    // the composer would silently render every line and silhouette at one sample,
+    // which is exactly what reads as "pixelated" on a phone.
+    const maxSamples = renderer.capabilities.maxSamples ?? 0;
+    const composerTarget = new THREE.WebGLRenderTarget(1, 1, {
+      type: THREE.HalfFloatType,
+      samples: Math.min(4, maxSamples),
+    });
+    const composer = new EffectComposer(renderer, composerTarget);
+    const applyComposerSamples = (requested) => {
+      const samples = Math.min(requested, maxSamples);
+      for (const target of [composer.renderTarget1, composer.renderTarget2]) {
+        if (target.samples === samples) continue;
+        target.samples = samples;
+        target.dispose();
+      }
+    };
     composer.addPass(new RenderPass(scene, camera));
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 1.08, 0.68, 0.52);
     composer.addPass(bloomPass);
@@ -2073,6 +1957,14 @@ export function SoundflightStage(props) {
     };
     visualRuntimeRef.current = runtime;
     if (import.meta.env.DEV || window.__relativityE2E === true) {
+      // Land the editorial camera immediately, so visual QA does not have to
+      // single-step a two-second flight one frame at a time.
+      mount.__rgSnapCamera = () => {
+        camera.position.copy(runtime.editorialCameraPosition);
+        controls.target.copy(runtime.editorialCameraTarget);
+        controls.update(0);
+        return camera.position.distanceTo(controls.target);
+      };
       mount.__rgDebugState = () => {
         const rect = mount.getBoundingClientRect();
         return {
@@ -2098,6 +1990,8 @@ export function SoundflightStage(props) {
                 maxBackingPixels: runtime.profile.maxBackingPixels,
                 backingWidth: renderer.domElement.width,
                 backingHeight: renderer.domElement.height,
+                samples: composer.renderTarget2.samples,
+                maxSamples,
               }
             : null,
           landmarks: cosmicLandmarkField.visuals
@@ -2132,8 +2026,13 @@ export function SoundflightStage(props) {
       runtime.profile = profile;
       livingGalaxy.points.geometry.setDrawRange(
         0,
-        Math.min(1900, Math.max(1150, Math.floor(profile.starCount * 0.8))),
+        Math.min(16_000, Math.max(5200, Math.floor(profile.starCount * 6.2))),
       );
+      livingGalaxy.galaxyObject.setPixelRatio(profile.pixelRatio);
+      for (const visual of cosmicLandmarkField.visuals) {
+        visual.cluster?.setPixelRatio(profile.pixelRatio);
+        visual.nearbySystem?.setResolution(rect.width, rect.height);
+      }
       livingGalaxy.distant.geometry.setDrawRange(
         0,
         Math.min(
@@ -2143,6 +2042,7 @@ export function SoundflightStage(props) {
       );
       renderer.setPixelRatio(profile.pixelRatio);
       renderer.setSize(rect.width, rect.height, false);
+      applyComposerSamples(profile.samples);
       composer.setPixelRatio(profile.pixelRatio);
       composer.setSize(rect.width, rect.height);
       camera.aspect = rect.width / Math.max(1, rect.height);
@@ -3411,6 +3311,14 @@ export function SoundflightStage(props) {
       const focusedSystemVisual = runtime.focusedSystemId
         ? cosmicLandmarkField.byId.get(runtime.focusedSystemId)
         : null;
+      // Standing inside a real system, the player's own invented one would
+      // otherwise hang over it as a second star and a stray orbit ring.
+      const visitingAnotherStar = Boolean(focusedSystemVisual);
+      starVisual.group.visible = !visitingAnotherStar;
+      for (const visual of runtime.bodyVisuals.values()) {
+        visual.group.visible = !visitingAnotherStar;
+        visual.orbitString.visible = !visitingAnotherStar && visual.orbitString.visible;
+      }
       const semanticScaleId = runtime.authoredScaleId
         ?? (runtime.cosmicScale.id === "orbit" ? "system" : runtime.cosmicScale.id);
       const authoredTarget = focusedSystemVisual
@@ -3620,6 +3528,7 @@ export function SoundflightStage(props) {
       renderer.domElement.remove();
       timeNeedle.remove();
       delete mount.__rgDebugState;
+      delete mount.__rgSnapCamera;
       delete mount.__rgTrailPaths;
       visualRuntimeRef.current = null;
     };
@@ -3636,3 +3545,5 @@ export function SoundflightStage(props) {
     />
   );
 }
+
+

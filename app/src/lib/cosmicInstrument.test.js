@@ -110,10 +110,17 @@ test("real cosmic landmarks are sparse, playable, and bound to one semantic worl
   assert.ok(localGroup.some((landmark) => landmark.id === "milky-way"));
   assert.ok(localGroup.some((landmark) => landmark.id === "andromeda"));
   assert.ok(universe.some((landmark) => landmark.id === "cosmic-web"));
-  assert.ok([neighborhood, galaxy, localGroup, universe].every((landmarks) => landmarks.length <= 4));
+  assert.ok(
+    [neighborhood, galaxy, localGroup, universe].every((landmarks) => landmarks.length <= 6),
+    "a scale stays readable: never more than six named destinations at once",
+  );
   assert.ok(
     neighborhood.every((landmark) => Math.hypot(landmark.position[0], landmark.position[2]) <= 6.2),
     "nearby stars must remain playable in a narrow portrait viewport",
+  );
+  assert.ok(
+    neighborhood.some((landmark) => landmark.id === "solar-system"),
+    "our own Solar System is a destination a child can visit and study",
   );
   assert.equal(new Set(all.map((landmark) => landmark.id)).size, all.length);
   assert.ok(all.every((landmark) => (
@@ -137,13 +144,14 @@ test("every nearby star opens as a small real system instead of a decorative dot
   const proxima = cosmicLandmarkById("proxima-centauri");
   const sirius = cosmicLandmarkById("sirius");
   const trappist = cosmicLandmarkById("trappist-1");
+  const solar = cosmicLandmarkById("solar-system");
 
   assert.ok(neighborhood.every((landmark) => (
     landmark.system
     && ["planetary", "binary"].includes(landmark.system.kind)
     && Number.isInteger(landmark.system.worlds)
     && landmark.system.worlds >= 1
-    && landmark.system.worlds <= 7
+    && landmark.system.worlds <= 8
     && landmark.system.label.length > 0
     && landmark.system.worlds === landmark.system.bodies.length
     && landmark.system.bodies.every((body) => (
@@ -154,49 +162,43 @@ test("every nearby star opens as a small real system instead of a decorative dot
       && body.periodDays > 0
       && Number.isFinite(body.orbitAu)
       && body.orbitAu > 0
+      && Number.isFinite(body.radiusEarth)
+      && body.radiusEarth > 0
     ))
   )));
-  assert.deepEqual(proxima.system, {
-    kind: "planetary",
-    worlds: 2,
-    label: "2 CONFIRMED WORLDS · 5.1–11.2 DAY YEARS",
-    bodies: [
-      {
-        id: "proxima-d",
-        name: "PROXIMA d",
-        kind: "planet",
-        periodDays: 5.12338,
-        orbitAu: 0.02881,
-        radiusEarth: 0.692,
-      },
-      {
-        id: "proxima-b",
-        name: "PROXIMA b",
-        kind: "planet",
-        periodDays: 11.18465,
-        orbitAu: 0.04848,
-        radiusEarth: 1.02,
-      },
-    ],
-  });
-  assert.deepEqual(sirius.system, {
-    kind: "binary",
-    worlds: 1,
-    label: "SIRIUS A + B · 50 YEAR ORBIT · 19.7 AU",
-    bodies: [
-      {
-        id: "sirius-b",
-        name: "SIRIUS B",
-        kind: "star",
-        periodDays: 18262.5,
-        orbitAu: 19.7,
-        radiusEarth: 0.92,
-      },
-    ],
-  });
+
+  // Honest rendering needs the host star, not just its worlds: colour comes
+  // from temperature and the habitable zone comes from luminosity.
+  assert.ok(neighborhood.every((landmark) => (
+    landmark.system.star
+    && landmark.system.star.name
+    && landmark.system.star.spectralType
+    && landmark.system.star.temperature > 1500
+    && landmark.system.star.temperature < 60_000
+    && landmark.system.star.radiusSolar > 0
+    && landmark.system.star.luminositySuns > 0
+  )), "every visitable star carries its measured temperature, radius and luminosity");
+
+  // Worlds are listed outward, so the drawn order is the real order.
+  for (const landmark of neighborhood) {
+    const orbits = landmark.system.bodies.map((body) => body.orbitAu);
+    assert.deepEqual(orbits, [...orbits].sort((first, second) => first - second),
+      `${landmark.name} must list its worlds outward`);
+  }
+
+  assert.equal(solar.system.worlds, 8);
+  assert.equal(solar.system.bodies[2].name, "EARTH");
+  assert.equal(solar.system.bodies[2].periodDays, 365.256);
+  assert.equal(solar.system.star.temperature, 5772);
+
+  assert.equal(proxima.system.worlds, 2);
+  assert.equal(proxima.system.bodies.at(-1).id, "proxima-b");
+  assert.equal(sirius.system.kind, "binary");
+  assert.equal(sirius.system.bodies[0].kind, "star");
+
   assert.equal(trappist.system.kind, "planetary");
   assert.equal(trappist.system.worlds, 7);
-  assert.equal(trappist.system.label, "7 ROCKY WORLDS · 1.5–18.8 DAY YEARS");
+  assert.equal(trappist.system.star.temperature, 2566);
   assert.deepEqual(
     trappist.system.bodies.map(({ id, periodDays, orbitAu }) => ({ id, periodDays, orbitAu })),
     [
