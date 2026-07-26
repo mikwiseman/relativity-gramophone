@@ -485,14 +485,58 @@ test("quality adapts to measured frame cost instead of guessing from device metr
   // costs less beauty than a whole upscaled image.
   assert.ok(QUALITY_LADDER[1].pixelRatioScale === 1 && QUALITY_LADDER[1].samples < 4);
 
-  assert.equal(nextQualityLevel({ level: 0, medianFrameMillis: 30 }), 1);
-  assert.equal(nextQualityLevel({ level: 2, medianFrameMillis: 16.7 }), 2);
-  assert.equal(nextQualityLevel({ level: 2, medianFrameMillis: 8 }), 1);
-  assert.equal(nextQualityLevel({ level: 0, medianFrameMillis: 8 }), 0);
+  // Dropping frames on a 60 Hz display: 33 ms against a 16.7 ms refresh.
+  assert.deepEqual(
+    nextQualityLevel({ level: 0, medianFrameMillis: 33, fastestFrameMillis: 16.7 }),
+    { level: 1, goodWindows: 0 },
+  );
+
+  // The case an absolute threshold could never see: a downgraded machine now
+  // sitting exactly on a 60 Hz vsync has to be able to climb back.
+  let state = { level: 2, goodWindows: 0 };
+  for (let window = 0; window < 3; window += 1) {
+    state = nextQualityLevel({ ...state, medianFrameMillis: 16.7, fastestFrameMillis: 16.6 });
+    assert.equal(state.level, 2, "one good window is not enough to spend resolution again");
+  }
+  state = nextQualityLevel({ ...state, medianFrameMillis: 16.7, fastestFrameMillis: 16.6 });
+  assert.deepEqual(state, { level: 1, goodWindows: 0 }, "sustained smoothness recovers quality");
+
+  // The same must hold on a 120 Hz display, where 8.3 ms is keeping up.
+  assert.deepEqual(
+    nextQualityLevel({
+      level: 1,
+      goodWindows: 3,
+      medianFrameMillis: 8.4,
+      fastestFrameMillis: 8.3,
+    }),
+    { level: 0, goodWindows: 0 },
+  );
+  // …and 16.7 ms on that same 120 Hz display is dropping every other frame.
   assert.equal(
-    nextQualityLevel({ level: QUALITY_LADDER.length - 1, medianFrameMillis: 90 }),
+    nextQualityLevel({ level: 0, medianFrameMillis: 16.7, fastestFrameMillis: 8.3 }).level,
+    1,
+  );
+
+  // A single good window in the middle of a bad stretch does not accumulate.
+  assert.equal(
+    nextQualityLevel({
+      level: 2,
+      goodWindows: 3,
+      medianFrameMillis: 21,
+      fastestFrameMillis: 16.6,
+    }).goodWindows,
+    0,
+  );
+
+  assert.equal(
+    nextQualityLevel({
+      level: QUALITY_LADDER.length - 1,
+      medianFrameMillis: 90,
+      fastestFrameMillis: 16.7,
+    }).level,
     QUALITY_LADDER.length - 1,
   );
+  assert.equal(nextQualityLevel({ level: 0, goodWindows: 9, medianFrameMillis: 16.7 }).level, 0);
   assert.throws(
     () => nextQualityLevel({ level: 0, medianFrameMillis: Number.NaN }),
     /finite/i,

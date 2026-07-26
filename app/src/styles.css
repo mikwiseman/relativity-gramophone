@@ -2251,7 +2251,14 @@ input:focus-visible {
   cursor: crosshair;
 }
 
-.app-shell[data-onboarding="step-1"] .soundflight-stage {
+/*
+ * The canvas is inert exactly while the sound gate is covering it, and not a
+ * moment longer. Keying this off the first onboarding step instead meant that
+ * pausing — which also leaves the lesson at step one whenever no planet exists
+ * yet — killed every touch on the canvas, including the seven worlds of a
+ * system the player had travelled to.
+ */
+.app-shell[data-audio-state="locked"] .soundflight-stage {
   pointer-events: none;
 }
 

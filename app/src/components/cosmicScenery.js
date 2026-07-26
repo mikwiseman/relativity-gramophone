@@ -606,11 +606,11 @@ export function createStarSystemObject(system, {
     },
     touchAreas: worlds.map((world) => world.touchArea),
     /** Advance every world by real period ratios: one shared time compression. */
-    advance(delta, secondsPerFastestOrbit = 7) {
+    advance(delta, secondsPerFastestOrbit = 7, decayDelta = delta) {
       elapsed += delta;
       star.material.uniforms.uTime.value = elapsed;
       star.material.uniforms.uImpulse.value = starImpulse;
-      starImpulse *= Math.exp(-delta * 2.4);
+      starImpulse *= Math.exp(-decayDelta * 2.4);
       for (const world of worlds) {
         const revolutions = delta / (secondsPerFastestOrbit
           * (world.planet.periodDays / fastestPeriod));
@@ -631,7 +631,7 @@ export function createStarSystemObject(system, {
           .negate()
           .normalize();
         world.body.material.uniforms.uImpulse.value = world.impulse;
-        world.impulse *= Math.exp(-delta * 2.2);
+        world.impulse *= Math.exp(-decayDelta * 2.2);
       }
     },
     /**

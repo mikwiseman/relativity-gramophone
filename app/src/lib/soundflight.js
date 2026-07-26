@@ -448,17 +448,44 @@ export const QUALITY_LADDER = [
 ];
 
 /**
- * One step of the adaptive ladder, from the median frame cost of a whole
- * measurement window. Median rather than mean so a single stall — a texture
- * upload, a garbage collection — never permanently dims the artwork.
+ * One step of the adaptive ladder, from the median and the floor of a whole
+ * measurement window.
+ *
+ * The measurement is relative to the display, not to a fixed millisecond
+ * count. A browser paces `requestAnimationFrame` to vsync, so a machine that
+ * is comfortably keeping up still reports 16.7 ms on a 60 Hz screen and 8.3 ms
+ * on a 120 Hz one; an absolute "faster than 13 ms means recover" threshold is
+ * simply unreachable on the commonest display there is, and the artwork would
+ * stay dimmed forever after one slow moment. The fastest frame in the window is
+ * the refresh interval, and keeping up means the median sits on it.
+ *
+ * Median rather than mean, so one stall — a texture upload, a collection —
+ * never dims the artwork; and recovery asks for several good windows in a row
+ * while one bad window is enough to give ground, so a machine sitting exactly
+ * on the boundary settles instead of oscillating.
  */
-export function nextQualityLevel({ level, medianFrameMillis, slowMillis = 21, fastMillis = 13 }) {
-  if (!Number.isFinite(medianFrameMillis)) {
+export function nextQualityLevel({
+  level,
+  medianFrameMillis,
+  fastestFrameMillis = medianFrameMillis,
+  goodWindows = 0,
+  slowRatio = 1.55,
+  keepingUpRatio = 1.18,
+  windowsBeforeRecovery = 4,
+}) {
+  if (!Number.isFinite(medianFrameMillis) || !Number.isFinite(fastestFrameMillis)) {
     throw new Error("Adaptive quality needs a finite measured frame cost");
   }
-  if (medianFrameMillis > slowMillis) return Math.min(QUALITY_LADDER.length - 1, level + 1);
-  if (medianFrameMillis < fastMillis) return Math.max(0, level - 1);
-  return level;
+  const refresh = Math.max(1, Math.min(fastestFrameMillis, medianFrameMillis));
+  if (medianFrameMillis > refresh * slowRatio) {
+    return { level: Math.min(QUALITY_LADDER.length - 1, level + 1), goodWindows: 0 };
+  }
+  if (medianFrameMillis > refresh * keepingUpRatio) return { level, goodWindows: 0 };
+  const windows = goodWindows + 1;
+  if (level > 0 && windows >= windowsBeforeRecovery) {
+    return { level: level - 1, goodWindows: 0 };
+  }
+  return { level, goodWindows: windows };
 }
 
 export function bodyToStage(body, scale = 10) {

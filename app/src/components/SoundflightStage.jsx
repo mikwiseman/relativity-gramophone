@@ -1209,8 +1209,13 @@ function updateCosmicLandmarkField(
       // Pause has to hold a visited system too — worlds that keep circling
       // under a paused transport make the button read as broken — but a system
       // entered while already paused still has to place its worlds once, or
-      // all seven sit stacked on top of their star.
-      visual.nearbySystem.advance(!reducedMotion && worldsMoving ? delta : 0);
+      // all seven sit stacked on top of their star. A struck world's highlight
+      // fades on real time either way; that is a response, not orbital motion.
+      visual.nearbySystem.advance(
+        !reducedMotion && worldsMoving ? delta : 0,
+        undefined,
+        delta,
+      );
       visual.nearbySystem.group.scale.setScalar(
         (isFocusedSystem ? 1 : 0.26) * (1 + visual.impulse * 0.08),
       );
@@ -1740,7 +1745,7 @@ function updateHarmonicKnot(line, resonance, physicalBodies, bodiesById, resolut
   // three samples per cycle, and three samples per cycle is a staircase, not a
   // string. Cap the visible harmonic and sample it densely.
   const cycles = clamp(definition.numerator, 1, 6);
-  const SAMPLES = 192;
+  const SAMPLES = 128;
   for (let index = 0; index <= SAMPLES; index += 1) {
     const progress = index / SAMPLES;
     // A standing wave is pinned at both ends: the envelope has to die at the
@@ -2026,6 +2031,7 @@ export function SoundflightStage(props) {
       profile: null,
       qualityLevel: 0,
       frameCosts: [],
+      goodQualityWindows: 0,
       lastQualityChange: -Infinity,
       selectedHistory: [],
       starBreath: 0.5,
@@ -3554,12 +3560,15 @@ export function SoundflightStage(props) {
       // artwork for a screen nobody is looking at.
       if (document.visibilityState !== "visible") return;
       if (milliseconds - runtime.lastQualityChange < 2500) return;
-      const level = nextQualityLevel({
+      const next = nextQualityLevel({
         level: runtime.qualityLevel,
+        goodWindows: runtime.goodQualityWindows,
         medianFrameMillis: sorted[Math.floor(sorted.length / 2)],
+        fastestFrameMillis: sorted[0],
       });
-      if (level === runtime.qualityLevel) return;
-      runtime.qualityLevel = level;
+      runtime.goodQualityWindows = next.goodWindows;
+      if (next.level === runtime.qualityLevel) return;
+      runtime.qualityLevel = next.level;
       runtime.lastQualityChange = milliseconds;
       measure();
     };
@@ -3785,7 +3794,11 @@ export function SoundflightStage(props) {
       opalTexture.dispose();
       solarTexture.dispose();
       sharedRadialTexture.dispose();
-      for (const visual of cosmicLandmarkField.visuals) visual.labelTexture.dispose();
+      for (const visual of cosmicLandmarkField.visuals) {
+        visual.labelTexture.dispose();
+        visual.nearbySystem?.dispose();
+        visual.cluster?.dispose();
+      }
       starVisual.homeLabel.material.map.dispose();
       scene.environment?.dispose();
       disposeObject(scene);

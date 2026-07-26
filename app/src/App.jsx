@@ -469,10 +469,10 @@ export function App() {
     // Sound that is already running does not need to be started again, and
     // re-running the gesture handshake would put its clock-verification probe
     // in front of every single note. An instrument has to answer immediately.
-    if (audioRef.current.getState() === "running") {
-      audioRef.current.setFieldActive(activateField);
-      return Promise.resolve("running");
-    }
+    // Deliberately does not touch the field: whether the continuous voice of
+    // the system is sounding belongs to the transport, and a single note must
+    // not switch it on under a paused transport or off under a playing one.
+    if (audioRef.current.getState() === "running") return Promise.resolve("running");
     let request;
     request = audioRef.current.activateFromGesture(activateField)
       .then((state) => {
