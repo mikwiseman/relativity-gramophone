@@ -5,7 +5,7 @@ import {
   voiceParameters,
   voicePluckParameters,
 } from "./sonification.js";
-import { orbitalSonificationFrequency } from "./cosmicInstrument.js";
+import { systemVoiceFrequencies } from "./cosmicAtlas.js";
 
 const REVERB_SECONDS = 3.1;
 const AUDIO_CLOCK_PROBE_MS = 90;
@@ -1044,9 +1044,12 @@ export class AudioEngine {
     };
     const ratios = ratiosByScale[landmark.scale];
     if (!ratios) throw new Error(`Unknown cosmic landmark scale: ${landmark.scale}`);
-    const systemFrequencies = landmark.system?.bodies?.map((body) => (
-      orbitalSonificationFrequency(body.periodDays)
-    )) ?? [];
+    // One shared whole-octave transposition for the whole system, so a slower
+    // orbit is always a lower voice and every interval is the real period
+    // ratio. TRAPPIST-1's resonance chain arrives as an actual chord.
+    const systemFrequencies = landmark.system?.bodies
+      ? systemVoiceFrequencies(landmark.system.bodies.map((body) => body.periodDays))
+      : [];
     const frequencies = systemFrequencies.length > 0
       ? systemFrequencies
       : ratios.map((ratio) => landmark.frequency * ratio);

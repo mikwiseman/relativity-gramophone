@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { systemVoiceFrequencies } from "./cosmicAtlas.js";
 import {
   COSMIC_DESTINATIONS,
   cosmicDestination,
@@ -225,6 +226,33 @@ test("real orbital periods become audible without changing their octave identity
         `${body.name} must only be transposed by whole octaves`,
       );
     }
+  }
+});
+
+test("touching a real system plays a chord that falls as the orbits widen", () => {
+  for (const landmark of cosmicLandmarksForScale("neighborhood")) {
+    const periods = landmark.system.bodies.map((body) => body.periodDays);
+    const voices = systemVoiceFrequencies(periods);
+
+    for (let index = 1; index < voices.length; index += 1) {
+      const octaves = Math.log2((voices[index - 1] / voices[index])
+        / (periods[index] / periods[index - 1]));
+      assert.ok(
+        Math.abs(octaves - Math.round(octaves)) < 1e-9,
+        `${landmark.name} must keep every interval a real period ratio`,
+      );
+    }
+    for (const frequency of voices) {
+      assert.ok(frequency >= 55 && frequency <= 1760, `${landmark.name} stays audible`);
+    }
+  }
+
+  // TRAPPIST-1 spans under four octaves, so the whole chain plays untouched:
+  // each world sounds lower than the one inside it, with no folding at all.
+  const trappist = cosmicLandmarkById("trappist-1");
+  const chain = systemVoiceFrequencies(trappist.system.bodies.map((body) => body.periodDays));
+  for (let index = 1; index < chain.length; index += 1) {
+    assert.ok(chain[index] < chain[index - 1], "a wider orbit is a deeper voice");
   }
 });
 

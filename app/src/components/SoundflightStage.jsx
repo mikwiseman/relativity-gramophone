@@ -973,15 +973,15 @@ function createCosmicLandmarkVisual(landmark, radialTexture) {
   // above each light is what made six real systems unreadable on one screen.
   const labelHeight = {
     neighborhood: 1.02,
-    galaxy: 1.5,
-    localGroup: 1.62,
-    universe: 1.8,
+    galaxy: 1.6,
+    localGroup: 2.9,
+    universe: 3.4,
   }[landmark.scale];
   label.position.y = landmark.labelOffset ?? {
     neighborhood: -1.24,
-    galaxy: -1.85,
-    localGroup: -2.75,
-    universe: -3.1,
+    galaxy: -1.95,
+    localGroup: -3.5,
+    universe: -4.1,
   }[landmark.scale];
   label.scale.set(
     labelHeight * 4.8,
@@ -3311,14 +3311,6 @@ export function SoundflightStage(props) {
       const focusedSystemVisual = runtime.focusedSystemId
         ? cosmicLandmarkField.byId.get(runtime.focusedSystemId)
         : null;
-      // Standing inside a real system, the player's own invented one would
-      // otherwise hang over it as a second star and a stray orbit ring.
-      const visitingAnotherStar = Boolean(focusedSystemVisual);
-      starVisual.group.visible = !visitingAnotherStar;
-      for (const visual of runtime.bodyVisuals.values()) {
-        visual.group.visible = !visitingAnotherStar;
-        visual.orbitString.visible = !visitingAnotherStar && visual.orbitString.visible;
-      }
       const semanticScaleId = runtime.authoredScaleId
         ?? (runtime.cosmicScale.id === "orbit" ? "system" : runtime.cosmicScale.id);
       const authoredTarget = focusedSystemVisual
@@ -3497,6 +3489,18 @@ export function SoundflightStage(props) {
         currentProps.onCameraScale(cameraScaleLabel(reportedDistance));
         currentProps.onCosmicScale(runtime.cosmicScale);
       }
+      // Last word on the player's own system, after every writer has had its
+      // say. It stays visible among the nearby stars as the anchor you flew
+      // from, disappears inside another star's system, and recedes once the
+      // galaxy itself is the subject.
+      const ownSystemVisible = !runtime.focusedSystemId
+        && runtime.cosmicScale.systemMix > 0.14;
+      starVisual.group.visible = ownSystemVisible;
+      for (const visual of runtime.bodyVisuals.values()) {
+        visual.group.visible = ownSystemVisible;
+        if (!ownSystemVisible) visual.orbitString.visible = false;
+      }
+
       composer.render(delta);
     };
     renderer.setAnimationLoop(animate);
