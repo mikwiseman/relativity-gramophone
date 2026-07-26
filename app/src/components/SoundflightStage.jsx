@@ -1790,7 +1790,9 @@ export function SoundflightStage(props) {
     controls.rotateSpeed = 0.34;
     controls.panSpeed = 0.62;
     controls.zoomSpeed = 0.82;
-    controls.minDistance = 3.2;
+    // Low enough to fly in among the orbits of whichever system you are
+    // standing in, which is what "zoom all the way in" has to mean.
+    controls.minDistance = 1.35;
     controls.maxDistance = 72;
     controls.minPolarAngle = 0.24;
     controls.maxPolarAngle = Math.PI * 0.49;
@@ -2946,7 +2948,7 @@ export function SoundflightStage(props) {
       runtime.authoredScaleId = null;
       runtime.compositionZoom = clamp(
         runtime.authoredCameraDistance / runtime.lastFitDistance,
-        0.58,
+        0.24,
         7.2,
       );
     };
@@ -3391,7 +3393,7 @@ export function SoundflightStage(props) {
             runtime.cameraJourneyTargetId = cameraCommand.targetId ?? null;
             runtime.compositionZoom = clamp(
               runtime.authoredCameraDistance / Math.max(0.001, runtime.lastFitDistance),
-              0.58,
+              0.24,
               7.2,
             );
             runtime.resettingCamera = true;
@@ -3421,7 +3423,7 @@ export function SoundflightStage(props) {
           runtime.cameraJourneyTargetId = null;
           runtime.compositionZoom = clamp(
             runtime.authoredCameraDistance / Math.max(0.001, runtime.lastFitDistance),
-            0.58,
+            0.24,
             7.2,
           );
         } else {
