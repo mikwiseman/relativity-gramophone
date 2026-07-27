@@ -592,10 +592,41 @@ const COSMIC_CAMERA_TARGET_OFFSETS = Object.freeze({
   universe: Object.freeze({ x: 0, y: 0, z: -10 }),
 });
 
-export function cosmicCameraDirection(scaleId, seconds = 0) {
+/**
+ * How far above its own plane a visited system is read from, in the frame the
+ * camera actually has.
+ *
+ * A planetary system is a flat disc, so how much of the picture it occupies is
+ * decided by this angle and nothing else. The fit solves for width, because
+ * the disc is wide — and on a portrait phone that leaves the system a band
+ * filling 85 per cent of the width and 24 per cent of the height, floating in
+ * an empty column. Measured, at 38 degrees: 102 pixels of an available 422.
+ *
+ * A tall frame therefore looks further down onto the system, opening the
+ * ellipse into the space it has; a wide frame keeps the low, dramatic angle
+ * that separates seven concentric orbits into rings a child can aim at. It
+ * never goes overhead — a disc seen from directly above is a diagram.
+ */
+export function visitedSystemElevation(aspect) {
+  if (!Number.isFinite(aspect) || aspect <= 0) {
+    throw new Error("A visited system's elevation needs a finite aspect ratio");
+  }
+  // 38 degrees on anything as wide as a laptop, opening to 62 on a phone held
+  // upright. Interpolated on the aspect between those two shapes.
+  const tallness = clamp((1.2 - aspect) / (1.2 - 0.46), 0, 1);
+  return (38 + tallness * 24) * (Math.PI / 180);
+}
+
+export function cosmicCameraDirection(scaleId, seconds = 0, aspect = null) {
   const direction = COSMIC_CAMERA_DIRECTIONS[scaleId];
   if (!direction) throw new Error(`Unknown cosmic camera scale: ${scaleId}`);
   let { x, y, z } = direction;
+  if (scaleId === "visitedSystem" && Number.isFinite(aspect) && aspect > 0) {
+    const elevation = visitedSystemElevation(aspect);
+    y = Math.sin(elevation);
+    z = Math.cos(elevation);
+    x = 0;
+  }
   // A frozen camera on coplanar ellipses is a diagram, however well it is lit.
   // Parallax is the cue that tells an eye "this is a solid thing in space", and
   // a few degrees of slow sway buys it for nothing. Only a system you are

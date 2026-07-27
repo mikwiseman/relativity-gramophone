@@ -25,6 +25,7 @@ import {
   starGripRadius,
   systemTouchRadius,
   visitedSystemCameraDistance,
+  visitedSystemElevation,
   shouldApplyGestationUpdate,
   shouldApplyThereminRelease,
   shouldArmDirectMoon,
@@ -805,4 +806,30 @@ test("a touch target refuses to be sized from nonsense", () => {
     () => systemTouchRadius({ bodyRadius: 0.1, pixelsPerWorldUnit: 40, minimumPixels: 0 }),
     /positive minimum/,
   );
+});
+
+test("a tall frame looks further down onto a visited system than a wide one", () => {
+  // A planetary system is a flat disc, so the angle decides how much of the
+  // picture it occupies. The fit solves for width — measured on a 390 by 844
+  // phone at 38 degrees, the system filled 85% of the width and 24% of the
+  // height and floated in an empty column.
+  const laptop = visitedSystemElevation(1440 / 900);
+  const phone = visitedSystemElevation(390 / 844);
+  assert.ok(Math.abs(laptop - (38 * Math.PI) / 180) < 1e-9, "a wide frame keeps the low angle");
+  assert.ok(phone > laptop, "a tall frame looks further down");
+  assert.ok(phone < (75 * Math.PI) / 180, "never overhead — a disc seen from above is a diagram");
+
+  // How much of the frame that actually buys, at the solved fit distance.
+  const share = (aspect, height) => {
+    const distance = visitedSystemCameraDistance(4.2, aspect);
+    const halfFrame = Math.tan((52 * Math.PI) / 360) * distance;
+    return (4.2 * Math.sin(visitedSystemElevation(aspect))) / halfFrame;
+  };
+  assert.ok(share(390 / 844) > 0.33, `portrait fills ${(share(390 / 844) * 100).toFixed(0)}% of the height`);
+  assert.ok(share(1440 / 900) > 0.33, "and a laptop still does too");
+});
+
+test("a visited system's elevation refuses a frame it cannot read", () => {
+  assert.throws(() => visitedSystemElevation(0), /finite aspect/);
+  assert.throws(() => visitedSystemElevation(Number.NaN), /finite aspect/);
 });

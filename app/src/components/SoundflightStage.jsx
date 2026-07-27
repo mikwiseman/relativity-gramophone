@@ -3976,6 +3976,9 @@ export function SoundflightStage(props) {
         const direction = cosmicCameraDirection(
           runtime.focusedSystemId ? "visitedSystem" : semanticScaleId,
           now,
+          renderer.domElement.clientHeight > 0
+            ? renderer.domElement.clientWidth / renderer.domElement.clientHeight
+            : null,
         );
         const viewDirection = new THREE.Vector3(direction.x, direction.y, direction.z);
         runtime.editorialCameraPosition.copy(runtime.editorialCameraTarget).addScaledVector(viewDirection, desiredDistance);
