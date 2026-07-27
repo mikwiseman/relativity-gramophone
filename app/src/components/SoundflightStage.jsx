@@ -1918,6 +1918,11 @@ export function SoundflightStage(props) {
       antialias: true,
       alpha: false,
       powerPreference: "high-performance",
+      // Development only, so the picture can be measured rather than argued
+      // about: without this the drawing buffer is cleared after every
+      // composite, and `__rgBeauty` reads back an empty frame. It costs a copy
+      // per frame, which is why the shipped instrument does not pay it.
+      preserveDrawingBuffer: import.meta.env.DEV,
     });
     renderer.setClearColor(0x030303, 1);
     MAX_ANISOTROPY = renderer.capabilities.getMaxAnisotropy();
@@ -3795,7 +3800,13 @@ export function SoundflightStage(props) {
             runtime.focusedSystemId = landmark.id;
             runtime.authoredCameraDistance = COSMIC_DESTINATIONS.system.distance;
             runtime.authoredScaleId = "system";
-            runtime.cameraJourneyTargetId = null;
+            // A flight still in the air is being sent somewhere else, so it can
+            // never report that it settled. Say so, or the interface waits for
+            // an arrival that will not come and keeps FLY and STARS disabled.
+            if (runtime.cameraJourneyTargetId) {
+              runtime.cameraJourneyTargetId = null;
+              currentProps.onCameraNavigate({ type: "superseded" });
+            }
             runtime.compositionZoom = 1;
             runtime.resettingCamera = true;
           }

@@ -41,6 +41,7 @@ import {
   thereminParameters,
 } from "./lib/cosmicInstrument.js";
 import { periodFromReference } from "./lib/cosmicAtlas.js";
+import { IDLE_JOURNEY, nextJourneyState } from "./lib/cosmicJourney.js";
 import { COSMIC_VOICES, hapticPattern, voiceParameters } from "./lib/sonification.js";
 import {
   frequencyToNoteName,
@@ -116,8 +117,9 @@ export function App() {
   const [shellIndex, setShellIndex] = useState(0);
   const [guestWorlds, setGuestWorlds] = useState(() => new Map());
   const [guestPreview, setGuestPreview] = useState(null);
-  const [journeyTarget, setJourneyTarget] = useState(null);
-  const [arrivalTarget, setArrivalTarget] = useState(null);
+  const [journey, setJourney] = useState(IDLE_JOURNEY);
+  const journeyTarget = journey.journeyTarget;
+  const arrivalTarget = journey.arrivalTarget;
   const [interactionMode, setInteractionMode] = useState("compose");
   const [hasPluckedOrbit, setHasPluckedOrbit] = useState(false);
   const [thereminPhase, setThereminPhase] = useState("idle");
@@ -208,10 +210,9 @@ export function App() {
     physicsFrameRef.current = null;
     eventCountRef.current = nextComposition.events.length;
     setSonicCue("");
-    setJourneyTarget(null);
+    setJourney((current) => nextJourneyState(current, { type: "reset" }));
     journeyTargetRef.current = null;
     window.clearTimeout(arrivalTimeoutRef.current);
-    setArrivalTarget(null);
     setInteractionMode("compose");
     setHasPluckedOrbit(false);
     setHasPlayedTheremin(false);
@@ -558,19 +559,20 @@ export function App() {
   }, []);
 
   const handleCameraNavigate = useCallback((event) => {
-    if (event?.type === "manual") {
+    if (event?.type === "manual" || event?.type === "superseded") {
       journeyTargetRef.current = null;
-      setJourneyTarget(null);
       window.clearTimeout(arrivalTimeoutRef.current);
-      setArrivalTarget(null);
+      setJourney((current) => nextJourneyState(current, { type: event.type }));
       return;
     }
     if (event?.type !== "settled" || journeyTargetRef.current !== event.targetId) return;
     journeyTargetRef.current = null;
-    setJourneyTarget(null);
-    setArrivalTarget(event.targetId);
+    setJourney((current) => nextJourneyState(current, { type: "settled", targetId: event.targetId }));
     window.clearTimeout(arrivalTimeoutRef.current);
-    arrivalTimeoutRef.current = window.setTimeout(() => setArrivalTarget(null), 2400);
+    arrivalTimeoutRef.current = window.setTimeout(
+      () => setJourney((current) => nextJourneyState(current, { type: "arrival-expired" })),
+      2400,
+    );
     announceSonicCue(`ARRIVED · ${cosmicDestination(event.targetId).label}`, 2400);
   }, [announceSonicCue]);
 
@@ -683,9 +685,8 @@ export function App() {
     setSelectedBodyId(null);
     if (targetId !== "neighborhood") setShellIndex(0);
     window.clearTimeout(arrivalTimeoutRef.current);
-    setArrivalTarget(null);
     journeyTargetRef.current = targetId;
-    setJourneyTarget(targetId);
+    setJourney((current) => nextJourneyState(current, { type: "travel", targetId }));
     setInteractionMode("compose");
     setCameraCommand((current) => ({
       id: current.id + 1,
@@ -819,6 +820,12 @@ export function App() {
       await startAudio(true);
       audioRef.current.playCosmicLandmark(landmark);
       if (landmark.system) {
+        // Entering a system supersedes any flight still in the air. The camera
+        // is being sent somewhere else, so the flight can never report that it
+        // arrived — and FLY and STARS are disabled until it does.
+        journeyTargetRef.current = null;
+        window.clearTimeout(arrivalTimeoutRef.current);
+        setJourney((current) => nextJourneyState(current, { type: "superseded" }));
         setVisitedSystemId(landmark.id);
         setSelectedBodyId(null);
         setCameraCommand((current) => ({
