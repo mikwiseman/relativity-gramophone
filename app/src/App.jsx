@@ -16,6 +16,7 @@ import { SoundflightStage } from "./components/SoundflightStage.jsx";
 import { AudioEngine } from "./lib/audioEngine.js";
 import {
   createBlankComposition,
+  createDefaultComposition,
   createReplyComposition,
   getPresentationTheme,
   MAX_SCORE_EVENTS,
@@ -39,6 +40,7 @@ import {
   NEIGHBOURHOOD_SHELLS,
   thereminParameters,
 } from "./lib/cosmicInstrument.js";
+import { periodFromReference } from "./lib/cosmicAtlas.js";
 import { COSMIC_VOICES, hapticPattern, voiceParameters } from "./lib/sonification.js";
 import {
   frequencyToNoteName,
@@ -80,7 +82,12 @@ function bodyLabel(body) {
 
 export function App() {
   const initial = useMemo(readInitialScore, []);
-  const [composition, setComposition] = useState(initial.score ?? createBlankComposition);
+  // The instrument opens with worlds already turning. A star alone is not an
+  // instrument: it has no strings to pluck, no orbits to touch and nothing to
+  // hear, and "there is effectively only one planetary system" is a fair
+  // description of that first frame. The core trio AGENTS.md calls permanent
+  // is what the blank variant was deleting.
+  const [composition, setComposition] = useState(initial.score ?? createDefaultComposition);
   const [isListener, setIsListener] = useState(Boolean(initial.score));
   const [isPlaying, setIsPlaying] = useState(
     initial.score || initial.storedId ? false : INITIAL_PLAYBACK,
@@ -107,6 +114,8 @@ export function App() {
   const [cosmicScale, setCosmicScale] = useState(() => cosmicScaleForDistance(10));
   const [visitedSystemId, setVisitedSystemId] = useState(null);
   const [shellIndex, setShellIndex] = useState(0);
+  const [guestWorlds, setGuestWorlds] = useState(() => new Map());
+  const [guestPreview, setGuestPreview] = useState(null);
   const [journeyTarget, setJourneyTarget] = useState(null);
   const [arrivalTarget, setArrivalTarget] = useState(null);
   const [interactionMode, setInteractionMode] = useState("compose");
@@ -310,7 +319,11 @@ export function App() {
           : "HOLD THE STAR · PULL OUTWARD · RELEASE"
         : "TOUCH A BRIGHT REGION TO HEAR IT"
     : visitedSystem
-      ? `TOUCH A WORLD TO HEAR ITS YEAR · TOUCH THE STAR FOR ALL ${visitedSystem.system.worlds}`
+      ? guestPreview
+        ? `YOUR WORLD AT ${guestPreview.orbitAu < 0.1
+            ? guestPreview.orbitAu.toFixed(3)
+            : guestPreview.orbitAu.toFixed(2)} AU · RELEASE TO HEAR IT`
+        : `TOUCH A WORLD TO HEAR ITS YEAR · DRAG FROM THE STAR TO ADD YOUR OWN`
     : isAwaitingCosmicScore
         ? "LISTEN · THE CAMERA FOLLOWS EACH COSMIC VOICE"
       : inNeighbourhood
@@ -829,6 +842,52 @@ export function App() {
     }
   }, [announceSonicCue, startAudio]);
 
+  /**
+   * A world the player adds to a real system.
+   *
+   * Its period comes from that system's own Kepler constant, inverted from one
+   * of its measured worlds, so no stellar mass is assumed and the answer is
+   * exact. It joins the system's chord at the pitch its period earns — which is
+   * the whole point: you can hear where a world of your own would sit inside
+   * TRAPPIST-1's rhythm.
+   */
+  const handleGuestWorld = useCallback(async ({ landmark, orbitAu }) => {
+    try {
+      const reference = landmark.system.bodies[0];
+      const periodDays = periodFromReference(orbitAu, reference);
+      const index = (guestWorlds.get(landmark.id)?.length ?? 0) + 1;
+      const world = Object.freeze({
+        id: `${landmark.id}-yours-${index}`,
+        name: `YOUR WORLD ${index}`,
+        kind: "planet",
+        periodDays,
+        orbitAu,
+        radiusEarth: 1,
+        eccentricity: 0,
+        guest: true,
+      });
+      setGuestWorlds((current) => {
+        const next = new Map(current);
+        next.set(landmark.id, [...(current.get(landmark.id) ?? []), world]);
+        return next;
+      });
+      await startAudio(true);
+      const bodies = [...landmark.system.bodies, world]
+        .sort((first, second) => first.periodDays - second.periodDays);
+      audioRef.current.playSystemWorld(
+        { ...landmark, system: { ...landmark.system, bodies } },
+        world.id,
+      );
+      const year = periodDays >= 365
+        ? `${(periodDays / 365.25).toFixed(1)} YEARS`
+        : `${periodDays >= 10 ? periodDays.toFixed(0) : periodDays.toFixed(1)} DAYS`;
+      announceSonicCue(`YOUR WORLD IN ${landmark.name} · ${year}`, 3000);
+      performHaptic({ kind: "birth", strength: 0.7 });
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : "That world could not form");
+    }
+  }, [announceSonicCue, guestWorlds, performHaptic, startAudio]);
+
   /** One world of a visited system, touched on its own. */
   const handleSystemWorldAudition = useCallback(async ({ landmark, planetId }) => {
     try {
@@ -1277,6 +1336,9 @@ export function App() {
         onCameraScale={setCameraScale}
         onCosmicAudition={handleCosmicAudition}
         onSystemWorldAudition={handleSystemWorldAudition}
+        onGuestWorld={handleGuestWorld}
+        onGuestOrbitPreview={setGuestPreview}
+        guestWorlds={guestWorlds}
         onCosmicScale={handleCosmicScale}
         onConsumptionBloom={handleConsumptionBloom}
         onElapsed={handleElapsed}

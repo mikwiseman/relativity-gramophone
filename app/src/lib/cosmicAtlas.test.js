@@ -7,9 +7,12 @@ import {
   habitableZone,
   logSpiralRadius,
   planetAppearance,
+  expandedOrbitAu,
+  periodFromReference,
   systemVoiceFrequencies,
   systemWorldVoice,
 } from "./cosmicAtlas.js";
+import { STAR_SYSTEMS } from "./starSystems.js";
 
 function channels(hex) {
   return {
@@ -152,26 +155,72 @@ test("a whole system is transposed by one shared octave shift, so slower really 
   );
 });
 
-test("a system too wide for one register folds only its extremes, by whole octaves", () => {
-  const solarPeriods = [87.969, 224.701, 365.256, 686.98, 4332.59, 10_759.22, 30_685.4, 60_189];
-  const voices = systemVoiceFrequencies(solarPeriods);
+test("slower is always deeper — in every system in the catalogue, without exception", () => {
+  // The law the instrument states about itself. Folding each voice back into
+  // the register one octave at a time broke it in the most recognisable place
+  // there is: in THE SUN, Earth came out above Venus.
+  const solarPeriods = [87.969, 224.701, 365.256, 686.98, 4332.82, 10_755.699, 30_687.153, 60_190.03];
+  const check = (name, periods) => {
+    const voices = systemVoiceFrequencies(periods);
+    for (const frequency of voices) {
+      assert.ok(frequency >= 55 && frequency <= 1760, `${name}: no world escapes the audible span`);
+    }
+    for (let index = 1; index < voices.length; index += 1) {
+      assert.ok(
+        voices[index] < voices[index - 1],
+        `${name}: world ${index} is slower than world ${index - 1} and must sound lower`,
+      );
+    }
+  };
 
-  for (const frequency of voices) {
-    assert.ok(frequency >= 55 && frequency <= 1760, "no planet escapes the audible span");
+  check("THE SUN", solarPeriods);
+  for (const system of STAR_SYSTEMS) {
+    check(system.name, system.bodies.map((body) => body.periodDays));
   }
-  const foldedRatio = voices[0] / voices[2];
-  const trueRatio = solarPeriods[2] / solarPeriods[0];
-  const octaves = Math.log2(trueRatio / foldedRatio);
-  assert.ok(
-    Math.abs(octaves - Math.round(octaves)) < 1e-9,
-    "any correction is a whole number of octaves, so the interval survives",
-  );
+
+  // A system that fits the register keeps its intervals exactly, because it is
+  // only ever moved by whole octaves.
+  const trappist = [1.510826, 2.421937, 4.049219, 6.101013, 9.20754, 12.352446, 18.772866];
+  const chain = systemVoiceFrequencies(trappist);
+  assert.ok(Math.abs(chain[0] / chain[1] - trappist[1] / trappist[0]) < 1e-9);
+
+  // A system too wide to fit is compressed, and the compression is one shared
+  // logarithmic factor rather than eight arbitrary wraps: every interval is
+  // reduced by the same power, so their ORDER and relative sizes survive.
+  const solar = systemVoiceFrequencies(solarPeriods);
+  const power = (a, b) => Math.log2(solar[a] / solar[b])
+    / Math.log2(solarPeriods[b] / solarPeriods[a]);
+  assert.ok(Math.abs(power(0, 2) - power(4, 7)) < 1e-9, "one shared compression, not many");
 });
 
 test("system voices refuse impossible periods", () => {
   assert.throws(() => systemVoiceFrequencies([]), /at least one period/i);
   assert.throws(() => systemVoiceFrequencies([0]), /positive period/i);
   assert.throws(() => systemVoiceFrequencies([Number.NaN]), /positive period/i);
+});
+
+test("a world added to a real system obeys that system's own Kepler constant", () => {
+  const earth = { orbitAu: 1, periodDays: 365.256 };
+  // Mars: 1.5237 AU should come back as 686.9 days from Earth alone.
+  assert.ok(Math.abs(periodFromReference(1.52371034, earth) - 686.98) < 1.5);
+  // Jupiter, five astronomical units out and two orders of magnitude slower.
+  assert.ok(Math.abs(periodFromReference(5.202887, earth) - 4332.82) < 12);
+  // Doubling the axis multiplies the period by exactly 2^1.5, whatever the star.
+  const dwarf = { orbitAu: 0.02, periodDays: 4 };
+  assert.ok(Math.abs(periodFromReference(0.04, dwarf) - 4 * 2 ** 1.5) < 1e-9);
+  assert.throws(() => periodFromReference(0, earth), /positive semi-major axis/i);
+  assert.throws(() => periodFromReference(1, { orbitAu: 1 }), /positive period/i);
+
+  // A finger on the screen has to land in astronomical units.
+  const band = { minimumAu: 0.01, maximumAu: 30, innerRadius: 1.1, outerRadius: 4.2 };
+  for (const au of [0.01, 0.4, 3.2, 30]) {
+    const drawn = compressedOrbitRadius(au, band);
+    assert.ok(Math.abs(expandedOrbitAu(drawn, band) - au) < au * 1e-9, `${au} AU round-trips`);
+  }
+  assert.throws(
+    () => expandedOrbitAu(2, { ...band, outerRadius: 0 }),
+    /finite drawable band/i,
+  );
 });
 
 test("a single world can be sounded out of its own system, at its own place in the chord", () => {

@@ -325,13 +325,25 @@ test("touching a real system plays a chord that falls as the orbits widen", () =
     const periods = landmark.system.bodies.map((body) => body.periodDays);
     const voices = systemVoiceFrequencies(periods);
 
+    // The law, in the order it matters: a slower world always sounds lower.
     for (let index = 1; index < voices.length; index += 1) {
-      const octaves = Math.log2((voices[index - 1] / voices[index])
-        / (periods[index] / periods[index - 1]));
       assert.ok(
-        Math.abs(octaves - Math.round(octaves)) < 1e-9,
-        `${landmark.name} must keep every interval a real period ratio`,
+        voices[index] < voices[index - 1],
+        `${landmark.name}: a wider orbit must be a deeper voice`,
       );
+    }
+    // A system narrow enough to fit the register is only ever moved by whole
+    // octaves, so its intervals arrive exactly as measured.
+    const span = Math.log2(Math.max(...periods) / Math.min(...periods));
+    if (span <= Math.log2(1760 / 55)) {
+      for (let index = 1; index < voices.length; index += 1) {
+        const octaves = Math.log2((voices[index - 1] / voices[index])
+          / (periods[index] / periods[index - 1]));
+        assert.ok(
+          Math.abs(octaves - Math.round(octaves)) < 1e-9,
+          `${landmark.name} must keep every interval a real period ratio`,
+        );
+      }
     }
     for (const frequency of voices) {
       assert.ok(frequency >= 55 && frequency <= 1760, `${landmark.name} stays audible`);

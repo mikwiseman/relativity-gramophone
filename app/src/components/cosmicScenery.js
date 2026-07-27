@@ -64,6 +64,12 @@ function createHazeTexture(innerAlpha, outerStop) {
   return texture;
 }
 
+let MAX_ANISOTROPY = 8;
+/** Texture filtering can only ask for what this GPU actually has. */
+export function setMaxAnisotropy(value) {
+  if (Number.isFinite(value) && value >= 1) MAX_ANISOTROPY = value;
+}
+
 let sharedHaze = null;
 function hazeTexture() {
   if (!sharedHaze) sharedHaze = createHazeTexture(0.85, 0.32);
@@ -291,11 +297,15 @@ function createStarBall(temperature, drawnRadius, radialTexture, innermostOrbit 
     map: radialTexture,
     color,
     transparent: true,
+    // Light in front of a body is still light: a glow is never occluded by the
+    // thing it belongs to.
+    depthTest: false,
     opacity: 0.9,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     toneMapped: false,
   }));
+  glow.renderOrder = 3;
   glow.scale.setScalar(Math.min(drawnRadius * 5.4, innermostOrbit * 0.82));
   group.add(glow);
 
@@ -303,11 +313,15 @@ function createStarBall(temperature, drawnRadius, radialTexture, innermostOrbit 
     map: radialTexture,
     color,
     transparent: true,
+    // Light in front of a body is still light: a glow is never occluded by the
+    // thing it belongs to.
+    depthTest: false,
     opacity: 0.26,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
     toneMapped: false,
   }));
+  corona.renderOrder = 2;
   corona.scale.setScalar(Math.min(drawnRadius * 13, innermostOrbit * 1.55));
   group.add(corona);
 
@@ -487,10 +501,14 @@ function createPlanetLabelTexture(planet, appearance) {
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.minFilter = THREE.LinearFilter;
+  // A name is drawn three to four times smaller than its canvas. Without a
+  // mipmap chain that is point sampling, and a serif stem lands as a hard
+  // on/off column of pixels — the one thing on screen whose correct appearance
+  // the eye already knows, arriving wrong.
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
-  texture.generateMipmaps = false;
-  texture.anisotropy = 8;
+  texture.anisotropy = MAX_ANISOTROPY;
   return texture;
 }
 
@@ -572,7 +590,7 @@ export function createStarSystemObject(system, {
   // fireflies": nothing about a world's size meant anything.
   const largestEarthRadii = Math.max(...planets.map((planet) => planet.radiusEarth));
 
-  const worlds = planets.map((planet) => {
+  const makeWorld = (planet) => {
     const drawnRadius = compressedOrbitRadius(planet.orbitAu, {
       minimumAu,
       maximumAu,
@@ -637,11 +655,13 @@ export function createStarSystemObject(system, {
       map: neutralHaloTexture(),
       color,
       transparent: true,
+      depthTest: false,
       opacity: 0,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
       toneMapped: false,
     }));
+    halo.renderOrder = 3;
     halo.scale.setScalar(bodyRadius * 3.1);
     group.add(halo);
 
@@ -649,7 +669,12 @@ export function createStarSystemObject(system, {
     // pixels wide without having to be surgical about it.
     const touchArea = new THREE.Mesh(
       new THREE.SphereGeometry(Math.max(bodyRadius * 3.4, 0.14), 12, 10),
-      new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+      new THREE.MeshBasicMaterial({
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        colorWrite: false,
+      }),
     );
     touchArea.userData.systemPlanetId = planet.id;
     touchArea.frustumCulled = false;
@@ -704,7 +729,9 @@ export function createStarSystemObject(system, {
       phase: random() * Math.PI * 2,
       impulse: 0,
     };
-  });
+  };
+
+  const worlds = planets.map(makeWorld);
 
   const fastestPeriod = Math.min(...planets.map((planet) => planet.periodDays));
   // A system spanning Mercury to Neptune covers 684:1 in period. Anchoring the
@@ -720,12 +747,28 @@ export function createStarSystemObject(system, {
   );
   let elapsed = 0;
   let starImpulse = 0;
+  let lastResolution = null;
 
-  return {
+  const api = {
     group,
     star,
     worlds,
     habitableBand,
+    band: Object.freeze({ minimumAu, maximumAu, innerRadius, outerRadius }),
+    /**
+     * A world the player adds to a real system. It keeps its own voice colour
+     * rather than a measured class colour, because it is not a measurement:
+     * everything else in this sky was observed, and this one was made.
+     */
+    addWorld(planet) {
+      const world = makeWorld(planet);
+      worlds.push(world);
+      api.worldById.set(planet.id, world);
+      api.touchAreas.push(world.touchArea);
+      if (lastResolution) world.orbit.material.resolution.set(lastResolution.width, lastResolution.height);
+      world.impulse = 1;
+      return world;
+    },
     worldById: new Map(worlds.map((world) => [world.planet.id, world])),
     /**
      * Names are drawn in world units, so a phone standing twice as far back to
@@ -810,6 +853,7 @@ export function createStarSystemObject(system, {
       }
     },
     setResolution(width, height) {
+      lastResolution = { width, height };
       for (const world of worlds) world.orbit.material.resolution.set(width, height);
     },
     strike(planetId) {
@@ -841,4 +885,5 @@ export function createStarSystemObject(system, {
       habitableBand.material.dispose();
     },
   };
+  return api;
 }

@@ -56,8 +56,10 @@ import { galaxyArmGeometry } from "../lib/galaxyShape.js";
 import {
   createGalaxyObject,
   createStarSystemObject,
+  setMaxAnisotropy,
   VISITED_SYSTEM_OUTER_RADIUS,
 } from "./cosmicScenery.js";
+import { expandedOrbitAu } from "../lib/cosmicAtlas.js";
 import {
   birthSatelliteFromRadialLaunch,
   satelliteStabilityBand,
@@ -161,6 +163,8 @@ function seededRandom(seed) {
     return ((next ^ (next >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+let MAX_ANISOTROPY = 8;
 
 function createRadialTexture() {
   const size = 256;
@@ -707,6 +711,7 @@ function createStarVisual(solarTexture, radialTexture) {
       transparent: true,
       opacity: 0,
       depthWrite: false,
+      colorWrite: false,
     }),
   );
   group.add(hitArea);
@@ -956,9 +961,14 @@ function createLandmarkLabelTexture(landmark) {
   context.fillText(landmark.detail, canvas.width / 2, 112);
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  texture.minFilter = THREE.LinearFilter;
+  // A name is drawn three to four times smaller than its canvas. Without a
+  // mipmap chain that is point sampling, and a serif stem lands as a hard
+  // on/off column of pixels — the one thing on screen whose correct appearance
+  // the eye already knows, arriving wrong.
+  texture.generateMipmaps = true;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.magFilter = THREE.LinearFilter;
-  texture.generateMipmaps = false;
+  texture.anisotropy = MAX_ANISOTROPY;
   return texture;
 }
 
@@ -999,6 +1009,10 @@ function createCosmicLandmarkVisual(landmark, radialTexture) {
     opacity: 0.001,
     depthWrite: false,
     depthTest: false,
+    // An untextured sprite is a solid quad, and linear 0.001 survives the tone
+    // curve at about 3/255 — so every named light in every sky was wearing a
+    // faintly lit rectangle. Raycasting reads layers, never colorWrite.
+    colorWrite: false,
   }));
   const hitScale = {
     neighborhood: 3.4,
@@ -1906,6 +1920,8 @@ export function SoundflightStage(props) {
       powerPreference: "high-performance",
     });
     renderer.setClearColor(0x030303, 1);
+    MAX_ANISOTROPY = renderer.capabilities.getMaxAnisotropy();
+    setMaxAnisotropy(MAX_ANISOTROPY);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.12;
@@ -2093,6 +2109,7 @@ export function SoundflightStage(props) {
       pendingBodyTap: null,
       pendingCosmicTap: null,
       pendingSystemWorldTap: null,
+      guestBirth: null,
       activeTouchPointers: new Set(),
       cancelledPointerIds: new Set(),
       cosmicScale: cosmicScaleForDistance(camera.position.distanceTo(controls.target)),
@@ -2695,6 +2712,7 @@ export function SoundflightStage(props) {
       runtime.pendingBodyTap = null;
       runtime.pendingCosmicTap = null;
       runtime.pendingSystemWorldTap = null;
+      runtime.guestBirth = null;
       directPointerIds.forEach(releaseCapturedPointer);
       controls.enabled = true;
     };
@@ -2755,7 +2773,37 @@ export function SoundflightStage(props) {
         }
         return;
       }
-      if (runtime.focusedSystemId) return;
+      // Inside a visited system the star is still the place worlds come from.
+      // Dragging outward from it adds YOUR world to a real one, and hears where
+      // it lands in that system's chord — the same gesture as at home, in a
+      // sky you travelled to.
+      if (runtime.focusedSystemId) {
+        if (propsRef.current.isListener || propsRef.current.interactionMode !== "compose") return;
+        const visual = cosmicLandmarkField.byId.get(runtime.focusedSystemId);
+        const system = visual?.nearbySystem;
+        if (!system) return;
+        const point = intersectPlane(event);
+        if (!point) return;
+        const grip = Math.hypot(
+          point.x - visual.group.position.x,
+          point.z - visual.group.position.z,
+        );
+        if (grip > system.band.innerRadius * 0.86) return;
+        if (event.pointerType !== "touch") {
+          event.stopImmediatePropagation();
+          capturePointer(event.pointerId);
+        }
+        runtime.guestBirth = {
+          landmarkId: runtime.focusedSystemId,
+          pointerId: event.pointerId,
+          pointerType: event.pointerType,
+          startScreen: eventPoint(event, renderer.domElement),
+          radius: system.band.innerRadius,
+          active: false,
+        };
+        controls.enabled = false;
+        return;
+      }
       if (propsRef.current.interactionMode === "explore") return;
       const bodyId = hitBody(event);
       const engine = engineRef.current;
@@ -2869,6 +2917,34 @@ export function SoundflightStage(props) {
           screen.y - pending.startScreen.y,
         );
         if (traveled > CREATION_DRAG_THRESHOLD) runtime[pendingKey] = null;
+      }
+      if (runtime.guestBirth) {
+        const visual = cosmicLandmarkField.byId.get(runtime.guestBirth.landmarkId);
+        const system = visual?.nearbySystem;
+        const point = system ? intersectPlane(event) : null;
+        if (point) {
+          const reach = Math.hypot(
+            point.x - visual.group.position.x,
+            point.z - visual.group.position.z,
+          );
+          runtime.guestBirth.radius = clamp(
+            reach,
+            system.band.innerRadius * 0.62,
+            system.band.outerRadius * 1.28,
+          );
+          const screen = eventPoint(event, renderer.domElement);
+          runtime.guestBirth.active = Math.hypot(
+            screen.x - runtime.guestBirth.startScreen.x,
+            screen.y - runtime.guestBirth.startScreen.y,
+          ) > CREATION_DRAG_THRESHOLD;
+          if (runtime.guestBirth.active) {
+            propsRef.current.onGuestOrbitPreview({
+              landmarkId: runtime.guestBirth.landmarkId,
+              orbitAu: expandedOrbitAu(runtime.guestBirth.radius, system.band),
+            });
+          }
+        }
+        return;
       }
       if (runtime.theremin) {
         const screen = eventPoint(event, renderer.domElement);
@@ -3043,6 +3119,19 @@ export function SoundflightStage(props) {
         }
         return;
       }
+      if (runtime.guestBirth?.pointerId === event.pointerId) {
+        const birth = runtime.guestBirth;
+        runtime.guestBirth = null;
+        controls.enabled = true;
+        releaseCapturedPointer(event.pointerId);
+        propsRef.current.onGuestOrbitPreview(null);
+        const visual = cosmicLandmarkField.byId.get(birth.landmarkId);
+        const system = visual?.nearbySystem;
+        if (!birth.active || !system) return;
+        const orbitAu = expandedOrbitAu(birth.radius, system.band);
+        propsRef.current.onGuestWorld({ landmark: visual.landmark, orbitAu });
+        return;
+      }
       if (runtime.pendingSystemWorldTap?.pointerId === event.pointerId) {
         const { world } = runtime.pendingSystemWorldTap;
         runtime.pendingSystemWorldTap = null;
@@ -3115,6 +3204,10 @@ export function SoundflightStage(props) {
           propsRef.current.onLaunchComplete(spec.id);
         } catch (error) {
           propsRef.current.onBirthRefused(error instanceof Error ? error.message : "The world could not be born");
+        } else {
+          // A short tap on the star used to return literal silence, which reads
+          // as a broken instrument rather than as an unfinished gesture.
+          propsRef.current.onBirthRefused("Pull outward from the star, then let go — the distance chooses the note.");
         }
       }
       if (runtime.pluck) {
@@ -3521,6 +3614,20 @@ export function SoundflightStage(props) {
           ? cosmicLandmarkField.byId.get("milky-way")?.group.position
           : null,
       );
+      // Worlds the player has added to real systems live in React state so the
+      // score can carry them; the scene adopts each one exactly once.
+      const guestWorlds = propsRef.current.guestWorlds;
+      if (guestWorlds && guestWorlds.size > 0) {
+        for (const [landmarkId, worlds] of guestWorlds) {
+          const visual = cosmicLandmarkField.byId.get(landmarkId);
+          const system = visual?.ensureSystem(cosmicLandmarkField.resolution);
+          if (!system) continue;
+          for (const world of worlds) {
+            if (system.worldById.has(world.id)) continue;
+            system.addWorld(world);
+          }
+        }
+      }
       updateCosmicLandmarkField(
         cosmicLandmarkField,
         runtime.cosmicScale,
@@ -3784,10 +3891,15 @@ export function SoundflightStage(props) {
       // galaxy itself is the subject.
       const ownSystemVisible = !runtime.focusedSystemId
         && runtime.cosmicScale.systemMix > 0.14;
+      // Your star stays visible among the nearby suns as the anchor you flew
+      // from — but only as a star. Its worlds, their strings and any resonance
+      // it has earned belong to the system scale; drawn out here they overlap
+      // the real systems you came to look at, at their own full size.
+      const ownWorldsVisible = ownSystemVisible && runtime.cosmicScale.systemMix > 0.72;
       starVisual.group.visible = ownSystemVisible;
       for (const visual of runtime.bodyVisuals.values()) {
-        visual.group.visible = ownSystemVisible;
-        if (!ownSystemVisible) {
+        visual.group.visible = ownWorldsVisible;
+        if (!ownWorldsVisible) {
           visual.orbitString.visible = false;
           visual.notePulse.visible = false;
         }
@@ -3795,12 +3907,14 @@ export function SoundflightStage(props) {
       // Everything the player's own composition draws belongs to the player's
       // own system. Left on, a resonance bridge and two orbit strings hang
       // across the Milky Way as ghost geometry from a scale you have left.
-      if (!ownSystemVisible) {
+      if (!ownWorldsVisible) {
         harmonicKnot.visible = false;
         ribbonTrail.group.visible = false;
         particleCloud.visible = false;
         launchPreview.group.visible = false;
         moonPreview.group.visible = false;
+        resonanceCathedral.group.visible = false;
+        memoryComet.group.visible = false;
       }
 
       composer.render(delta);

@@ -135,6 +135,38 @@ export function compressedOrbitRadius(au, { minimumAu, maximumAu, innerRadius, o
 }
 
 /**
+ * Turn a drawn radius back into a real semi-major axis, inverting
+ * `compressedOrbitRadius`. A finger lands on the screen; the world it makes has
+ * to land in astronomical units.
+ */
+export function expandedOrbitAu(radius, { minimumAu, maximumAu, innerRadius, outerRadius }) {
+  assertPositive(minimumAu, "Orbit expansion requires a positive minimum semi-major axis");
+  assertPositive(maximumAu, "Orbit expansion requires a positive maximum semi-major axis");
+  if (!Number.isFinite(radius) || !Number.isFinite(innerRadius)
+    || !Number.isFinite(outerRadius) || outerRadius <= innerRadius) {
+    throw new Error("Orbit expansion requires a finite drawable band");
+  }
+  if (minimumAu === maximumAu) return minimumAu;
+  const progress = (radius - innerRadius) / (outerRadius - innerRadius);
+  return Math.exp(Math.log(minimumAu) + progress * (Math.log(maximumAu) - Math.log(minimumAu)));
+}
+
+/**
+ * The period a new world would keep at `orbitAu` around a star we know only
+ * through one of its own worlds.
+ *
+ * Kepler's third law says P² is proportional to a³ over the star's mass, so a
+ * system that already carries a measured world carries its own constant with
+ * it: no stellar mass is needed, and the answer is exact rather than modelled.
+ */
+export function periodFromReference(orbitAu, reference) {
+  assertPositive(orbitAu, "A period needs a positive semi-major axis in AU");
+  assertPositive(reference?.orbitAu, "A reference world needs a positive semi-major axis");
+  assertPositive(reference?.periodDays, "A reference world needs a positive period");
+  return reference.periodDays * (orbitAu / reference.orbitAu) ** 1.5;
+}
+
+/**
  * A logarithmic spiral arm: r = r0 · e^(θ · tan i), where i is the measured
  * pitch angle. The Milky Way's arms sit near i = 12°.
  */
@@ -231,14 +263,51 @@ export function systemVoiceFrequencies(periodsDays) {
     return period * 86_400;
   });
 
-  const meanLogFrequency = seconds
-    .reduce((total, period) => total + Math.log2(1 / period), 0) / seconds.length;
-  const sharedShift = Math.round(Math.log2(VOICE_ANCHOR) - meanLogFrequency);
+  // One law carries every scale: the bigger and slower a thing is, the deeper
+  // it sounds. Folding each voice back into the register one octave at a time
+  // broke that law in the most recognisable place in the instrument — in THE
+  // SUN, Earth came out above Venus, and Uranus and Neptune above Saturn —
+  // because a wrap is not order-preserving.
+  //
+  // So the system is moved as a block. A span that already fits the register is
+  // shifted by a whole number of octaves, which leaves every interval exactly
+  // as measured. Only a system too wide to fit at all — the Solar System spans
+  // nine octaves — is compressed, and then logarithmically and uniformly about
+  // its own centre, so the ordering and the interval classes survive and the
+  // compression is one stated number rather than eight arbitrary wraps.
+  const logs = seconds.map((period) => Math.log2(1 / period));
+  const highest = Math.max(...logs);
+  const lowest = Math.min(...logs);
+  const span = highest - lowest;
+  // A hair inside the register rather than exactly on it: a system compressed
+  // to the boundary lands its extremes on 55 and 1760 to within floating-point
+  // error, and an instrument should not depend on which way that rounds.
+  const register = Math.log2(VOICE_HIGHEST / VOICE_LOWEST) * 0.98;
+  const centre = (highest + lowest) / 2;
+  const squeeze = span > register ? register / span : 1;
 
-  return seconds.map((period) => {
-    let frequency = (1 / period) * 2 ** sharedShift;
-    while (frequency > VOICE_HIGHEST) frequency /= 2;
-    while (frequency < VOICE_LOWEST) frequency *= 2;
-    return frequency;
-  });
+  const placed = logs.map((value) => centre + (value - centre) * squeeze);
+  const placedCentre = (Math.max(...placed) + Math.min(...placed)) / 2;
+  // Whole octaves whenever the system fits, so a real resonance arrives as a
+  // real interval. A compressed system is instead centred on the register's own
+  // middle, which is the only placement that needs no clamp — and a clamp would
+  // silently undo both the ordering and the single shared compression.
+  const floor = Math.log2(VOICE_LOWEST);
+  const ceiling = Math.log2(VOICE_HIGHEST);
+  const lowestPlaced = Math.min(...placed);
+  const highestPlaced = Math.max(...placed);
+  let shift;
+  if (squeeze === 1) {
+    // A whole number of octaves, chosen as near the anchor as the register
+    // allows: a system spanning four of the five available octaves has less
+    // slack than the rounding itself can consume, and rounding blindly walks
+    // its extremes out of hearing.
+    shift = Math.round(Math.log2(VOICE_ANCHOR) - placedCentre);
+    shift = Math.min(shift, Math.floor(ceiling - highestPlaced));
+    shift = Math.max(shift, Math.ceil(floor - lowestPlaced));
+  } else {
+    shift = (floor + ceiling) / 2 - placedCentre;
+  }
+
+  return placed.map((value) => 2 ** (value + shift));
 }
