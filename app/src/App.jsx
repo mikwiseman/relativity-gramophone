@@ -124,6 +124,7 @@ export function App() {
   const [hasPluckedOrbit, setHasPluckedOrbit] = useState(false);
   const [hasBornWorld, setHasBornWorld] = useState(false);
   const [hasBornMoon, setHasBornMoon] = useState(false);
+  const [heardSystemWorld, setHeardSystemWorld] = useState(false);
   const [thereminPhase, setThereminPhase] = useState("idle");
   const [hasPlayedTheremin, setHasPlayedTheremin] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -219,6 +220,7 @@ export function App() {
     setHasPluckedOrbit(false);
     setHasBornWorld(false);
     setHasBornMoon(false);
+    setHeardSystemWorld(false);
     setHasPlayedTheremin(false);
     setGuideOpen(false);
     setLightOpen(false);
@@ -338,6 +340,14 @@ export function App() {
         ? `YOUR WORLD AT ${guestPreview.orbitAu < 0.1
             ? guestPreview.orbitAu.toFixed(3)
             : guestPreview.orbitAu.toFixed(2)} AU · RELEASE TO HEAR IT`
+        // The one thing this place has that nowhere else has, under its name,
+        // until the player has touched a world for themselves. Thirty-six of
+        // these are authored in the data and not one had ever been rendered,
+        // so a child who flew to TRAPPIST-1 heard a chord, read a distance
+        // already printed under the star on the way in, and had no reason to
+        // go to a second system.
+        : !heardSystemWorld && visitedSystem.lesson
+          ? visitedSystem.lesson
         : `TOUCH A WORLD TO HEAR ITS YEAR · DRAG FROM THE STAR TO ADD YOUR OWN`
     : isAwaitingCosmicScore
         ? "LISTEN · THE CAMERA FOLLOWS EACH COSMIC VOICE"
@@ -842,6 +852,7 @@ export function App() {
         journeyTargetRef.current = null;
         window.clearTimeout(arrivalTimeoutRef.current);
         setJourney((current) => nextJourneyState(current, { type: "superseded" }));
+        setHeardSystemWorld(false);
         setVisitedSystemId(landmark.id);
         setSelectedBodyId(null);
         setCameraCommand((current) => ({
@@ -854,10 +865,8 @@ export function App() {
       setDialogOpen(false);
       setRuntimeError(null);
       announceSonicCue(
-        landmark.system
-          ? `${landmark.name} · ${landmark.system.label}`
-          : `${landmark.name} · ${landmark.detail}`,
-        2800,
+        `${landmark.name} · ${landmark.lesson ?? landmark.system?.label ?? landmark.detail}`,
+        3400,
       );
     } catch (error) {
       setAudioState("locked");
@@ -914,6 +923,7 @@ export function App() {
   /** One world of a visited system, touched on its own. */
   const handleSystemWorldAudition = useCallback(async ({ landmark, planetId }) => {
     try {
+      setHeardSystemWorld(true);
       await startAudio(true);
       const voice = audioRef.current.playSystemWorld(landmark, planetId);
       if (!voice) return;
