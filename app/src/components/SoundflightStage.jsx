@@ -629,20 +629,28 @@ function updateTrailLine(line, history, phase, intensity) {
 
 function createPlanetVisual(opalTexture, radialTexture, body) {
   const group = new THREE.Group();
+  // Every world the player makes used to be this one material with these exact
+  // constants, so a sky of five worlds was five copies of one object with five
+  // differently-coloured strings around them. A world's own voice now reaches
+  // its body: the opal keeps its lacquer character, but each world is tinted,
+  // lit and finished as its own thing.
+  const voice = voiceVisual(body.voice);
+  const skin = new THREE.Color(voice.color);
+  const seed = (stringSeed(body.id) % 1000) / 1000;
   const material = new THREE.MeshPhysicalMaterial({
-    color: 0xf5f0e8,
+    color: new THREE.Color(0xf5f0e8).lerp(skin, 0.42),
     map: opalTexture,
     emissiveMap: opalTexture,
-    emissive: new THREE.Color(0x6f8fac),
-    emissiveIntensity: 0.3,
-    roughness: 0.28,
+    emissive: skin.clone().multiplyScalar(0.5),
+    emissiveIntensity: 0.22 + seed * 0.2,
+    roughness: 0.18 + seed * 0.3,
     metalness: 0.03,
-    clearcoat: 0.84,
-    clearcoatRoughness: 0.16,
-    iridescence: 0.76,
-    iridescenceIOR: 1.48,
+    clearcoat: 0.5 + seed * 0.45,
+    clearcoatRoughness: 0.08 + seed * 0.2,
+    iridescence: 0.35 + seed * 0.6,
+    iridescenceIOR: 1.32 + seed * 0.3,
     transmission: 0.04,
-    envMapIntensity: 1.15,
+    envMapIntensity: 0.9 + seed * 0.5,
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 48), material);
   mesh.castShadow = false;
@@ -651,7 +659,7 @@ function createPlanetVisual(opalTexture, radialTexture, body) {
 
   const rim = new THREE.Sprite(new THREE.SpriteMaterial({
     map: radialTexture,
-    color: 0xbceef5,
+    color: voice.color,
     transparent: true,
     opacity: 0.18,
     depthWrite: false,
@@ -3713,6 +3721,7 @@ export function SoundflightStage(props) {
           ?? (runtime.cosmicScale.id === "orbit" ? "system" : runtime.cosmicScale.id);
         const direction = cosmicCameraDirection(
           runtime.focusedSystemId ? "visitedSystem" : semanticScaleId,
+          now,
         );
         const viewDirection = new THREE.Vector3(direction.x, direction.y, direction.z);
         runtime.editorialCameraPosition.copy(runtime.editorialCameraTarget).addScaledVector(viewDirection, desiredDistance);

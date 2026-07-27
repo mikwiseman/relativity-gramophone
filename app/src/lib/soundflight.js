@@ -570,15 +570,27 @@ const COSMIC_CAMERA_TARGET_OFFSETS = Object.freeze({
   universe: Object.freeze({ x: 0, y: 0, z: -10 }),
 });
 
-export function cosmicCameraDirection(scaleId) {
+export function cosmicCameraDirection(scaleId, seconds = 0) {
   const direction = COSMIC_CAMERA_DIRECTIONS[scaleId];
   if (!direction) throw new Error(`Unknown cosmic camera scale: ${scaleId}`);
-  const length = Math.hypot(direction.x, direction.y, direction.z);
-  return {
-    x: direction.x / length,
-    y: direction.y / length,
-    z: direction.z / length,
-  };
+  let { x, y, z } = direction;
+  // A frozen camera on coplanar ellipses is a diagram, however well it is lit.
+  // Parallax is the cue that tells an eye "this is a solid thing in space", and
+  // a few degrees of slow sway buys it for nothing. Only a system you are
+  // reading breathes; the composition camera stays where the player put it.
+  if (scaleId === "visitedSystem" && Number.isFinite(seconds)) {
+    const azimuth = Math.sin(seconds * 0.185) * 0.075;
+    const rise = Math.sin(seconds * 0.121 + 1.4) * 0.045;
+    const cos = Math.cos(azimuth);
+    const sin = Math.sin(azimuth);
+    const swungX = x * cos + z * sin;
+    const swungZ = z * cos - x * sin;
+    x = swungX;
+    z = swungZ;
+    y += rise;
+  }
+  const length = Math.hypot(x, y, z);
+  return { x: x / length, y: y / length, z: z / length };
 }
 
 export function cosmicCameraTarget(scaleId, starPosition) {

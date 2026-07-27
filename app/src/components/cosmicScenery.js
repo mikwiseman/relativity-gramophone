@@ -70,6 +70,33 @@ function hazeTexture() {
   return sharedHaze;
 }
 
+let sharedNeutralHalo = null;
+/**
+ * A colourless glow. The shared radial texture bakes red at 255 with green and
+ * blue falling away, so a sprite tinted with it can only ever come out orange —
+ * which is why seven worlds of one system all wore the same warm skirt. A
+ * neutral map lets `SpriteMaterial.color` actually mean the world's colour.
+ */
+function neutralHaloTexture() {
+  if (sharedNeutralHalo) return sharedNeutralHalo;
+  const size = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  const gradient = context.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  for (let index = 0; index <= 24; index += 1) {
+    const radius = index / 24;
+    const alpha = Math.exp(-((radius / 0.3) ** 2)) * (1 - radius * radius) ** 2.2;
+    gradient.addColorStop(radius, `rgba(255,255,255,${alpha.toFixed(4)})`);
+  }
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, size, size);
+  sharedNeutralHalo = new THREE.CanvasTexture(canvas);
+  sharedNeutralHalo.colorSpace = THREE.SRGBColorSpace;
+  return sharedNeutralHalo;
+}
+
 /**
  * One galaxy, drawn from its real morphology.
  *
@@ -233,7 +260,7 @@ const STAR_SURFACE_FRAGMENT_SHADER = `
   }
 `;
 
-function createStarBall(temperature, drawnRadius, radialTexture) {
+function createStarBall(temperature, drawnRadius, radialTexture, innermostOrbit = Infinity) {
   const group = new THREE.Group();
   const color = blackbodyColor(temperature);
   const whiteCore = Math.min(1, Math.max(0, (temperature - 3200) / 2600));
@@ -269,7 +296,7 @@ function createStarBall(temperature, drawnRadius, radialTexture) {
     blending: THREE.AdditiveBlending,
     toneMapped: false,
   }));
-  glow.scale.setScalar(drawnRadius * 5.4);
+  glow.scale.setScalar(Math.min(drawnRadius * 5.4, innermostOrbit * 0.82));
   group.add(glow);
 
   const corona = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -281,7 +308,7 @@ function createStarBall(temperature, drawnRadius, radialTexture) {
     blending: THREE.AdditiveBlending,
     toneMapped: false,
   }));
-  corona.scale.setScalar(drawnRadius * 13);
+  corona.scale.setScalar(Math.min(drawnRadius * 13, innermostOrbit * 1.55));
   group.add(corona);
 
   return { group, sphere, glow, corona, material, color };
@@ -296,8 +323,13 @@ const PLANET_SURFACE_FRAGMENT_SHADER = `
   uniform vec3 uDayColor;
   uniform vec3 uNightColor;
   uniform vec3 uAtmosphere;
+  uniform vec3 uAccent;
   uniform float uBanding;
   uniform float uRoughness;
+  uniform float uIceCaps;
+  uniform float uMolten;
+  uniform float uOcean;
+  uniform float uStorm;
   uniform float uImpulse;
   uniform float uOpacity;
   uniform float uSeed;
@@ -309,18 +341,49 @@ const PLANET_SURFACE_FRAGMENT_SHADER = `
     vec3 normal = normalize(vObjectNormal);
     float incidence = dot(normal, normalize(uStarDirection));
     float lit = smoothstep(-0.18, 0.30, incidence);
+    float latitude = abs(normal.y);
 
+    // Three ways a real surface can be organised, mixed by class rather than
+    // by taste: broken continents, zonal wind bands, and a banded giant's one
+    // long-lived storm. Seven worlds of one system differ because their
+    // measured radius and the starlight they receive differ, not because a
+    // palette was chosen for them.
     float continents = rgFbm(normal * 2.9 + uSeed);
     float weather = rgFbm(normal * 5.6 + uSeed * 1.7);
-    // Zonal bands: a giant's winds are stretched flat along its latitudes.
     float bands = 0.5 + 0.5 * sin(normal.y * 13.0 + rgFbm(normal * vec3(1.4, 3.2, 1.4) + uSeed) * 3.6);
     float surface = mix(mix(continents, weather, 0.35), bands, uBanding);
 
     vec3 day = uDayColor * (0.46 + uRoughness * surface * 0.78);
+
+    // Dark basalt plains, the way the Moon and Mercury are mottled.
+    float maria = smoothstep(0.62, 0.30, continents) * (1.0 - uBanding);
+    day *= 1.0 - maria * 0.34 * (1.0 - uOcean);
+
+    // A liquid surface is smooth and dark where it is deep, and it throws a
+    // specular highlight back at the star.
+    float sea = smoothstep(0.54, 0.40, continents) * uOcean;
+    day = mix(day, uAccent * 0.62, sea * 0.75);
+
+    // Ice reaches down from the poles, and further on a colder world.
+    float caps = smoothstep(0.98 - uIceCaps * 0.62, 1.0, latitude + rgFbm(normal * 6.0 + uSeed) * 0.14);
+    day = mix(day, vec3(0.93, 0.96, 1.0) * 0.86, caps * uIceCaps);
+
+    // One oval storm, held at a single latitude, the way a giant's is.
+    float stormShape = exp(-24.0 * pow(normal.y - 0.22, 2.0)
+      - 5.0 * pow(atan(normal.z, normal.x) - 1.1, 2.0));
+    day = mix(day, uAccent, clamp(stormShape, 0.0, 1.0) * uStorm * 0.7);
+
     vec3 color = mix(uNightColor, day, lit);
 
-    float fresnel = pow(1.0 - clamp(dot(normalize(vViewNormal), normalize(-vViewPosition)), 0.0, 1.0), 2.8);
+    // A molten world glows through its own crust on the side facing away from
+    // its star; that glow is the only light a lava night side has.
+    float cracks = smoothstep(0.58, 0.86, rgFbm(normal * 7.2 + uSeed * 2.3));
+    color += uAccent * cracks * uMolten * (1.0 - lit) * 1.35;
+
+    float fresnel = pow(1.0 - clamp(dot(normalize(vViewNormal), normalize(-vViewPosition)), 0.0, 1.0), 1.6);
     color += uAtmosphere * fresnel * (0.16 + 1.05 * lit);
+    // Sunlight glancing off a sea, only where the star is actually reflected.
+    color += uAccent * pow(max(0.0, incidence), 34.0) * sea * 0.9;
     color += uDayColor * uImpulse * 0.75;
 
     gl_FragColor = vec4(color, uOpacity);
@@ -341,20 +404,40 @@ function atmosphereColor(classId, dayColor) {
   }
 }
 
+/**
+ * How each measured class of world is organised on its surface. Nothing here is
+ * a taste decision about a particular planet: `planetAppearance` derives the
+ * class from the world's measured radius and the starlight it actually
+ * receives, and the class decides which of these features exist at all.
+ */
+const CLASS_SURFACE = Object.freeze({
+  lava:               { banding: 0, iceCaps: 0,    molten: 1,    ocean: 0,    storm: 0,   accent: 0xff5a1e },
+  "warm-rocky":       { banding: 0, iceCaps: 0.12, molten: 0.12, ocean: 0,    storm: 0,   accent: 0xff8b4a },
+  "temperate-rocky":  { banding: 0, iceCaps: 0.5,  molten: 0,    ocean: 0.85, storm: 0,   accent: 0x2f6fb8 },
+  "frozen-rocky":     { banding: 0, iceCaps: 1,    molten: 0,    ocean: 0,    storm: 0,   accent: 0xdff0ff },
+  "mini-neptune":     { banding: 1, iceCaps: 0.2,  molten: 0,    ocean: 0,    storm: 0,   accent: 0xbfe4f4 },
+  "ice-giant":        { banding: 1, iceCaps: 0.1,  molten: 0,    ocean: 0,    storm: 0.3, accent: 0x5ec7dd },
+  "gas-giant":        { banding: 1, iceCaps: 0,    molten: 0,    ocean: 0,    storm: 1,   accent: 0xc9603a },
+});
+
 function createPlanetSurface(radius, appearance, color, seed) {
   const day = new THREE.Color(color);
-  const banding = appearance.id === "gas-giant" || appearance.id === "ice-giant"
-    || appearance.id === "mini-neptune" ? 1 : 0;
+  const surface = CLASS_SURFACE[appearance.id] ?? CLASS_SURFACE["warm-rocky"];
   const material = new THREE.ShaderMaterial({
     uniforms: {
       uStarDirection: { value: new THREE.Vector3(1, 0, 0) },
       uDayColor: { value: day },
       // The unlit face is not black — it holds a trace of its own colour, the
       // way the dark limb of a planet does against a starfield.
-      uNightColor: { value: day.clone().multiplyScalar(0.055) },
+      uNightColor: { value: day.clone().multiplyScalar(0.15) },
       uAtmosphere: { value: atmosphereColor(appearance.id, color) },
-      uBanding: { value: banding },
-      uRoughness: { value: banding ? 0.34 : 0.62 },
+      uAccent: { value: new THREE.Color(surface.accent) },
+      uBanding: { value: surface.banding },
+      uRoughness: { value: surface.banding ? 0.34 : 0.62 },
+      uIceCaps: { value: surface.iceCaps },
+      uMolten: { value: surface.molten },
+      uOcean: { value: surface.ocean },
+      uStorm: { value: surface.storm },
       uImpulse: { value: 0 },
       uOpacity: { value: 0 },
       uSeed: { value: seed },
@@ -446,10 +529,14 @@ export function createStarSystemObject(system, {
   const minimumAu = Math.min(...semiMajorValues);
   const maximumAu = Math.max(...semiMajorValues);
 
+  // A star's corona has to be sized against its own system, not in absolute
+  // units. At 13 times its drawn radius the Sun's skirt reached past Mercury's
+  // whole orbit and erased the inner three worlds in a white smear.
   const star = createStarBall(
     system.star.temperature,
     Math.max(0.14, Math.min(0.42, 0.2 * Math.cbrt(system.star.radiusSolar))),
     radialTexture,
+    innerRadius,
   );
   group.add(star.group);
 
@@ -476,6 +563,14 @@ export function createStarSystemObject(system, {
   );
   habitableBand.rotation.x = -Math.PI / 2;
   group.add(habitableBand);
+
+  // The largest world in a system sets the scale, and every other world is
+  // drawn as a stated power of its real radius against it. The old formula —
+  // an additive floor plus a cube root — squeezed the Solar System's true 29:1
+  // spread from Mercury to Jupiter into 1.97:1, so a gas giant and a rock
+  // arrived on screen the same size. That is the whole of "identical
+  // fireflies": nothing about a world's size meant anything.
+  const largestEarthRadii = Math.max(...planets.map((planet) => planet.radiusEarth));
 
   const worlds = planets.map((planet) => {
     const drawnRadius = compressedOrbitRadius(planet.orbitAu, {
@@ -520,10 +615,12 @@ export function createStarSystemObject(system, {
 
     // Radii are compressed too: Jupiter must read as a giant beside Earth
     // without Earth vanishing, so the cube root of the real radius sets the size.
-    // Large enough to be a world rather than a pixel: at the distance a phone
-    // has to stand back to fit seven orbits, the old radius was under three
-    // pixels across.
-    const bodyRadius = 0.052 + 0.062 * Math.cbrt(Math.min(14, planet.radiusEarth));
+    // Order- and ratio-preserving under one stated compression, with a floor
+    // only so the smallest world stays aimable at arm's length on a phone.
+    const bodyRadius = Math.max(
+      0.052,
+      0.158 * (planet.radiusEarth / largestEarthRadii) ** 0.45,
+    );
     const body = createPlanetSurface(
       bodyRadius,
       appearance,
@@ -537,7 +634,7 @@ export function createStarSystemObject(system, {
     // A world this small on screen needs a halo to be findable at all; it is
     // sized from the body so it never becomes a decorative blob.
     const halo = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: radialTexture,
+      map: neutralHaloTexture(),
       color,
       transparent: true,
       opacity: 0,
@@ -545,7 +642,7 @@ export function createStarSystemObject(system, {
       blending: THREE.AdditiveBlending,
       toneMapped: false,
     }));
-    halo.scale.setScalar(bodyRadius * 4.4);
+    halo.scale.setScalar(bodyRadius * 3.1);
     group.add(halo);
 
     // A generous invisible sphere, so a fingertip can find a world that is two
@@ -557,6 +654,28 @@ export function createStarSystemObject(system, {
     touchArea.userData.systemPlanetId = planet.id;
     touchArea.frustumCulled = false;
     group.add(touchArea);
+
+    // A ring plane is the one silhouette in the sky nobody can mistake, and the
+    // Solar System table has carried `rings: true` on Saturn from the start
+    // without a single line of code ever reading it. Drawn only where the data
+    // says so — no exoplanet here has an observed ring system.
+    let rings = null;
+    if (planet.rings) {
+      const ringGeometry = new THREE.RingGeometry(bodyRadius * 1.32, bodyRadius * 2.28, 96, 1);
+      rings = new THREE.Mesh(ringGeometry, new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        toneMapped: false,
+      }));
+      // Saturn's axis leans 26.7 degrees, which is why we ever see the rings
+      // open at all.
+      rings.rotation.set(-Math.PI / 2 + (26.73 * Math.PI) / 180, 0, 0.42);
+      rings.frustumCulled = false;
+      group.add(rings);
+    }
 
     const label = new THREE.Sprite(new THREE.SpriteMaterial({
       map: createPlanetLabelTexture(planet, appearance),
@@ -578,6 +697,7 @@ export function createStarSystemObject(system, {
       halo,
       touchArea,
       label,
+      rings,
       drawnRadius,
       bodyRadius,
       eccentricity: planet.eccentricity ?? 0,
@@ -587,6 +707,17 @@ export function createStarSystemObject(system, {
   });
 
   const fastestPeriod = Math.min(...planets.map((planet) => planet.periodDays));
+  // A system spanning Mercury to Neptune covers 684:1 in period. Anchoring the
+  // clock to the fastest world freezes the outer half of it; anchoring to the
+  // geometric mean lets every world visibly move, and the period RATIOS — which
+  // are the music — survive untouched either way.
+  const meanLogPeriod = planets
+    .reduce((total, planet) => total + Math.log(planet.periodDays), 0) / planets.length;
+  const secondsPerLapAtMean = 26;
+  const systemSecondsPerFastestOrbit = Math.max(
+    2.5,
+    (secondsPerLapAtMean * fastestPeriod) / Math.exp(meanLogPeriod),
+  );
   let elapsed = 0;
   let starImpulse = 0;
 
@@ -606,7 +737,7 @@ export function createStarSystemObject(system, {
     },
     touchAreas: worlds.map((world) => world.touchArea),
     /** Advance every world by real period ratios: one shared time compression. */
-    advance(delta, secondsPerFastestOrbit = 7, decayDelta = delta) {
+    advance(delta, secondsPerFastestOrbit = systemSecondsPerFastestOrbit, decayDelta = delta) {
       elapsed += delta;
       star.material.uniforms.uTime.value = elapsed;
       star.material.uniforms.uImpulse.value = starImpulse;
@@ -623,6 +754,7 @@ export function createStarSystemObject(system, {
         );
         world.halo.position.copy(world.body.position);
         world.touchArea.position.copy(world.body.position);
+        if (world.rings) world.rings.position.copy(world.body.position);
         world.label.position.copy(world.body.position);
         // The star sits at the system's own origin, so the direction to the
         // light is simply the direction back to the middle.
@@ -642,6 +774,17 @@ export function createStarSystemObject(system, {
     setOpacity(opacity, labelMix = 0) {
       group.visible = opacity > 0.01;
       star.material.uniforms.uOpacity.value = opacity;
+      // A ring passing BEHIND its star is the strongest depth cue any picture
+      // of a planetary system has, and without a depth buffer it happens
+      // backwards: three sorts a transparent object by its origin, so every
+      // orbit ellipse painted straight across the star's disc and across any
+      // world standing on the far side. That single inversion is most of why a
+      // real three-dimensional system read as a flat diagram. Once a system is
+      // fully present it is opaque and writes depth, and the ellipses fall
+      // behind the bodies where they belong.
+      const solid = opacity > 0.985;
+      star.material.transparent = !solid;
+      star.material.depthWrite = solid;
       // Seen from across the neighbourhood a system is 50 pixels wide; a corona
       // sized for arrival would bloom over its own worlds and leave a white
       // smudge where eight planets should be.
@@ -654,7 +797,13 @@ export function createStarSystemObject(system, {
         world.orbit.material.opacity = opacity
           * (0.055 + labelMix * 0.26 + world.impulse * 0.5);
         world.body.material.uniforms.uOpacity.value = opacity;
+        world.body.material.transparent = !solid;
+        world.body.material.depthWrite = solid;
         world.halo.material.opacity = opacity * (0.07 + world.impulse * 0.62);
+        if (world.rings) {
+          world.rings.material.opacity = opacity * (0.28 + labelMix * 0.34);
+          world.rings.visible = world.rings.material.opacity > 0.02;
+        }
         world.label.material.opacity = labelMix * opacity * (0.72 + world.impulse * 0.28);
         world.label.visible = world.label.material.opacity > 0.02;
         world.touchArea.visible = labelMix > 0.5;
@@ -677,6 +826,8 @@ export function createStarSystemObject(system, {
         world.body.geometry.dispose();
         world.body.material.dispose();
         world.halo.material.dispose();
+        world.rings?.geometry.dispose();
+        world.rings?.material.dispose();
         world.touchArea.geometry.dispose();
         world.touchArea.material.dispose();
         world.label.material.map.dispose();
