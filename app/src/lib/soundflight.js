@@ -650,6 +650,43 @@ export function starGripRadius({ width, height }) {
   return Math.max(44, Math.min(width, height) * 0.085);
 }
 
+/**
+ * How wide a world's invisible touch sphere has to be, in world units, for a
+ * fingertip to find it.
+ *
+ * It has to be solved against the camera, not baked when the system is built.
+ * A visited system is fitted to the frame, so the same world is a different
+ * number of pixels across on a phone and on a laptop — and measured on a
+ * 390 by 844 portrait phone, every one of the 131 catalogue worlds came out
+ * between 15 and 42 pixels. Not one of them reached the 44 this instrument
+ * asks of anything a finger must hit.
+ *
+ * The cap is what keeps it honest: a target may not swell past its share of
+ * the gap to the next orbit, because two worlds that both claim the same pixel
+ * are worse than one that is small. Where the gap forbids 44 px, the target
+ * takes what the gap allows and the number says so.
+ */
+export function systemTouchRadius({
+  bodyRadius,
+  pixelsPerWorldUnit,
+  neighbourGap = Infinity,
+  minimumPixels = 44,
+}) {
+  if (!Number.isFinite(bodyRadius) || bodyRadius <= 0) {
+    throw new Error("A touch target needs a positive body radius");
+  }
+  if (!Number.isFinite(pixelsPerWorldUnit) || pixelsPerWorldUnit <= 0) {
+    throw new Error("A touch target needs the camera's scale in pixels per world unit");
+  }
+  if (!Number.isFinite(minimumPixels) || minimumPixels <= 0) {
+    throw new Error("A touch target needs a positive minimum in pixels");
+  }
+  const generous = Math.max(bodyRadius * 3.4, 0.14);
+  const comfortable = minimumPixels / 2 / pixelsPerWorldUnit;
+  const ceiling = Number.isFinite(neighbourGap) ? Math.max(generous, neighbourGap * 0.46) : Infinity;
+  return Math.min(Math.max(generous, comfortable), ceiling);
+}
+
 export function nextCameraDistance(distance, direction) {
   if (!Number.isFinite(distance) || distance <= 0) throw new Error("Camera distance must be positive");
   if (direction !== -1 && direction !== 1) throw new Error("Camera zoom direction must be -1 or 1");

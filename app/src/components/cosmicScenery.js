@@ -17,6 +17,7 @@ import {
 } from "../lib/cosmicAtlas.js";
 import { buildClusterCloud, buildGalaxyCloud } from "../lib/galaxyShape.js";
 import { seededRandom, stringSeed } from "../lib/seededRandom.js";
+import { systemTouchRadius } from "../lib/soundflight.js";
 
 const galaxyVertexShader = `
   attribute float aSize;
@@ -667,8 +668,9 @@ export function createStarSystemObject(system, {
 
     // A generous invisible sphere, so a fingertip can find a world that is two
     // pixels wide without having to be surgical about it.
+    const touchBaseRadius = Math.max(bodyRadius * 3.4, 0.14);
     const touchArea = new THREE.Mesh(
-      new THREE.SphereGeometry(Math.max(bodyRadius * 3.4, 0.14), 12, 10),
+      new THREE.SphereGeometry(touchBaseRadius, 12, 10),
       new THREE.MeshBasicMaterial({
         transparent: true,
         opacity: 0,
@@ -725,6 +727,10 @@ export function createStarSystemObject(system, {
       rings,
       drawnRadius,
       bodyRadius,
+      touchBaseRadius,
+      // Filled in once every world's drawn radius is known: a target may not
+      // swell past its share of the gap to the next orbit.
+      neighbourGap: Infinity,
       eccentricity: planet.eccentricity ?? 0,
       phase: random() * Math.PI * 2,
       impulse: 0,
@@ -732,6 +738,19 @@ export function createStarSystemObject(system, {
   };
 
   const worlds = planets.map(makeWorld);
+  // Two worlds that both claim the same pixel are worse than one that is
+  // small, so each target's ceiling is half the distance to its nearer
+  // neighbour's orbit.
+  const measureNeighbourGaps = (list) => {
+    const sorted = [...list].sort((first, second) => first.drawnRadius - second.drawnRadius);
+    for (let index = 0; index < sorted.length; index += 1) {
+      const gaps = [];
+      if (index > 0) gaps.push(sorted[index].drawnRadius - sorted[index - 1].drawnRadius);
+      if (index < sorted.length - 1) gaps.push(sorted[index + 1].drawnRadius - sorted[index].drawnRadius);
+      sorted[index].neighbourGap = gaps.length > 0 ? Math.min(...gaps) : Infinity;
+    }
+  };
+  measureNeighbourGaps(worlds);
 
   const fastestPeriod = Math.min(...planets.map((planet) => planet.periodDays));
   // A system spanning Mercury to Neptune covers 684:1 in period. Anchoring the
@@ -763,6 +782,7 @@ export function createStarSystemObject(system, {
     addWorld(planet) {
       const world = makeWorld(planet);
       worlds.push(world);
+      measureNeighbourGaps(worlds);
       api.worldById.set(planet.id, world);
       api.touchAreas.push(world.touchArea);
       if (lastResolution) world.orbit.material.resolution.set(lastResolution.width, lastResolution.height);
@@ -777,6 +797,25 @@ export function createStarSystemObject(system, {
     setLabelScale(factor) {
       const eased = Math.min(2.6, Math.max(0.85, factor));
       for (const world of worlds) world.label.scale.set(1.34 * eased, 0.335 * eased, 1);
+    },
+    /**
+     * A finger is a fixed number of pixels wide however far the camera stands
+     * back, so a touch target has to be solved against the camera rather than
+     * baked when the system is built. Measured on a portrait phone before this
+     * existed, every one of the catalogue's worlds was between 15 and 42
+     * pixels across — not one reached the 44 this instrument asks of anything
+     * a finger must hit.
+     */
+    setTouchScale(pixelsPerWorldUnit) {
+      if (!Number.isFinite(pixelsPerWorldUnit) || pixelsPerWorldUnit <= 0) return;
+      for (const world of worlds) {
+        const radius = systemTouchRadius({
+          bodyRadius: world.bodyRadius,
+          pixelsPerWorldUnit,
+          neighbourGap: world.neighbourGap,
+        });
+        world.touchArea.scale.setScalar(radius / world.touchBaseRadius);
+      }
     },
     touchAreas: worlds.map((world) => world.touchArea),
     /** Advance every world by real period ratios: one shared time compression. */

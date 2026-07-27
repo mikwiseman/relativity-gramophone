@@ -3782,8 +3782,14 @@ export function SoundflightStage(props) {
       const semanticScaleId = runtime.authoredScaleId
         ?? (runtime.cosmicScale.id === "orbit" ? "system" : runtime.cosmicScale.id);
       if (focusedSystemVisual?.nearbySystem) {
-        focusedSystemVisual.nearbySystem.setLabelScale(
-          camera.position.distanceTo(controls.target) / 12.7,
+        const viewDistance = camera.position.distanceTo(controls.target);
+        focusedSystemVisual.nearbySystem.setLabelScale(viewDistance / 12.7);
+        // A finger is the same number of pixels wide however far back the
+        // camera has had to stand to fit the system, so the touch targets are
+        // solved against the camera every frame rather than baked once.
+        const halfHeight = Math.tan((camera.fov * Math.PI) / 360) * viewDistance;
+        focusedSystemVisual.nearbySystem.setTouchScale(
+          halfHeight > 0 ? (renderer.domElement.clientHeight / 2) / halfHeight : 0,
         );
       }
       const authoredTarget = focusedSystemVisual

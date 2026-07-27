@@ -23,6 +23,7 @@ import {
   QUALITY_LADDER,
   selectRenderProfile,
   starGripRadius,
+  systemTouchRadius,
   visitedSystemCameraDistance,
   shouldApplyGestationUpdate,
   shouldApplyThereminRelease,
@@ -764,4 +765,44 @@ test("the grip on a visited system's star is measured on screen, never on its pl
   assert.equal(starGripRadius({ width: 2560, height: 1600 }), 136);
   assert.throws(() => starGripRadius({ width: 0, height: 800 }), /finite viewport/i);
   assert.throws(() => starGripRadius({ width: 800 }), /finite viewport/i);
+});
+
+test("a world in a visited system is big enough to hit with a finger", () => {
+  // Measured on a 390 by 844 portrait phone before this existed: all 131
+  // catalogue worlds projected touch targets between 15 and 42 pixels across.
+  // Not one reached the 44 this instrument asks of anything a finger must hit,
+  // and the size was baked when the system was built rather than solved
+  // against the camera that fits it to the frame.
+  const pixelsPerWorldUnit = 39.3;
+  const small = systemTouchRadius({ bodyRadius: 0.052, pixelsPerWorldUnit });
+  assert.ok(small * 2 * pixelsPerWorldUnit >= 44, `smallest world was ${(small * 2 * pixelsPerWorldUnit).toFixed(1)} px`);
+
+  // A world already comfortable is not shrunk to the minimum.
+  const roomy = systemTouchRadius({ bodyRadius: 0.158, pixelsPerWorldUnit: 400 });
+  assert.ok(Math.abs(roomy - 0.158 * 3.4) < 1e-9, "a generous target keeps its generosity");
+});
+
+test("a touch target never swells past its share of the gap to the next orbit", () => {
+  // Two worlds that both claim the same pixel are worse than one that is small.
+  const crowded = systemTouchRadius({
+    bodyRadius: 0.052,
+    pixelsPerWorldUnit: 39.3,
+    neighbourGap: 0.4,
+  });
+  assert.ok(crowded <= 0.4 * 0.46 + 1e-9, `crowded target was ${crowded}`);
+  const open = systemTouchRadius({
+    bodyRadius: 0.052,
+    pixelsPerWorldUnit: 39.3,
+    neighbourGap: 4,
+  });
+  assert.ok(open * 2 * 39.3 >= 44, "an open system still reaches the minimum");
+});
+
+test("a touch target refuses to be sized from nonsense", () => {
+  assert.throws(() => systemTouchRadius({ bodyRadius: 0, pixelsPerWorldUnit: 40 }), /positive body radius/);
+  assert.throws(() => systemTouchRadius({ bodyRadius: 0.1, pixelsPerWorldUnit: 0 }), /pixels per world unit/);
+  assert.throws(
+    () => systemTouchRadius({ bodyRadius: 0.1, pixelsPerWorldUnit: 40, minimumPixels: 0 }),
+    /positive minimum/,
+  );
 });
