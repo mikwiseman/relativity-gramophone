@@ -2647,9 +2647,16 @@ export function SoundflightStage(props) {
         updateTrailLine(moonPreview.orbitLine, localOrbit, 0, 0.52);
         propsRef.current.onGestationTone({
           ...candidate,
-          deferAudio: audioUnlockPhase(moonBirth.pointerType) === "pointerup",
+          deferAudio: audioUnlockPhase(birth.pointerType) === "pointerup",
         });
-      } catch {
+      } catch (error) {
+        // Only an orbit this parent cannot hold is refused. A programming
+        // fault is not a refusal, and swallowing one here is how the whole
+        // preview went dark: `moonBirth` was a free identifier in this
+        // function — the parameter is `birth` — so every frame threw a
+        // ReferenceError, and the taught gesture answered with the coral the
+        // instrument uses for "no".
+        if (error instanceof ReferenceError || error instanceof TypeError) throw error;
         moonPreview.seed.visible = false;
         moonPreview.orbitLine.visible = false;
         moonPreview.guideLine.material.uniforms.uColor.value.setHex(0xff765f);

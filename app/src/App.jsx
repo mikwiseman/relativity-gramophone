@@ -236,6 +236,14 @@ export function App() {
   const recordedBodies = useMemo(() => resolveScoreRoster(shareScore), [shareScore]);
   const liveBodies = physicsFrame?.bodies ?? [];
   const planets = liveBodies.filter((body) => body.kind === "planet");
+  // What the lesson asks next depends on whether this universe has worlds in
+  // it — a fact about the score, not about whether a frame has been painted
+  // yet. Reading it from the live frame alone meant that before the first
+  // physics frame arrived the instrument decided the sky was empty and told a
+  // player standing in front of three turning worlds to go and make one.
+  const worldCount = physicsFrame
+    ? planets.length
+    : recordedBodies.filter((body) => body.kind === "planet").length;
   const selectedBody = liveBodies.find((body) => body.id === selectedBodyId) ?? null;
   const currentDestination = cosmicDestination(
     cosmicScale.id === "orbit" ? "system" : cosmicScale.id,
@@ -284,7 +292,7 @@ export function App() {
   });
   const lesson = instrumentLesson({
     audioState,
-    planetCount: planets.length,
+    planetCount: worldCount,
     hasPluckedOrbit,
     hasBornWorld,
     hasBornMoon,

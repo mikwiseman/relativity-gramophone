@@ -2238,7 +2238,12 @@ input:focus-visible {
   pointer-events: none;
 }
 
-.app-shell[data-onboarding="step-2"]::after {
+/* The one affordance drawn on the canvas: a ring at the star that pulses
+   outward, illustrating the pull that makes a world. It has to sit on the
+   step that asks for that pull. It was keyed to step 2, and when the
+   lesson was rewritten step 2 became "TOUCH AN ORBIT" — so the only thing
+   the product points at was circling the wrong object. */
+.app-shell[data-onboarding="step-3"]::after {
   position: absolute;
   z-index: 3;
   top: 50%;
