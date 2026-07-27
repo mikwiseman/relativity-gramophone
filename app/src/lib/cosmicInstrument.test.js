@@ -243,7 +243,7 @@ test("every nearby star opens as a small real system instead of a decorative dot
 
   assert.ok(neighborhood.every((landmark) => (
     landmark.system
-    && ["planetary", "binary"].includes(landmark.system.kind)
+    && ["planetary", "binary", "open", "globular"].includes(landmark.system.kind)
     && Number.isInteger(landmark.system.worlds)
     // A system with one body has a one-note chord and is not a system.
     && landmark.system.worlds >= 2

@@ -481,24 +481,40 @@ function createPlanetLabelTexture(planet, appearance) {
   context.shadowColor = "rgba(0, 0, 0, 0.95)";
 
   // A world of TRAPPIST-1 is "TRAPPIST-1 e"; on its own orbit it is simply "e".
+  // A shell of Omega Centauri is simply "HALF-LIGHT" — you are standing inside
+  // the cluster and its name is already the headline, so repeating it on seven
+  // rings at once is how the labels ran into each other.
   const shortName = planet.name.replace(/^.*?([A-Za-z]?\s*[b-z])$/u, "$1").trim();
-  const name = shortName.length <= 2 && shortName.length > 0
-    ? shortName.toUpperCase()
-    : planet.name.toUpperCase();
+  const name = planet.shell
+    ? planet.shell
+    : shortName.length <= 2 && shortName.length > 0
+      ? shortName.toUpperCase()
+      : planet.name.toUpperCase();
 
   context.shadowBlur = 20;
   context.font = "58px 'Iowan Old Style', Georgia, serif";
   context.fillStyle = "rgba(255, 246, 228, 0.96)";
   context.fillText(name, width / 2, 63);
 
+  // A year, at whatever size the thing keeping it happens to be. A planet's is
+  // days; a star's orbit around the centre of a globular cluster is millions of
+  // years, and calling that "9,600,000 DAYS" would be true and useless.
   const days = planet.periodDays;
-  const year = days >= 365
-    ? `${(days / 365.25).toFixed(days / 365.25 >= 10 ? 0 : 1)} YEARS`
-    : `${days >= 10 ? days.toFixed(0) : days.toFixed(1)} DAYS`;
+  const years = days / 365.25;
+  const year = years >= 1e6
+    ? `${(years / 1e6).toFixed(1)} MILLION YEARS`
+    : years >= 1000
+      ? `${Math.round(years).toLocaleString("en-US")} YEARS`
+      : days >= 365
+        ? `${years.toFixed(years >= 10 ? 0 : 1)} YEARS`
+        : `${days >= 10 ? days.toFixed(0) : days.toFixed(1)} DAYS`;
+  // A shell of a star cluster is not a planet, and a mass-radius class is not
+  // a thing it has. It says where in the cluster it stands.
+  const caption = planet.shell ? `${planet.shell} STARS` : appearance.label;
   context.shadowBlur = 14;
   context.font = "30px ui-monospace, SFMono-Regular, Menlo, monospace";
   context.fillStyle = "rgba(188, 236, 255, 0.8)";
-  context.fillText(`${year} · ${appearance.label}`, width / 2, 132);
+  context.fillText(`${year} · ${caption}`, width / 2, 132);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;

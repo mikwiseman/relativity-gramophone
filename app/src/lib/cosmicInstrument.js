@@ -1,5 +1,6 @@
 import { blackbodyColor } from "./cosmicAtlas.js";
 import { STAR_SYSTEMS_BY_ID } from "./starSystems.js";
+import { STAR_CLUSTERS_BY_ID } from "./starClusters.js";
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -188,11 +189,12 @@ export const NEIGHBOURHOOD_SHELLS = Object.freeze([
     guidanceDetail: "OUR OWN ARM OF THE MILKY WAY",
     members: Object.freeze([
       Object.freeze(["hr-8799", [0, 1]]),
-      Object.freeze(["hd-191939", [0.95, 0.42]]),
-      Object.freeze(["toi-1136", [0.95, -0.5]]),
-      Object.freeze(["v1298-tau", [0, -1]]),
-      Object.freeze(["toi-178", [-0.95, -0.5]]),
-      Object.freeze(["hd-10180", [-0.95, 0.42]]),
+      Object.freeze(["hyades", [0.83, 0.6]]),
+      Object.freeze(["hd-191939", [1, -0.22]]),
+      Object.freeze(["toi-1136", [0.5, -0.95]]),
+      Object.freeze(["v1298-tau", [-0.5, -0.95]]),
+      Object.freeze(["toi-178", [-1, -0.22]]),
+      Object.freeze(["hd-10180", [-0.83, 0.6]]),
     ]),
   }),
   Object.freeze({
@@ -202,13 +204,37 @@ export const NEIGHBOURHOOD_SHELLS = Object.freeze([
     guidance: "TOUCH A STAR TO PLAY ITS WORLDS",
     guidanceDetail: "THE CROWDED SUNS ONE TELESCOPE STARED AT FOR FOUR YEARS",
     members: Object.freeze([
-      Object.freeze(["k2-138", [0, 1]]),
-      Object.freeze(["kepler-20", [0.83, 0.6]]),
-      Object.freeze(["kepler-80", [1, -0.22]]),
-      Object.freeze(["kepler-90", [0.5, -0.95]]),
-      Object.freeze(["kepler-11", [-0.5, -0.95]]),
-      Object.freeze(["kepler-62", [-1, -0.22]]),
-      Object.freeze(["kepler-186", [-0.83, 0.6]]),
+      Object.freeze(["pleiades", [0, 1]]),
+      Object.freeze(["k2-138", [0.78, 0.66]]),
+      Object.freeze(["kepler-20", [1, -0.05]]),
+      Object.freeze(["kepler-80", [0.72, -0.82]]),
+      Object.freeze(["kepler-90", [0, -1.02]]),
+      Object.freeze(["kepler-11", [-0.72, -0.82]]),
+      Object.freeze(["kepler-62", [-1, -0.05]]),
+      Object.freeze(["kepler-186", [-0.78, 0.66]]),
+    ]),
+  }),
+  // The fifth sky, and the first that is not made of planets. A globular
+  // cluster is a system in exactly the sense this instrument means — a central
+  // mass with things going round it at measured radii — so travelling into one
+  // needs no new gesture and no new screen. What it changes is the scale of
+  // time: a planet's year is days, and a star's orbit around the centre of one
+  // of these is millions of years. The law does the rest without being told,
+  // and a globular cluster becomes the deepest voice the instrument has.
+  Object.freeze({
+    id: "globular-clusters",
+    label: "THE OLD CLUSTERS",
+    measure: "6,000 TO 34,000 LIGHT-YEARS",
+    guidance: "TOUCH A CLUSTER TO PLAY ITS STARS",
+    guidanceDetail: "BALLS OF ANCIENT STARS ORBITING OUR GALAXY",
+    members: Object.freeze([
+      Object.freeze(["messier-4", [0, 1]]),
+      Object.freeze(["messier-22", [0.83, 0.6]]),
+      Object.freeze(["47-tucanae", [1, -0.22]]),
+      Object.freeze(["omega-centauri", [0.5, -0.95]]),
+      Object.freeze(["messier-13", [-0.5, -0.95]]),
+      Object.freeze(["messier-5", [-1, -0.22]]),
+      Object.freeze(["messier-15", [-0.83, 0.6]]),
     ]),
   }),
 ]);
@@ -261,8 +287,14 @@ const SOLAR_SYSTEM_LANDMARK = Object.freeze({
       }),
     });
 
-/** One system of the catalogue, as a landmark of its shell. */
+/** One system or cluster of the catalogue, as a landmark of its shell. */
 function catalogueLandmark(system, shellIndex, slot, order) {
+  // A cluster is a system in every sense this instrument means — a central
+  // mass with things going round it at measured radii — so it becomes a
+  // landmark by exactly the same route, and every gesture already written
+  // works inside one. Only the line under its name differs: a cluster is
+  // counted in stars, not in worlds.
+  const isCluster = system.kind === "open" || system.kind === "globular";
   return Object.freeze({
     id: system.id,
     scale: "neighborhood",
@@ -270,7 +302,9 @@ function catalogueLandmark(system, shellIndex, slot, order) {
     name: system.name,
     detail: `${system.distanceLy < 100
       ? system.distanceLy.toFixed(1)
-      : Math.round(system.distanceLy).toLocaleString("en-US")} LIGHT-YEARS · ${system.bodies.length} WORLDS`,
+      : Math.round(system.distanceLy).toLocaleString("en-US")} LIGHT-YEARS · ${isCluster
+      ? system.members
+      : `${system.bodies.length} WORLDS`}`,
     voice: system.voice,
     // The landmark's own note is the deepest voice of its own system, so a
     // light in the sky already sounds like the chord behind it.
@@ -282,7 +316,7 @@ function catalogueLandmark(system, shellIndex, slot, order) {
     slot: Object.freeze([...slot]),
     lesson: system.lesson,
     system: Object.freeze({
-      kind: "planetary",
+      kind: isCluster ? system.kind : "planetary",
       worlds: system.bodies.length,
       label: system.label,
       star: system.star,
@@ -296,7 +330,7 @@ const NEIGHBOURHOOD_LANDMARKS = Object.freeze(
     if (id === "solar-system") {
       return Object.freeze({ ...SOLAR_SYSTEM_LANDMARK, shell: shellIndex, slot: Object.freeze([...slot]) });
     }
-    const system = STAR_SYSTEMS_BY_ID.get(id);
+    const system = STAR_SYSTEMS_BY_ID.get(id) ?? STAR_CLUSTERS_BY_ID.get(id);
     if (!system) throw new Error(`Unknown catalogue system in a shell: ${id}`);
     return catalogueLandmark(system, shellIndex, slot, order);
   })),
