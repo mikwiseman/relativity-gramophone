@@ -1054,12 +1054,11 @@ function createCosmicLandmarkVisual(landmark, radialTexture) {
   if (cluster) group.add(cluster.group);
   // A visitable system is built once at full size and scaled down until the
   // traveller actually arrives, so its proportions never change on the way in.
-  const nearbySystem = landmark.scale === "neighborhood" && landmark.system?.star
-    ? createStarSystemObject(landmark.system, { radialTexture })
-    : null;
-  if (nearbySystem) group.add(nearbySystem.group);
-
-  return {
+  // It is built the first time the sky it belongs to is actually looked at:
+  // every system costs an orbit line, a shader sphere and a name canvas per
+  // world, and constructing a whole catalogue at boot for a room the player may
+  // never open is how a universe stops fitting on a phone.
+  const visual = {
     landmark,
     group,
     glow,
@@ -1068,10 +1067,18 @@ function createCosmicLandmarkVisual(landmark, radialTexture) {
     label,
     labelTexture,
     cluster,
-    nearbySystem,
+    nearbySystem: null,
     coreScale,
     impulse: 0,
+    ensureSystem(resolution) {
+      if (visual.nearbySystem || !landmark.system?.star) return visual.nearbySystem;
+      visual.nearbySystem = createStarSystemObject(landmark.system, { radialTexture });
+      if (resolution) visual.nearbySystem.setResolution(resolution.width, resolution.height);
+      group.add(visual.nearbySystem.group);
+      return visual.nearbySystem;
+    },
   };
+  return visual;
 }
 
 function createCosmicWeb(visuals, radialTexture) {
@@ -1167,6 +1174,7 @@ function createCosmicLandmarkField(radialTexture) {
     visuals,
     byId: new Map(visuals.map((visual) => [visual.landmark.id, visual])),
     web,
+    resolution: null,
   };
 }
 
@@ -1177,6 +1185,7 @@ function updateCosmicLandmarkField(
   reducedMotion,
   focusedSystemId = null,
   worldsMoving = true,
+  shellIndex = 0,
 ) {
   const mixes = {
     neighborhood: scale.neighborhoodMix,
@@ -1186,6 +1195,19 @@ function updateCosmicLandmarkField(
   };
   for (const visual of field.visuals) {
     const isFocusedSystem = focusedSystemId === visual.landmark.id;
+    // A shell is one sky. Systems belonging to a shell the traveller is not
+    // standing in are simply not there — that is what lets the nearby sky hold
+    // twenty-eight real systems without ever showing more than eight at once.
+    const otherShell = visual.landmark.shell !== undefined
+      && visual.landmark.shell !== shellIndex;
+    if (otherShell && !isFocusedSystem) {
+      visual.group.visible = false;
+      visual.hitArea.visible = false;
+      continue;
+    }
+    if (visual.landmark.system && (isFocusedSystem || (mixes[visual.landmark.scale] ?? 0) > 0.02)) {
+      visual.ensureSystem(field.resolution);
+    }
     const anotherSystemIsFocused = Boolean(focusedSystemId) && !isFocusedSystem;
     const mix = mixes[visual.landmark.scale] ?? 0;
     const focused = scale.id === visual.landmark.scale;
@@ -2167,6 +2189,7 @@ export function SoundflightStage(props) {
       livingGalaxy.galaxyObject.setPixelRatio(profile.pixelRatio);
       const aspect = rect.width / Math.max(1, rect.height);
       const landmarkFov = aspect < 0.8 ? 55 : 42;
+      cosmicLandmarkField.resolution = { width: rect.width, height: rect.height };
       for (const visual of cosmicLandmarkField.visuals) {
         visual.cluster?.setPixelRatio(profile.pixelRatio);
         visual.nearbySystem?.setResolution(rect.width, rect.height);
@@ -3505,6 +3528,7 @@ export function SoundflightStage(props) {
         reducedMotionQuery.matches,
         runtime.focusedSystemId,
         propsRef.current.isPlaying,
+        propsRef.current.shellIndex,
       );
       updateMemoryComet(memoryComet, runtime.bodyVisuals, now, resolution);
       if (runtime.starfield) {

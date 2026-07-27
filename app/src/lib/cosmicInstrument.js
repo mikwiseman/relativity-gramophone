@@ -1,3 +1,6 @@
+import { blackbodyColor } from "./cosmicAtlas.js";
+import { STAR_SYSTEMS_BY_ID } from "./starSystems.js";
+
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
 }
@@ -130,12 +133,98 @@ const COSMIC_JOURNEYS = Object.freeze({
   universe: Object.freeze({ outward: null, home: "system" }),
 });
 
-// Positions are deliberately schematic. Distances and relationships are real,
-// while each semantic scale is re-authored so a child can read it on one screen.
-// Sources: NASA Exoplanet Archive pscomppars (2026-07-25), NASA Hubble, ESA Gaia.
-const COSMIC_LANDMARKS = Object.freeze({
-  neighborhood: Object.freeze([
-    Object.freeze({
+/**
+ * The nearby sky, in four shells of increasing distance.
+ *
+ * A single sky can hold six or seven named systems before it stops being
+ * readable, and the catalogue holds far more than that. Rather than a map or a
+ * free camera — both of which this instrument refuses — the shells are strung
+ * on the same one-button ladder as everything else: FLY steps one shell further
+ * from home, and every step is literally "further away". A child can read the
+ * whole sequence as one straight line outward from their own star.
+ *
+ * Membership is by measured distance alone. Slots are the authored arrangement
+ * on screen, stretched onto the real frame by `landmarkPlacement`.
+ */
+export const NEIGHBOURHOOD_SHELLS = Object.freeze([
+  Object.freeze({
+    id: "nearby",
+    label: "NEARBY STARS",
+    measure: "WITHIN 25 LIGHT-YEARS",
+    guidance: "TOUCH A STAR TO PLAY ITS WORLDS",
+    guidanceDetail: "OUR CLOSEST SUNS · YOUR OWN STAR IS IN THE MIDDLE",
+    members: Object.freeze([
+      Object.freeze(["solar-system", [0, 1]]),
+      Object.freeze(["teegardens-star", [0.83, 0.6]]),
+      Object.freeze(["gj-1002", [1, -0.22]]),
+      Object.freeze(["gj-667-c", [0.5, -0.95]]),
+      Object.freeze(["hd-219134", [-0.5, -0.95]]),
+      Object.freeze(["gj-876", [-1, -0.22]]),
+      Object.freeze(["proxima-centauri", [-0.83, 0.6]]),
+    ]),
+  }),
+  Object.freeze({
+    id: "local-suns",
+    label: "THE LOCAL SUNS",
+    measure: "25 TO 110 LIGHT-YEARS",
+    guidance: "TOUCH A STAR TO PLAY ITS WORLDS",
+    guidanceDetail: "EIGHT REAL SYSTEMS A LITTLE FURTHER OUT",
+    members: Object.freeze([
+      Object.freeze(["trappist-1", [0, 1]]),
+      Object.freeze(["55-cnc", [0.78, 0.66]]),
+      Object.freeze(["gj-3293", [1, -0.05]]),
+      Object.freeze(["lp-890-9", [0.72, -0.82]]),
+      Object.freeze(["hd-110067", [0, -1.02]]),
+      Object.freeze(["toi-700", [-0.72, -0.82]]),
+      Object.freeze(["ups-and", [-1, -0.05]]),
+      Object.freeze(["l-98-59", [-0.78, 0.66]]),
+    ]),
+  }),
+  Object.freeze({
+    id: "orion-spur",
+    label: "THE ORION SPUR",
+    measure: "110 TO 400 LIGHT-YEARS",
+    guidance: "TOUCH A STAR TO PLAY ITS WORLDS",
+    guidanceDetail: "OUR OWN ARM OF THE MILKY WAY",
+    members: Object.freeze([
+      Object.freeze(["hr-8799", [0, 1]]),
+      Object.freeze(["hd-191939", [0.95, 0.42]]),
+      Object.freeze(["toi-1136", [0.95, -0.5]]),
+      Object.freeze(["v1298-tau", [0, -1]]),
+      Object.freeze(["toi-178", [-0.95, -0.5]]),
+      Object.freeze(["hd-10180", [-0.95, 0.42]]),
+    ]),
+  }),
+  Object.freeze({
+    id: "kepler-field",
+    label: "THE KEPLER FIELD",
+    measure: "400 TO 3,000 LIGHT-YEARS",
+    guidance: "TOUCH A STAR TO PLAY ITS WORLDS",
+    guidanceDetail: "THE CROWDED SUNS ONE TELESCOPE STARED AT FOR FOUR YEARS",
+    members: Object.freeze([
+      Object.freeze(["k2-138", [0, 1]]),
+      Object.freeze(["kepler-20", [0.83, 0.6]]),
+      Object.freeze(["kepler-80", [1, -0.22]]),
+      Object.freeze(["kepler-90", [0.5, -0.95]]),
+      Object.freeze(["kepler-11", [-0.5, -0.95]]),
+      Object.freeze(["kepler-62", [-1, -0.22]]),
+      Object.freeze(["kepler-186", [-0.83, 0.6]]),
+    ]),
+  }),
+]);
+
+export const NEIGHBOURHOOD_SHELL_IDS = Object.freeze(
+  NEIGHBOURHOOD_SHELLS.map((shell) => shell.id),
+);
+
+export function neighbourhoodShell(index) {
+  const shell = NEIGHBOURHOOD_SHELLS[index];
+  if (!shell) throw new Error(`Unknown neighbourhood shell: ${index}`);
+  return shell;
+}
+
+const SOLAR_SYSTEM_LANDMARK = Object.freeze({
+
       id: "solar-system",
       scale: "neighborhood",
       name: "THE SUN",
@@ -170,163 +259,54 @@ const COSMIC_LANDMARKS = Object.freeze({
           Object.freeze({ id: "neptune", name: "NEPTUNE", kind: "planet", periodDays: 60_190.03, orbitAu: 30.06992276, radiusEarth: 3.8826, eccentricity: 0.00859048, color: 0x90c6dc }),
         ]),
       }),
+    });
+
+/** One system of the catalogue, as a landmark of its shell. */
+function catalogueLandmark(system, shellIndex, slot, order) {
+  return Object.freeze({
+    id: system.id,
+    scale: "neighborhood",
+    shell: shellIndex,
+    name: system.name,
+    detail: `${system.distanceLy < 100
+      ? system.distanceLy.toFixed(1)
+      : Math.round(system.distanceLy).toLocaleString("en-US")} LIGHT-YEARS · ${system.bodies.length} WORLDS`,
+    voice: system.voice,
+    // The landmark's own note is the deepest voice of its own system, so a
+    // light in the sky already sounds like the chord behind it.
+    frequency: orbitalSonificationFrequency(
+      Math.max(...system.bodies.map((body) => body.periodDays)),
+    ),
+    color: blackbodyColor(system.star.temperature),
+    position: Object.freeze([slot[0] * 2.4, slot[1] * 2.4, ((order % 3) - 1) * 0.7]),
+    slot: Object.freeze([...slot]),
+    lesson: system.lesson,
+    system: Object.freeze({
+      kind: "planetary",
+      worlds: system.bodies.length,
+      label: system.label,
+      star: system.star,
+      bodies: system.bodies,
     }),
-    Object.freeze({
-      id: "proxima-centauri",
-      scale: "neighborhood",
-      name: "PROXIMA CENTAURI",
-      detail: "4.25 LIGHT-YEARS · 2 WORLDS",
-      voice: "alpha-centauri",
-      frequency: 220,
-      color: 0xff8f74,
-      position: Object.freeze([-2.25, -2.2, 0.6]),
-      slot: Object.freeze([-1, -0.44]),
-      lesson: "THE NEAREST STAR TO THE SUN, AND FAR TOO FAINT TO SEE",
-      system: Object.freeze({
-        kind: "planetary",
-        worlds: 2,
-        label: "2 CONFIRMED WORLDS · 5.1-11.2 DAY YEARS",
-        star: Object.freeze({
-          name: "PROXIMA CENTAURI",
-          spectralType: "M5.5Ve",
-          temperature: 2992,
-          radiusSolar: 0.141,
-          luminositySuns: 0.001567,
-        }),
-        // Neither world transits, so their radii are estimated from minimum
-        // mass, not measured. Periods and separations are the solid numbers.
-        bodies: Object.freeze([
-          Object.freeze({ id: "proxima-d", name: "PROXIMA d", kind: "planet", periodDays: 5.12338, orbitAu: 0.02881, radiusEarth: 0.692, eccentricity: 0.04 }),
-          Object.freeze({ id: "proxima-b", name: "PROXIMA b", kind: "planet", periodDays: 11.18465, orbitAu: 0.04848, radiusEarth: 1.02, eccentricity: 0.02 }),
-        ]),
-      }),
-    }),
-    Object.freeze({
-      id: "sirius",
-      scale: "neighborhood",
-      name: "SIRIUS",
-      detail: "8.6 LIGHT-YEARS · A BINARY",
-      voice: "light",
-      frequency: 293.66,
-      color: 0xbcecff,
-      position: Object.freeze([0, -4.4, -0.5]),
-      slot: Object.freeze([0, -1]),
-      lesson: "THE BRIGHTEST STAR IN OUR SKY, CIRCLED BY A DEAD ONE",
-      system: Object.freeze({
-        kind: "binary",
-        worlds: 1,
-        label: "SIRIUS A + B · 50 YEAR ORBIT · 19.8 AU",
-        star: Object.freeze({
-          name: "SIRIUS A",
-          spectralType: "A1V",
-          temperature: 9940,
-          radiusSolar: 1.711,
-          luminositySuns: 25.4,
-        }),
-        bodies: Object.freeze([
-          Object.freeze({ id: "sirius-b", name: "SIRIUS B", kind: "star", periodDays: 18_309, orbitAu: 19.8, radiusEarth: 0.92, eccentricity: 0.5923, color: 0xdfe9ff }),
-        ]),
-      }),
-    }),
-    Object.freeze({
-      id: "trappist-1",
-      scale: "neighborhood",
-      name: "TRAPPIST-1",
-      detail: "40.5 LIGHT-YEARS · 7 WORLDS",
-      voice: "theremin",
-      frequency: 174.61,
-      color: 0xd98bff,
-      position: Object.freeze([2.25, 2.2, -0.6]),
-      slot: Object.freeze([1, 0.44]),
-      lesson: "SEVEN ROCKY WORLDS LOCKED INTO ONE RHYTHM",
-      system: Object.freeze({
-        kind: "planetary",
-        worlds: 7,
-        label: "7 ROCKY WORLDS · 1.5-18.8 DAY YEARS",
-        resonance: "8:5 · 5:3 · 3:2 · 3:2 · 4:3 · 3:2 — EVERY NEIGHBOURING PAIR",
-        star: Object.freeze({
-          name: "TRAPPIST-1",
-          spectralType: "M8V",
-          temperature: 2566,
-          radiusSolar: 0.1192,
-          luminositySuns: 0.000553,
-        }),
-        bodies: Object.freeze([
-          Object.freeze({ id: "trappist-1-b", name: "TRAPPIST-1 b", kind: "planet", periodDays: 1.510826, orbitAu: 0.01154, radiusEarth: 1.116, eccentricity: 0.0062 }),
-          Object.freeze({ id: "trappist-1-c", name: "TRAPPIST-1 c", kind: "planet", periodDays: 2.421937, orbitAu: 0.0158, radiusEarth: 1.097, eccentricity: 0.0065 }),
-          Object.freeze({ id: "trappist-1-d", name: "TRAPPIST-1 d", kind: "planet", periodDays: 4.049219, orbitAu: 0.02227, radiusEarth: 0.788, eccentricity: 0.0084 }),
-          Object.freeze({ id: "trappist-1-e", name: "TRAPPIST-1 e", kind: "planet", periodDays: 6.101013, orbitAu: 0.02925, radiusEarth: 0.92, eccentricity: 0.0051 }),
-          Object.freeze({ id: "trappist-1-f", name: "TRAPPIST-1 f", kind: "planet", periodDays: 9.20754, orbitAu: 0.03849, radiusEarth: 1.045, eccentricity: 0.0101 }),
-          Object.freeze({ id: "trappist-1-g", name: "TRAPPIST-1 g", kind: "planet", periodDays: 12.352446, orbitAu: 0.04683, radiusEarth: 1.129, eccentricity: 0.0021 }),
-          Object.freeze({ id: "trappist-1-h", name: "TRAPPIST-1 h", kind: "planet", periodDays: 18.772866, orbitAu: 0.06189, radiusEarth: 0.755, eccentricity: 0.0057 }),
-        ]),
-      }),
-    }),
-    Object.freeze({
-      id: "toi-700",
-      scale: "neighborhood",
-      name: "TOI-700",
-      detail: "101.5 LIGHT-YEARS · 4 WORLDS",
-      voice: "ondes",
-      frequency: 196,
-      color: 0xffb072,
-      position: Object.freeze([2.25, -2.2, 0.8]),
-      slot: Object.freeze([1, -0.44]),
-      lesson: "TWO OF ITS WORLDS SIT WHERE LIQUID WATER COULD SURVIVE",
-      system: Object.freeze({
-        kind: "planetary",
-        worlds: 4,
-        label: "4 WORLDS · TOI-700 d AND e IN THE HABITABLE ZONE",
-        star: Object.freeze({
-          name: "TOI-700",
-          spectralType: "M2.5V",
-          temperature: 3459,
-          radiusSolar: 0.421,
-          luminositySuns: 0.0229,
-        }),
-        bodies: Object.freeze([
-          Object.freeze({ id: "toi-700-b", name: "TOI-700 b", kind: "planet", periodDays: 9.97722, orbitAu: 0.0677, radiusEarth: 0.914, eccentricity: 0.075 }),
-          Object.freeze({ id: "toi-700-c", name: "TOI-700 c", kind: "planet", periodDays: 16.05114, orbitAu: 0.0929, radiusEarth: 2.6, eccentricity: 0.068 }),
-          Object.freeze({ id: "toi-700-e", name: "TOI-700 e", kind: "planet", periodDays: 27.80978, orbitAu: 0.134, radiusEarth: 0.953, eccentricity: 0.059 }),
-          Object.freeze({ id: "toi-700-d", name: "TOI-700 d", kind: "planet", periodDays: 37.42396, orbitAu: 0.1633, radiusEarth: 1.073, eccentricity: 0.042 }),
-        ]),
-      }),
-    }),
-    Object.freeze({
-      id: "kepler-90",
-      scale: "neighborhood",
-      name: "KEPLER-90",
-      detail: "2,767 LIGHT-YEARS · 8 WORLDS",
-      voice: "trautonium",
-      frequency: 146.83,
-      color: 0xffe6a8,
-      position: Object.freeze([-2.25, 2.2, -0.8]),
-      slot: Object.freeze([-1, 0.44]),
-      lesson: "AS MANY PLANETS AS THE SUN HAS — ONE WAS FOUND BY A MACHINE",
-      system: Object.freeze({
-        kind: "planetary",
-        worlds: 8,
-        label: "8 WORLDS · SMALL ONES INSIDE, GIANTS OUTSIDE",
-        star: Object.freeze({
-          name: "KEPLER-90",
-          spectralType: "G2 / F9 IV-V",
-          temperature: 6015,
-          radiusSolar: 1.2,
-          luminositySuns: 1.69,
-        }),
-        bodies: Object.freeze([
-          Object.freeze({ id: "kepler-90-b", name: "KEPLER-90 b", kind: "planet", periodDays: 7.00815, orbitAu: 0.074, radiusEarth: 1.31, eccentricity: 0 }),
-          Object.freeze({ id: "kepler-90-c", name: "KEPLER-90 c", kind: "planet", periodDays: 8.71938, orbitAu: 0.089, radiusEarth: 1.19, eccentricity: 0 }),
-          Object.freeze({ id: "kepler-90-i", name: "KEPLER-90 i", kind: "planet", periodDays: 14.44912, orbitAu: 0.1201, radiusEarth: 1.32, eccentricity: 0 }),
-          Object.freeze({ id: "kepler-90-d", name: "KEPLER-90 d", kind: "planet", periodDays: 59.73667, orbitAu: 0.32, radiusEarth: 2.87, eccentricity: 0 }),
-          Object.freeze({ id: "kepler-90-e", name: "KEPLER-90 e", kind: "planet", periodDays: 91.93913, orbitAu: 0.42, radiusEarth: 2.66, eccentricity: 0 }),
-          Object.freeze({ id: "kepler-90-f", name: "KEPLER-90 f", kind: "planet", periodDays: 124.9144, orbitAu: 0.48, radiusEarth: 2.88, eccentricity: 0.01 }),
-          Object.freeze({ id: "kepler-90-g", name: "KEPLER-90 g", kind: "planet", periodDays: 210.73514, orbitAu: 0.717, radiusEarth: 7.718, eccentricity: 0.049 }),
-          Object.freeze({ id: "kepler-90-h", name: "KEPLER-90 h", kind: "planet", periodDays: 331.60296, orbitAu: 0.9706, radiusEarth: 11.252, eccentricity: 0.011 }),
-        ]),
-      }),
-    }),
-  ]),
+  });
+}
+
+const NEIGHBOURHOOD_LANDMARKS = Object.freeze(
+  NEIGHBOURHOOD_SHELLS.flatMap((shell, shellIndex) => shell.members.map(([id, slot], order) => {
+    if (id === "solar-system") {
+      return Object.freeze({ ...SOLAR_SYSTEM_LANDMARK, shell: shellIndex, slot: Object.freeze([...slot]) });
+    }
+    const system = STAR_SYSTEMS_BY_ID.get(id);
+    if (!system) throw new Error(`Unknown catalogue system in a shell: ${id}`);
+    return catalogueLandmark(system, shellIndex, slot, order);
+  })),
+);
+
+// Positions are deliberately schematic. Distances and relationships are real,
+// while each semantic scale is re-authored so a child can read it on one screen.
+// Sources: NASA Exoplanet Archive pscomppars (2026-07-25), NASA Hubble, ESA Gaia.
+const COSMIC_LANDMARKS = Object.freeze({
+  neighborhood: NEIGHBOURHOOD_LANDMARKS,
   galaxy: Object.freeze([
     Object.freeze({
       id: "orion-spur",

@@ -8,7 +8,7 @@
 
 export const STAR_SYSTEMS = Object.freeze([
   Object.freeze({
-    id: "koi-351",
+    id: "kepler-90",
     name: "KEPLER-90",
     distanceLy: 2767,
     lesson: "EIGHT WORLDS — AS MANY AS OUR OWN SUN HAS",
@@ -22,14 +22,14 @@ export const STAR_SYSTEMS = Object.freeze([
       luminositySuns: 1.856,
     }),
     bodies: Object.freeze([
-      Object.freeze({ id: "koi-351-b", name: "KEPLER-90 B", kind: "planet", periodDays: 7.008151, orbitAu: 0.074, radiusEarth: 1.31, eccentricity: 0 }),
-      Object.freeze({ id: "koi-351-c", name: "KEPLER-90 C", kind: "planet", periodDays: 8.719375, orbitAu: 0.089, radiusEarth: 1.19, eccentricity: 0 }),
+      Object.freeze({ id: "kepler-90-b", name: "KEPLER-90 B", kind: "planet", periodDays: 7.008151, orbitAu: 0.074, radiusEarth: 1.31, eccentricity: 0 }),
+      Object.freeze({ id: "kepler-90-c", name: "KEPLER-90 C", kind: "planet", periodDays: 8.719375, orbitAu: 0.089, radiusEarth: 1.19, eccentricity: 0 }),
       Object.freeze({ id: "kepler-90-i", name: "KEPLER-90 I", kind: "planet", periodDays: 14.44912, orbitAu: 0.1201380843, radiusEarth: 1.32, eccentricity: 0 }),
-      Object.freeze({ id: "koi-351-d", name: "KEPLER-90 D", kind: "planet", periodDays: 59.73667, orbitAu: 0.32, radiusEarth: 2.87, eccentricity: 0 }),
-      Object.freeze({ id: "koi-351-e", name: "KEPLER-90 E", kind: "planet", periodDays: 91.93913, orbitAu: 0.42, radiusEarth: 2.66, eccentricity: 0 }),
-      Object.freeze({ id: "koi-351-f", name: "KEPLER-90 F", kind: "planet", periodDays: 124.9144, orbitAu: 0.48, radiusEarth: 2.88, eccentricity: 0 }),
-      Object.freeze({ id: "koi-351-g", name: "KEPLER-90 G", kind: "planet", periodDays: 210.73514, orbitAu: 0.71704, radiusEarth: 7.718, eccentricity: 0.0292 }),
-      Object.freeze({ id: "koi-351-h", name: "KEPLER-90 H", kind: "planet", periodDays: 331.60296, orbitAu: 0.97062, radiusEarth: 11.252, eccentricity: 0.0276 }),
+      Object.freeze({ id: "kepler-90-d", name: "KEPLER-90 D", kind: "planet", periodDays: 59.73667, orbitAu: 0.32, radiusEarth: 2.87, eccentricity: 0 }),
+      Object.freeze({ id: "kepler-90-e", name: "KEPLER-90 E", kind: "planet", periodDays: 91.93913, orbitAu: 0.42, radiusEarth: 2.66, eccentricity: 0 }),
+      Object.freeze({ id: "kepler-90-f", name: "KEPLER-90 F", kind: "planet", periodDays: 124.9144, orbitAu: 0.48, radiusEarth: 2.88, eccentricity: 0 }),
+      Object.freeze({ id: "kepler-90-g", name: "KEPLER-90 G", kind: "planet", periodDays: 210.73514, orbitAu: 0.71704, radiusEarth: 7.718, eccentricity: 0.0292 }),
+      Object.freeze({ id: "kepler-90-h", name: "KEPLER-90 H", kind: "planet", periodDays: 331.60296, orbitAu: 0.97062, radiusEarth: 11.252, eccentricity: 0.0276 }),
     ]),
   }),
   Object.freeze({
@@ -61,7 +61,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "HD 219134",
     distanceLy: 21.3,
     lesson: "SIX WORLDS AROUND A STAR YOU CAN SEE WITH YOUR OWN EYES",
-    voice: "strings",
+    voice: "ondes",
     label: "6 WORLDS · YEARS OF 3.1 DAYS TO 6.2 EARTH YEARS",
     star: Object.freeze({
       name: "HD 219134",
@@ -84,7 +84,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "HD 110067",
     distanceLy: 105,
     lesson: "SIX WORLDS IN AN UNBROKEN RESONANT CHAIN, UNDISTURBED SINCE BIRTH",
-    voice: "ondes",
+    voice: "earth",
     label: "6 WORLDS · YEARS OF 9.1 TO 55 DAYS",
     star: Object.freeze({
       name: "HD 110067",
@@ -107,7 +107,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "HD 10180",
     distanceLy: 127,
     lesson: "A SUN-LIKE STAR WITH A FAMILY THE SIZE OF OURS",
-    voice: "brass",
+    voice: "earth",
     label: "6 WORLDS · YEARS OF 5.8 DAYS TO 6.0 EARTH YEARS",
     star: Object.freeze({
       name: "HD 10180",
@@ -130,7 +130,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "HD 191939",
     distanceLy: 175,
     lesson: "THREE MINI-NEPTUNES, THEN A COLD GIANT FAR OUT",
-    voice: "brass",
+    voice: "earth",
     label: "6 WORLDS · YEARS OF 8.9 DAYS TO 7.9 EARTH YEARS",
     star: Object.freeze({
       name: "HD 191939",
@@ -153,7 +153,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "TOI-178",
     distanceLy: 204,
     lesson: "FIVE OUTER WORLDS BEAT 18:9:6:4:3 AGAINST EACH OTHER",
-    voice: "theremin",
+    voice: "ondes",
     label: "6 WORLDS · YEARS OF 1.9 TO 21 DAYS",
     star: Object.freeze({
       name: "TOI-178",
@@ -176,7 +176,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "TOI-1136",
     distanceLy: 276,
     lesson: "A YOUNG SYSTEM STILL SETTLING INTO ITS RHYTHM",
-    voice: "ondes",
+    voice: "earth",
     label: "6 WORLDS · YEARS OF 4.2 TO 40 DAYS",
     star: Object.freeze({
       name: "TOI-1136",
@@ -199,7 +199,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "K2-138",
     distanceLy: 661,
     lesson: "A STAIRCASE OF NEAR 3:2 STEPS, FOUND BY VOLUNTEERS",
-    voice: "trautonium",
+    voice: "earth",
     label: "6 WORLDS · YEARS OF 2.4 TO 42 DAYS",
     star: Object.freeze({
       name: "K2-138",
@@ -222,7 +222,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "KEPLER-20",
     distanceLy: 922,
     lesson: "ROCK AND GAS ALTERNATING, WHICH SHOULD NOT HAPPEN",
-    voice: "glass",
+    voice: "earth",
     label: "6 WORLDS · YEARS OF 3.7 TO 78 DAYS",
     star: Object.freeze({
       name: "KEPLER-20",
@@ -245,7 +245,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "KEPLER-11",
     distanceLy: 2108,
     lesson: "SIX WORLDS PACKED INSIDE THE ORBIT OF VENUS",
-    voice: "glass",
+    voice: "earth",
     label: "6 WORLDS · YEARS OF 10 TO 118 DAYS",
     star: Object.freeze({
       name: "KEPLER-11",
@@ -268,7 +268,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "GLIESE 667 C",
     distanceLy: 23.63,
     lesson: "A DIM RED SUN IN A TRIPLE STAR SYSTEM",
-    voice: "theremin",
+    voice: "alpha-centauri",
     label: "5 WORLDS · YEARS OF 7.2 TO 256 DAYS",
     star: Object.freeze({
       name: "GLIESE 667 C",
@@ -290,7 +290,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "L 98-59",
     distanceLy: 34.64,
     lesson: "FIVE SMALL WORLDS, ONE LIGHTER THAN ANY OTHER MEASURED",
-    voice: "glass",
+    voice: "alpha-centauri",
     label: "5 WORLDS · YEARS OF 2.3 TO 23 DAYS",
     star: Object.freeze({
       name: "L 98-59",
@@ -312,7 +312,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "55 CANCRI",
     distanceLy: 41.05,
     lesson: "A WORLD OF LAVA THAT ORBITS IN EIGHTEEN HOURS",
-    voice: "brass",
+    voice: "earth",
     label: "5 WORLDS · YEARS OF 0.7 DAYS TO 13 EARTH YEARS",
     star: Object.freeze({
       name: "55 CANCRI",
@@ -334,7 +334,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "KEPLER-186",
     distanceLy: 579,
     lesson: "THE FIRST EARTH-SIZED WORLD FOUND IN A HABITABLE ZONE",
-    voice: "strings",
+    voice: "alpha-centauri",
     label: "5 WORLDS · YEARS OF 3.9 TO 130 DAYS",
     star: Object.freeze({
       name: "KEPLER-186",
@@ -356,7 +356,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "KEPLER-62",
     distanceLy: 981,
     lesson: "TWO WORLDS WHERE WATER COULD LIE ON THE GROUND",
-    voice: "strings",
+    voice: "ondes",
     label: "5 WORLDS · YEARS OF 5.7 TO 267 DAYS",
     star: Object.freeze({
       name: "KEPLER-62",
@@ -400,7 +400,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "GLIESE 876",
     distanceLy: 15.25,
     lesson: "THREE WORLDS IN A LAPLACE RESONANCE, LIKE JUPITER'S MOONS",
-    voice: "ondes",
+    voice: "alpha-centauri",
     label: "4 WORLDS · YEARS OF 1.9 TO 124 DAYS",
     star: Object.freeze({
       name: "GLIESE 876",
@@ -421,7 +421,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "GLIESE 3293",
     distanceLy: 65.85,
     lesson: "FOUR WORLDS AROUND A QUIET RED DWARF",
-    voice: "theremin",
+    voice: "alpha-centauri",
     label: "4 WORLDS · YEARS OF 13 TO 123 DAYS",
     star: Object.freeze({
       name: "GLIESE 3293",
@@ -442,7 +442,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "TOI-700",
     distanceLy: 102,
     lesson: "TWO OF ITS WORLDS SIT WHERE LIQUID WATER COULD SURVIVE",
-    voice: "ondes",
+    voice: "alpha-centauri",
     label: "4 WORLDS · YEARS OF 10.0 TO 37 DAYS",
     star: Object.freeze({
       name: "TOI-700",
@@ -463,7 +463,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "HR 8799",
     distanceLy: 135,
     lesson: "FOUR GIANTS PHOTOGRAPHED DIRECTLY, STILL GLOWING FROM BIRTH",
-    voice: "brass",
+    voice: "trautonium",
     label: "4 WORLDS · YEARS OF 20816 DAYS TO 465 EARTH YEARS",
     star: Object.freeze({
       name: "HR 8799",
@@ -484,7 +484,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "V1298 TAURI",
     distanceLy: 353,
     lesson: "A STAR ONLY 23 MILLION YEARS OLD, ITS WORLDS STILL SWELLING",
-    voice: "glass",
+    voice: "ondes",
     label: "4 WORLDS · YEARS OF 8.2 TO 49 DAYS",
     star: Object.freeze({
       name: "V1298 TAURI",
@@ -501,7 +501,7 @@ export const STAR_SYSTEMS = Object.freeze([
     ]),
   }),
   Object.freeze({
-    id: "teegarden-s-star",
+    id: "teegardens-star",
     name: "TEEGARDEN'S STAR",
     distanceLy: 12.49,
     lesson: "ONE OF THE COOLEST SUNS WE KNOW, AND ITS TEMPERATE WORLDS",
@@ -515,9 +515,9 @@ export const STAR_SYSTEMS = Object.freeze([
       luminositySuns: 0.000722,
     }),
     bodies: Object.freeze([
-      Object.freeze({ id: "teegarden-s-star-b", name: "TEEGARDEN'S STAR B", kind: "planet", periodDays: 4.90634, orbitAu: 0.0259, radiusEarth: 1.05, eccentricity: 0.03 }),
-      Object.freeze({ id: "teegarden-s-star-c", name: "TEEGARDEN'S STAR C", kind: "planet", periodDays: 11.416, orbitAu: 0.0455, radiusEarth: 1.02, eccentricity: 0.04 }),
-      Object.freeze({ id: "teegarden-s-star-d", name: "TEEGARDEN'S STAR D", kind: "planet", periodDays: 26.13, orbitAu: 0.0791, radiusEarth: 0.954, eccentricity: 0.07 }),
+      Object.freeze({ id: "teegardens-star-b", name: "TEEGARDEN'S STAR B", kind: "planet", periodDays: 4.90634, orbitAu: 0.0259, radiusEarth: 1.05, eccentricity: 0.03 }),
+      Object.freeze({ id: "teegardens-star-c", name: "TEEGARDEN'S STAR C", kind: "planet", periodDays: 11.416, orbitAu: 0.0455, radiusEarth: 1.02, eccentricity: 0.04 }),
+      Object.freeze({ id: "teegardens-star-d", name: "TEEGARDEN'S STAR D", kind: "planet", periodDays: 26.13, orbitAu: 0.0791, radiusEarth: 0.954, eccentricity: 0.07 }),
     ]),
   }),
   Object.freeze({
@@ -525,7 +525,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "UPSILON ANDROMEDAE",
     distanceLy: 43.72,
     lesson: "GIANTS ON TILTED, CROSSING ORBITS",
-    voice: "brass",
+    voice: "trautonium",
     label: "3 WORLDS · YEARS OF 4.6 DAYS TO 3.5 EARTH YEARS",
     star: Object.freeze({
       name: "UPSILON ANDROMEDAE",
@@ -541,11 +541,11 @@ export const STAR_SYSTEMS = Object.freeze([
     ]),
   }),
   Object.freeze({
-    id: "proxima-cen",
+    id: "proxima-centauri",
     name: "PROXIMA CENTAURI",
     distanceLy: 4.24,
     lesson: "THE NEAREST STAR TO THE SUN, AND FAR TOO FAINT TO SEE",
-    voice: "alpha-centauri",
+    voice: "theremin",
     label: "2 WORLDS · YEARS OF 5.1 TO 11 DAYS",
     star: Object.freeze({
       name: "PROXIMA CENTAURI",
@@ -555,8 +555,8 @@ export const STAR_SYSTEMS = Object.freeze([
       luminositySuns: 0.00151,
     }),
     bodies: Object.freeze([
-      Object.freeze({ id: "proxima-cen-d", name: "PROXIMA CENTAURI D", kind: "planet", periodDays: 5.12338, orbitAu: 0.02881, radiusEarth: 0.692, eccentricity: 0 }),
-      Object.freeze({ id: "proxima-cen-b", name: "PROXIMA CENTAURI B", kind: "planet", periodDays: 11.18465, orbitAu: 0.04848, radiusEarth: 1.02, eccentricity: 0 }),
+      Object.freeze({ id: "proxima-centauri-d", name: "PROXIMA CENTAURI D", kind: "planet", periodDays: 5.12338, orbitAu: 0.02881, radiusEarth: 0.692, eccentricity: 0 }),
+      Object.freeze({ id: "proxima-centauri-b", name: "PROXIMA CENTAURI B", kind: "planet", periodDays: 11.18465, orbitAu: 0.04848, radiusEarth: 1.02, eccentricity: 0 }),
     ]),
   }),
   Object.freeze({
@@ -583,7 +583,7 @@ export const STAR_SYSTEMS = Object.freeze([
     name: "LP 890-9",
     distanceLy: 106,
     lesson: "THE SECOND-COOLEST STAR KNOWN TO HOLD TRANSITING WORLDS",
-    voice: "glass",
+    voice: "theremin",
     label: "2 WORLDS · YEARS OF 2.7 TO 8.5 DAYS",
     star: Object.freeze({
       name: "LP 890-9",

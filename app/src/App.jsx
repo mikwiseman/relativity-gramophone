@@ -36,6 +36,7 @@ import {
   cosmicJourneyForScale,
   cosmicLandmarkById,
   cosmicScaleForDistance,
+  NEIGHBOURHOOD_SHELLS,
   thereminParameters,
 } from "./lib/cosmicInstrument.js";
 import { COSMIC_VOICES, hapticPattern, voiceParameters } from "./lib/sonification.js";
@@ -105,6 +106,7 @@ export function App() {
   const [cameraScale, setCameraScale] = useState("1.2 AU");
   const [cosmicScale, setCosmicScale] = useState(() => cosmicScaleForDistance(10));
   const [visitedSystemId, setVisitedSystemId] = useState(null);
+  const [shellIndex, setShellIndex] = useState(0);
   const [journeyTarget, setJourneyTarget] = useState(null);
   const [arrivalTarget, setArrivalTarget] = useState(null);
   const [interactionMode, setInteractionMode] = useState("compose");
@@ -231,18 +233,25 @@ export function App() {
     && liveBodies.length === 0
     && (cosmicScale.id === "orbit" || cosmicScale.id === "system")
     && !journeyTarget;
+  const shell = NEIGHBOURHOOD_SHELLS[shellIndex] ?? NEIGHBOURHOOD_SHELLS[0];
+  const inNeighbourhood = currentDestination.id === "neighborhood" && !visitedSystem;
   const cosmicJourney = cosmicJourneyForScale(currentDestination.id);
   const nextDestination = visitedSystem
     ? cosmicDestination("galaxy")
     : cosmicJourney.outward;
-  const flightLabel = nextDestination
-    ? {
-        neighborhood: "STARS",
-        galaxy: "MILKY WAY",
-        localGroup: "GALAXIES",
-        universe: "UNIVERSE",
-      }[nextDestination.id] ?? nextDestination.label
-    : "";
+  const nextShell = inNeighbourhood && shellIndex < NEIGHBOURHOOD_SHELLS.length - 1
+    ? NEIGHBOURHOOD_SHELLS[shellIndex + 1]
+    : null;
+  const flightLabel = nextShell
+    ? nextShell.label.replace(/^THE /u, "")
+    : nextDestination
+      ? {
+          neighborhood: "STARS",
+          galaxy: "MILKY WAY",
+          localGroup: "GALAXIES",
+          universe: "UNIVERSE",
+        }[nextDestination.id] ?? nextDestination.label
+      : "";
   const guidance = instrumentHint({
     planetCount: planets.length,
     selectedBody,
@@ -280,12 +289,14 @@ export function App() {
     : journeyTarget
     ? `FLYING TO ${cosmicDestination(journeyTarget).label}`
     : arrivalTarget
-      ? `YOU ARE IN ${cosmicDestination(arrivalTarget).label}`
+      ? `YOU ARE IN ${arrivalTarget === "neighborhood" ? shell.label : cosmicDestination(arrivalTarget).label}`
     : visitedSystem
       ? visitedSystem.name
     : isAwaitingCosmicScore
         ? "A SHARED UNIVERSE IS READY"
-      : cosmicScale.id === "orbit" || cosmicScale.id === "system"
+      : inNeighbourhood
+        ? shell.guidance
+    : cosmicScale.id === "orbit" || cosmicScale.id === "system"
         ? guidance
         : currentDestination.guidance;
   const activeGuidanceDetail = showInstrumentLesson
@@ -302,7 +313,9 @@ export function App() {
       ? `TOUCH A WORLD TO HEAR ITS YEAR · TOUCH THE STAR FOR ALL ${visitedSystem.system.worlds}`
     : isAwaitingCosmicScore
         ? "LISTEN · THE CAMERA FOLLOWS EACH COSMIC VOICE"
-      : cosmicScale.id === "orbit" || cosmicScale.id === "system"
+      : inNeighbourhood
+        ? `${shell.measure} · ${shell.guidanceDetail}`
+    : cosmicScale.id === "orbit" || cosmicScale.id === "system"
         ? guidanceDetail
         : currentDestination.guidanceDetail;
   const playback = playbackControl({ audioState, isPlaying });
@@ -655,6 +668,7 @@ export function App() {
     const destination = cosmicDestination(targetId);
     setVisitedSystemId(null);
     setSelectedBodyId(null);
+    if (targetId !== "neighborhood") setShellIndex(0);
     window.clearTimeout(arrivalTimeoutRef.current);
     setArrivalTarget(null);
     journeyTargetRef.current = targetId;
@@ -669,8 +683,29 @@ export function App() {
   }, [cancelDirectGestures]);
 
   const handlePrimaryFlight = useCallback(() => {
+    // The nearby sky is four shells deep. FLY walks outward through them before
+    // it leaves for the galaxy, so the ladder stays one button in one
+    // direction and every press is honestly "further from home".
+    if (
+      !visitedSystem
+      && currentDestination.id === "neighborhood"
+      && shellIndex < NEIGHBOURHOOD_SHELLS.length - 1
+    ) {
+      cancelDirectGestures();
+      setShellIndex((current) => current + 1);
+      setSelectedBodyId(null);
+      return;
+    }
+    if (visitedSystem || currentDestination.id !== "neighborhood") setShellIndex(0);
     handleCosmicTravel(nextDestination?.id ?? "system");
-  }, [handleCosmicTravel, nextDestination]);
+  }, [
+    cancelDirectGestures,
+    currentDestination.id,
+    handleCosmicTravel,
+    nextDestination,
+    shellIndex,
+    visitedSystem,
+  ]);
 
   const handleOpenLight = useCallback(() => {
     cancelDirectGestures();
@@ -1229,6 +1264,7 @@ export function App() {
         thereminBeaconVisible={false}
         playbackEvents={composition.events}
         removeCommand={removeCommand}
+        shellIndex={shellIndex}
         resetToken={resetToken}
         selectedBodyId={selectedBodyId}
         onBirthBloom={handleBirthBloom}
@@ -1268,7 +1304,7 @@ export function App() {
       {!dialogOpen && storedScoreState === "idle" && !lightOpen && (
         <div className="instrument-topbar">
           <span className="instrument-location">
-            {visitedSystem?.name ?? currentDestination.label}
+            {visitedSystem?.name ?? (inNeighbourhood ? shell.label : currentDestination.label)}
           </span>
           <button
             type="button"

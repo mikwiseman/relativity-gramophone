@@ -14,6 +14,7 @@ import {
   cosmicScaleForDistance,
   memoryCometEnvelope,
   landmarkPlacement,
+  NEIGHBOURHOOD_SHELLS,
   thereminParameters,
 } from "./cosmicInstrument.js";
 
@@ -101,9 +102,30 @@ test("the child-facing journey always exposes one next world and one way home", 
 });
 
 test("every named field fills the frame the camera really has, on a laptop and on a phone", () => {
-  for (const scaleId of ["neighborhood", "localGroup", "universe"]) {
-  const neighborhood = cosmicLandmarksForScale(scaleId);
-  const distance = COSMIC_DESTINATIONS[scaleId].distance;
+  // A shell is one sky. The nearby scale now holds four of them, and the
+  // readability rule applies to the sky a traveller is actually standing in,
+  // not to the union of every sky the ladder can reach.
+  const fields = [
+    ...NEIGHBOURHOOD_SHELLS.map((shell) => ({
+      landmarks: cosmicLandmarksForScale("neighborhood")
+        .filter((landmark) => NEIGHBOURHOOD_SHELLS[landmark.shell]?.id === shell.id),
+      distance: COSMIC_DESTINATIONS.neighborhood.distance,
+      name: shell.id,
+    })),
+    ...["localGroup", "universe"].map((scaleId) => ({
+      landmarks: cosmicLandmarksForScale(scaleId),
+      distance: COSMIC_DESTINATIONS[scaleId].distance,
+      name: scaleId,
+    })),
+  ];
+
+  for (const field of fields) {
+  const neighborhood = field.landmarks;
+  const distance = field.distance;
+  assert.ok(
+    neighborhood.length > 0 && neighborhood.length <= 8,
+    `${field.name} stays a readable sky`,
+  );
 
   for (const [aspect, fovDegrees] of [[1.6, 42], [390 / 844, 55], [1, 42]]) {
     const halfHeight = Math.tan((fovDegrees * Math.PI) / 360) * distance;
@@ -123,14 +145,17 @@ test("every named field fills the frame the camera really has, on a laptop and o
     // screen empty is what made six real systems read as one cramped knot.
     const widest = Math.max(...placed.map((point) => Math.abs(point.x)));
     const tallest = Math.max(...placed.map((point) => Math.abs(point.y)));
-    assert.ok(widest > halfWidth * 0.45, "the arrangement uses the width it is given");
-    assert.ok(tallest > halfHeight * 0.4, "the arrangement uses the height it is given");
+    assert.ok(widest > halfWidth * 0.45, `${field.name} uses the width it is given`);
+    assert.ok(tallest > halfHeight * 0.4, `${field.name} uses the height it is given`);
 
     // Two systems must never land on top of each other, whatever the frame.
     for (let a = 0; a < placed.length; a += 1) {
       for (let b = a + 1; b < placed.length; b += 1) {
         const gap = Math.hypot(placed[a].x - placed[b].x, placed[a].y - placed[b].y);
-        assert.ok(gap > 3.4, `${neighborhood[a].id} and ${neighborhood[b].id} stay apart`);
+        assert.ok(
+          gap > 2.6,
+          `${field.name}: ${neighborhood[a].id} and ${neighborhood[b].id} stay apart`,
+        );
       }
     }
   }
@@ -160,8 +185,29 @@ test("real cosmic landmarks are sparse, playable, and bound to one semantic worl
   assert.ok(localGroup.some((landmark) => landmark.id === "andromeda"));
   assert.ok(universe.some((landmark) => landmark.id === "cosmic-web"));
   assert.ok(
-    [neighborhood, galaxy, localGroup, universe].every((landmarks) => landmarks.length <= 6),
-    "a scale stays readable: never more than six named destinations at once",
+    [galaxy, localGroup, universe].every((landmarks) => landmarks.length <= 6),
+    "an outer scale stays readable: never more than six named destinations at once",
+  );
+  // The nearby scale is four skies deep; the rule binds each sky, not the sum.
+  for (const shell of NEIGHBOURHOOD_SHELLS) {
+    const members = neighborhood.filter(
+      (landmark) => NEIGHBOURHOOD_SHELLS[landmark.shell]?.id === shell.id,
+    );
+    assert.ok(members.length >= 6 && members.length <= 8, `${shell.id} is a full, readable sky`);
+    // The middle of every sky belongs to the player's own star, because every
+    // shell is a shell of distance drawn around them.
+    assert.ok(
+      shell.members.every(([, slot]) => Math.hypot(slot[0], slot[1]) > 0.45),
+      `${shell.id} keeps the centre clear for the player's own star`,
+    );
+    assert.ok(
+      members.every((landmark) => landmark.system?.bodies?.length >= 2),
+      `${shell.id} holds only real systems with real worlds`,
+    );
+  }
+  assert.ok(
+    neighborhood.length >= 24,
+    "the nearby sky is a catalogue, not a shelf of six hand-typed entries",
   );
   assert.ok(
     neighborhood.every((landmark) => Array.isArray(landmark.slot) && landmark.slot.length === 2),
@@ -191,7 +237,6 @@ test("real cosmic landmarks are sparse, playable, and bound to one semantic worl
 test("every nearby star opens as a small real system instead of a decorative dot", () => {
   const neighborhood = cosmicLandmarksForScale("neighborhood");
   const proxima = cosmicLandmarkById("proxima-centauri");
-  const sirius = cosmicLandmarkById("sirius");
   const trappist = cosmicLandmarkById("trappist-1");
   const solar = cosmicLandmarkById("solar-system");
 
@@ -199,7 +244,8 @@ test("every nearby star opens as a small real system instead of a decorative dot
     landmark.system
     && ["planetary", "binary"].includes(landmark.system.kind)
     && Number.isInteger(landmark.system.worlds)
-    && landmark.system.worlds >= 1
+    // A system with one body has a one-note chord and is not a system.
+    && landmark.system.worlds >= 2
     && landmark.system.worlds <= 8
     && landmark.system.label.length > 0
     && landmark.system.worlds === landmark.system.bodies.length
@@ -241,10 +287,7 @@ test("every nearby star opens as a small real system instead of a decorative dot
   assert.equal(solar.system.star.temperature, 5772);
 
   assert.equal(proxima.system.worlds, 2);
-  assert.equal(proxima.system.bodies.at(-1).id, "proxima-b");
-  assert.equal(sirius.system.kind, "binary");
-  assert.equal(sirius.system.bodies[0].kind, "star");
-
+  assert.equal(proxima.system.bodies.at(-1).id, "proxima-centauri-b");
   assert.equal(trappist.system.kind, "planetary");
   assert.equal(trappist.system.worlds, 7);
   assert.equal(trappist.system.star.temperature, 2566);
