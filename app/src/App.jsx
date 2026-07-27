@@ -122,6 +122,8 @@ export function App() {
   const arrivalTarget = journey.arrivalTarget;
   const [interactionMode, setInteractionMode] = useState("compose");
   const [hasPluckedOrbit, setHasPluckedOrbit] = useState(false);
+  const [hasBornWorld, setHasBornWorld] = useState(false);
+  const [hasBornMoon, setHasBornMoon] = useState(false);
   const [thereminPhase, setThereminPhase] = useState("idle");
   const [hasPlayedTheremin, setHasPlayedTheremin] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -215,6 +217,8 @@ export function App() {
     window.clearTimeout(arrivalTimeoutRef.current);
     setInteractionMode("compose");
     setHasPluckedOrbit(false);
+    setHasBornWorld(false);
+    setHasBornMoon(false);
     setHasPlayedTheremin(false);
     setGuideOpen(false);
     setLightOpen(false);
@@ -282,6 +286,8 @@ export function App() {
     audioState,
     planetCount: planets.length,
     hasPluckedOrbit,
+    hasBornWorld,
+    hasBornMoon,
     thereminPhase,
     hasPlayedTheremin,
   });
@@ -1009,6 +1015,7 @@ export function App() {
       setRuntimeError(null);
       setIsPlaying(true);
       setDialogOpen(false);
+      setHasBornWorld(true);
       audioRef.current.playBirthBloom(body);
       performHaptic({ kind: "birth", strength: body.displayMass ?? body.mass ?? 0.5 });
       protectCueUntilRef.current = performance.now() + 2400;
@@ -1025,6 +1032,7 @@ export function App() {
       setRuntimeError(null);
       setIsPlaying(true);
       setDialogOpen(false);
+      setHasBornMoon(true);
       audioRef.current.playMoonBloom(moon, parent);
       performHaptic({ kind: "birth", strength: moon.displayMass ?? moon.mass ?? 0.2 });
       protectCueUntilRef.current = performance.now() + 2600;

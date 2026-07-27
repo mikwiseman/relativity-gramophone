@@ -365,7 +365,7 @@ test("the child instrument lesson exposes one concrete gesture at a time", () =>
     planetCount: 0,
   }), {
     step: 1,
-    total: 3,
+    total: 4,
     label: "SOUND",
     instruction: "TOUCH TO HEAR THE UNIVERSE",
     detail: "SOUND STARTS WITH ONE TAP",
@@ -375,43 +375,86 @@ test("the child instrument lesson exposes one concrete gesture at a time", () =>
     planetCount: 0,
   }), {
     step: 1,
-    total: 3,
+    total: 4,
     label: "SOUND",
     instruction: "TOUCH TO HEAR THE UNIVERSE",
     detail: "SOUND STARTS WITH ONE TAP",
   });
+  // An empty sky has no string to touch, so the lesson goes straight to making
+  // the first world.
   assert.deepEqual(instrumentLesson({
     audioState: "running",
     planetCount: 0,
   }), {
-    step: 2,
-    total: 3,
+    step: 3,
+    total: 4,
     label: "MAKE A WORLD",
     instruction: "PULL THE STAR",
     detail: "RELEASE TO MAKE A PLANET",
   });
   assert.deepEqual(instrumentLesson({ planetCount: 1 }), {
-    step: 3,
-    total: 3,
+    step: 2,
+    total: 4,
     label: "PLAY",
     instruction: "TOUCH AN ORBIT",
     detail: "SWIPE IT LIKE A STRING",
   });
-  assert.equal(instrumentLesson({
-    planetCount: 1,
-    hasPluckedOrbit: true,
-  }), null);
   assert.deepEqual(instrumentLesson({
-    planetCount: 0,
+    planetCount: 1,
     hasPluckedOrbit: true,
     hasPlayedTheremin: true,
   }), {
-    step: 2,
-    total: 3,
+    step: 3,
+    total: 4,
     label: "MAKE A WORLD",
     instruction: "PULL THE STAR",
     detail: "RELEASE TO MAKE A PLANET",
   });
+});
+
+test("the lesson teaches making a world even when the sky opens already full", () => {
+  // The instrument opens with three worlds already turning, and for a while
+  // that silently deleted the whole creation lesson: it was reachable only
+  // while the sky was empty, which now never happens. A player was never told
+  // that making a world was possible at all — while the owner's own first ask
+  // for this instrument was the ability to add planets and moons.
+  const lesson = instrumentLesson({ audioState: "running", planetCount: 3, hasPluckedOrbit: true });
+  assert.equal(lesson.label, "MAKE A WORLD");
+  assert.equal(lesson.instruction, "PULL THE STAR");
+});
+
+test("the lesson goes on to teach moons, and only then falls silent", () => {
+  const moonLesson = instrumentLesson({
+    planetCount: 3,
+    hasPluckedOrbit: true,
+    hasBornWorld: true,
+  });
+  assert.deepEqual(moonLesson, {
+    step: 4,
+    total: 4,
+    label: "MAKE A MOON",
+    instruction: "PULL A WORLD OUTWARD",
+    detail: "RELEASE INSIDE ITS GLOWING BAND",
+  });
+  assert.equal(
+    instrumentLesson({
+      planetCount: 3,
+      hasPluckedOrbit: true,
+      hasBornWorld: true,
+      hasBornMoon: true,
+    }),
+    null,
+    "a taught player is left alone",
+  );
+});
+
+test("the lesson never teaches a moon before there is a world to hang it on", () => {
+  const lesson = instrumentLesson({
+    planetCount: 0,
+    hasPluckedOrbit: true,
+    hasBornWorld: true,
+  });
+  assert.equal(lesson.label, "MAKE A WORLD", "with an empty sky, the world comes first");
 });
 
 test("a moon birth survives the share format and listener replay contract", () => {

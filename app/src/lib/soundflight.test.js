@@ -30,6 +30,7 @@ import {
   shouldCelebrateThereminEnd,
   shouldCancelDirectManipulation,
   shouldDeferStringPluck,
+  shouldSoundSweptString,
   thereminReleaseDisposition,
   shouldSoundThereminOnRelease,
   shouldShowMoonPlacementGuide,
@@ -216,6 +217,22 @@ test("touch strings wait for pointer release so a second finger can cancel the n
   assert.equal(shouldDeferStringPluck("mouse"), false);
   assert.equal(shouldDeferStringPluck("pen"), true);
   assert.throws(() => shouldDeferStringPluck(), /pointer type/i);
+});
+
+test("a sweep sounds as it happens, unless a second finger is really down", () => {
+  // Holding every crossing until the finger lifts turns a strum across three
+  // orbits into one late note — on the surface the design calls primary.
+  assert.equal(shouldSoundSweptString({ pointerType: "touch", activeTouchCount: 1 }), true);
+  assert.equal(shouldSoundSweptString({ pointerType: "pen", activeTouchCount: 0 }), true);
+  assert.equal(shouldSoundSweptString({ pointerType: "mouse", activeTouchCount: 0 }), true);
+  // Two fingers down is a pinch, and a pinch is never music.
+  assert.equal(shouldSoundSweptString({ pointerType: "touch", activeTouchCount: 2 }), false);
+  assert.equal(shouldSoundSweptString({ pointerType: "mouse", activeTouchCount: 2 }), true);
+  assert.throws(() => shouldSoundSweptString({ activeTouchCount: 1 }), /pointer type/i);
+  assert.throws(
+    () => shouldSoundSweptString({ pointerType: "touch", activeTouchCount: -1 }),
+    /how many touches/i,
+  );
 });
 
 test("mouse unlocks on press while touch and pen unlock on their valid release", () => {

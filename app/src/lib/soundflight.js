@@ -189,6 +189,28 @@ export function shouldDeferStringPluck(pointerType) {
   return pointerType !== "mouse";
 }
 
+/**
+ * Whether a string crossed *during* a sweep sounds now or waits.
+ *
+ * A tap on a string waits for the release, so that a second finger arriving
+ * can cancel the note and a pinch is never heard as music. A sweep is a
+ * different gesture: the hand is already down and moving across the orbits,
+ * and holding every crossing back until the finger lifts turns a strum across
+ * three strings into a single late note. So a sweep sounds as it happens —
+ * unless a second finger really is down, which is the case the waiting was
+ * protecting in the first place.
+ */
+export function shouldSoundSweptString({ pointerType, activeTouchCount = 0 }) {
+  if (typeof pointerType !== "string" || pointerType.length === 0) {
+    throw new Error("A swept string requires a pointer type");
+  }
+  if (!Number.isInteger(activeTouchCount) || activeTouchCount < 0) {
+    throw new Error("A swept string requires how many touches are down");
+  }
+  if (pointerType === "mouse") return true;
+  return activeTouchCount <= 1;
+}
+
 export function shouldSoundThereminOnRelease({ pointerType, active }) {
   if (typeof active !== "boolean") {
     throw new Error("Theremin release requires an explicit active state");
@@ -668,10 +690,25 @@ export function shouldCelebrateThereminEnd({ sounded }) {
   return sounded;
 }
 
+/**
+ * The four things this instrument can do, taught one gesture at a time.
+ *
+ * Hear it, play a string, make a world, give that world a moon. The order is
+ * the order a child can act in: the sky opens already turning, so there is
+ * something to play before there is anything to build.
+ *
+ * The creation steps do NOT depend on the sky being empty. They used to, and
+ * when the instrument changed to open with three worlds already in it, that
+ * quietly deleted the entire lesson about making worlds — the one thing the
+ * owner asks for first. A step is finished when the player has done it, never
+ * when the scene happens to look a certain way.
+ */
 export function instrumentLesson({
   audioState = "running",
   planetCount,
   hasPluckedOrbit = false,
+  hasBornWorld = false,
+  hasBornMoon = false,
 }) {
   if (!["locked", "paused", "running"].includes(audioState)) {
     throw new Error(`Unknown instrument lesson audio state: ${audioState}`);
@@ -679,31 +716,43 @@ export function instrumentLesson({
   if (!Number.isInteger(planetCount) || planetCount < 0) {
     throw new Error("Instrument lesson requires a planet count");
   }
-  if (audioState !== "running" && planetCount === 0) {
+  const total = 4;
+  if (audioState !== "running") {
     return {
       step: 1,
-      total: 3,
+      total,
       label: "SOUND",
       instruction: "TOUCH TO HEAR THE UNIVERSE",
       detail: "SOUND STARTS WITH ONE TAP",
     };
   }
-  if (planetCount === 0) {
+  if (planetCount > 0 && !hasPluckedOrbit) {
     return {
       step: 2,
-      total: 3,
+      total,
+      label: "PLAY",
+      instruction: "TOUCH AN ORBIT",
+      detail: "SWIPE IT LIKE A STRING",
+    };
+  }
+  // A moon needs a world to hang on, so an empty sky always asks for a world
+  // first however much the player has already built and fed to the star.
+  if (!hasBornWorld || planetCount === 0) {
+    return {
+      step: 3,
+      total,
       label: "MAKE A WORLD",
       instruction: "PULL THE STAR",
       detail: "RELEASE TO MAKE A PLANET",
     };
   }
-  if (!hasPluckedOrbit) {
+  if (!hasBornMoon) {
     return {
-      step: 3,
-      total: 3,
-      label: "PLAY",
-      instruction: "TOUCH AN ORBIT",
-      detail: "SWIPE IT LIKE A STRING",
+      step: 4,
+      total,
+      label: "MAKE A MOON",
+      instruction: "PULL A WORLD OUTWARD",
+      detail: "RELEASE INSIDE ITS GLOWING BAND",
     };
   }
   return null;

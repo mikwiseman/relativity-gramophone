@@ -43,6 +43,7 @@ import {
   shouldBeginThereminHold,
   shouldCancelDirectManipulation,
   shouldDeferStringPluck,
+  shouldSoundSweptString,
   shouldSoundThereminOnRelease,
   shouldOrbitAffectCameraFit,
   shouldShowMoonPlacementGuide,
@@ -50,7 +51,7 @@ import {
   thereminReleaseDisposition,
   voiceVisual,
 } from "../lib/soundflight.js";
-import { nearestStringPoint } from "../lib/harpStrings.js";
+import { nearestStringPoint, stringsAlongSweep } from "../lib/harpStrings.js";
 import { MILKY_WAY } from "../lib/cosmicAtlas.js";
 import { galaxyArmGeometry } from "../lib/galaxyShape.js";
 import {
@@ -2903,11 +2904,27 @@ export function SoundflightStage(props) {
           pendingPluck: deferred ? { hit: stringHit, strength: 0.62 } : null,
           lastPluckAt: new Map([[stringHit.bodyId, performance.now()]]),
           lastPoint: { x: point.x, y: point.y },
+          lastSample: { x: point.x, y: point.y },
         };
         if (event.pointerType !== "touch") controls.enabled = false;
         if (!deferred) performPluck(stringHit, 0.62);
         return;
       }
+      // Landing on empty sky is still the beginning of a strum. The screen
+      // says "SWIPE IT LIKE A STRING", and a hand that starts on black and
+      // sweeps across three orbits is strumming three orbits — it used to
+      // sound nothing at all, because a strum could only be armed by landing
+      // within fourteen pixels of a line. Nothing is captured and nothing is
+      // disabled here: an empty-sky drag moves no camera in composition, so
+      // this fills a gesture that was doing nothing.
+      runtime.pluck = {
+        pointerId: event.pointerId,
+        pointerType: event.pointerType,
+        pendingPluck: null,
+        lastPluckAt: new Map(),
+        lastPoint: { x: point.x, y: point.y },
+        lastSample: { x: point.x, y: point.y },
+      };
     };
 
     const onPointerMove = (event) => {
@@ -3038,19 +3055,36 @@ export function SoundflightStage(props) {
         event.stopImmediatePropagation();
         const point = eventPoint(event, renderer.domElement);
         const traveled = Math.hypot(point.x - runtime.pluck.lastPoint.x, point.y - runtime.pluck.lastPoint.y);
-        const hit = nearestStringPoint(point, trailPaths(), STRING_TOUCH_DISTANCE);
-        if (hit && traveled >= 6) {
-          const lastAt = runtime.pluck.lastPluckAt.get(hit.bodyId) ?? -Infinity;
-          if (performance.now() - lastAt > STRING_PLUCK_COOLDOWN) {
-            const strength = 0.4 + Math.min(0.6, traveled / 230);
-            if (shouldDeferStringPluck(runtime.pluck.pointerType)) {
-              runtime.pluck.pendingPluck = { hit, strength };
-            } else {
+        // The gesture is the path between two samples, not the samples. At
+        // 60 Hz a quick flick reports points hundreds of pixels apart, and
+        // asking only where the finger was seen jumps clean over every string
+        // in between — so the fastest, most natural strum was the silent one.
+        const crossed = stringsAlongSweep(
+          runtime.pluck.lastSample,
+          point,
+          trailPaths(),
+          STRING_TOUCH_DISTANCE,
+        );
+        runtime.pluck.lastSample = { x: point.x, y: point.y };
+        if (crossed.length > 0 && traveled >= 6) {
+          const strength = 0.4 + Math.min(0.6, traveled / 230);
+          const immediately = shouldSoundSweptString({
+            pointerType: runtime.pluck.pointerType,
+            activeTouchCount: runtime.activeTouchPointers.size,
+          });
+          let sounded = false;
+          for (const hit of crossed) {
+            const lastAt = runtime.pluck.lastPluckAt.get(hit.bodyId) ?? -Infinity;
+            if (performance.now() - lastAt <= STRING_PLUCK_COOLDOWN) continue;
+            if (immediately) {
               performPluck(hit, strength);
+            } else {
+              runtime.pluck.pendingPluck = { hit, strength };
             }
             runtime.pluck.lastPluckAt.set(hit.bodyId, performance.now());
-            runtime.pluck.lastPoint = { x: point.x, y: point.y };
+            sounded = true;
           }
+          if (sounded) runtime.pluck.lastPoint = { x: point.x, y: point.y };
         }
         return;
       }
