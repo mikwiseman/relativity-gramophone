@@ -628,6 +628,28 @@ export function cosmicCameraTarget(scaleId, starPosition) {
   };
 }
 
+/**
+ * How close to a visited system's star a press has to land to begin adding a
+ * world, measured in screen pixels.
+ *
+ * It has to be screen pixels. The system is a flat disc seen from about 38
+ * degrees above its own plane, so the region of *screen* that maps to "within
+ * the innermost orbit" on that plane is a thin band a few dozen pixels tall,
+ * and a hand aiming at the star misses it almost every time — measured on the
+ * Solar System, a press aimed squarely at the Sun landed 4.5 units out on a
+ * plane whose limit was 0.95. A player aims at what they can see, so that is
+ * what is measured.
+ *
+ * Never below the 44 px the rest of this instrument treats as the smallest
+ * thing a finger can be asked to hit.
+ */
+export function starGripRadius({ width, height }) {
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    throw new Error("A star grip needs a finite viewport");
+  }
+  return Math.max(44, Math.min(width, height) * 0.085);
+}
+
 export function nextCameraDistance(distance, direction) {
   if (!Number.isFinite(distance) || distance <= 0) throw new Error("Camera distance must be positive");
   if (direction !== -1 && direction !== 1) throw new Error("Camera zoom direction must be -1 or 1");

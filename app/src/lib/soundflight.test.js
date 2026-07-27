@@ -22,6 +22,7 @@ import {
   nextQualityLevel,
   QUALITY_LADDER,
   selectRenderProfile,
+  starGripRadius,
   visitedSystemCameraDistance,
   shouldApplyGestationUpdate,
   shouldApplyThereminRelease,
@@ -749,4 +750,18 @@ test("doppler tinting shifts a voice color toward cyan on approach and coral on 
 
   assert.throws(() => dopplerTintedColor(Number.NaN, 1), /finite color/i);
   assert.throws(() => dopplerTintedColor(0xffffff, Number.NaN), /finite color/i);
+});
+
+test("the grip on a visited system's star is measured on screen, never on its plane", () => {
+  // A visited system is a flat disc seen from about 38 degrees above its own
+  // plane, so the part of the screen that maps to "inside the innermost orbit"
+  // is a thin band: a press aimed squarely at the Sun landed 4.5 units out on
+  // a plane whose limit was 0.95, and adding a world to a real system was
+  // therefore impossible. A player aims at what they can see.
+  assert.equal(starGripRadius({ width: 1280, height: 800 }), 68);
+  // Never below the smallest thing a finger may be asked to hit.
+  assert.equal(starGripRadius({ width: 390, height: 480 }), 44);
+  assert.equal(starGripRadius({ width: 2560, height: 1600 }), 136);
+  assert.throws(() => starGripRadius({ width: 0, height: 800 }), /finite viewport/i);
+  assert.throws(() => starGripRadius({ width: 800 }), /finite viewport/i);
 });

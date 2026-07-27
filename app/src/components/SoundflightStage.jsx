@@ -36,6 +36,7 @@ import {
   nextQualityLevel,
   QUALITY_LADDER,
   selectRenderProfile,
+  starGripRadius,
   visitedSystemCameraDistance,
   shouldAutoSoundBody,
   shouldAdvancePhysics,
@@ -81,6 +82,8 @@ import {
 const STAGE_SCALE = 10;
 const MAX_FRAME_DELTA = 0.1;
 const STRING_TOUCH_DISTANCE = 14;
+/** Every system is drawn flat, so its own plane differs only in height. */
+const SYSTEM_PLANE_NORMAL = new THREE.Vector3(0, 1, 0);
 const STRING_PLUCK_COOLDOWN = 120;
 const MAX_TRAIL_PARTICLES = 1100;
 const MAX_TRAIL_POINTS = 256;
@@ -2106,6 +2109,11 @@ export function SoundflightStage(props) {
       raycaster: new THREE.Raycaster(),
       pointer: new THREE.Vector2(),
       plane: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+      // A visited system lies at the height its name sits at on screen, not
+      // at the world's y = 0, so reaching out from its star is measured on
+      // its own plane.
+      systemPlane: new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+      projected: new THREE.Vector3(),
       planePoint: new THREE.Vector3(),
       drag: null,
       birth: null,
@@ -2289,6 +2297,36 @@ export function SoundflightStage(props) {
       return runtime.raycaster.ray.intersectPlane(runtime.plane, runtime.planePoint)
         ? runtime.planePoint.clone()
         : null;
+    };
+
+    /**
+     * The same intersection, but on the plane a visited system actually lies
+     * in rather than on the world's own y = 0.
+     *
+     * The neighbourhood camera looks almost straight down +z, so a system is
+     * laid out at the height its name sits at on screen — `placement.y` — and
+     * only one of them could ever be at zero. Measuring the reach from the star
+     * against the y = 0 plane therefore returned a distance to somewhere else
+     * entirely, which is why "DRAG FROM THE STAR TO ADD YOUR OWN" never once
+     * armed: the grip was always larger than the innermost orbit.
+     */
+    const intersectSystemPlane = (event, visual) => {
+      const point = eventPoint(event, renderer.domElement);
+      runtime.pointer.set((point.x / point.width) * 2 - 1, -(point.y / point.height) * 2 + 1);
+      runtime.raycaster.setFromCamera(runtime.pointer, camera);
+      runtime.systemPlane.set(SYSTEM_PLANE_NORMAL, -visual.group.position.y);
+      return runtime.raycaster.ray.intersectPlane(runtime.systemPlane, runtime.planePoint)
+        ? runtime.planePoint.clone()
+        : null;
+    };
+
+    /** Where a world point lands in the same pixels a finger is measured in. */
+    const projectToScreen = (position, viewport) => {
+      runtime.projected.copy(position).project(camera);
+      return {
+        x: (runtime.projected.x * 0.5 + 0.5) * viewport.width,
+        y: (-runtime.projected.y * 0.5 + 0.5) * viewport.height,
+      };
     };
 
     const hitBody = (event) => {
@@ -2764,6 +2802,41 @@ export function SoundflightStage(props) {
         }
         return;
       }
+      // Inside a visited system the star is still the place worlds come from.
+      // Dragging outward from it adds YOUR world to a real one, and hears where
+      // it lands in that system's chord — the same gesture as at home, in a
+      // sky you travelled to.
+      //
+      // This has to be tried BEFORE the landmark audition, because the star of
+      // the system you are standing in is itself a landmark: touching it sounds
+      // the whole chord and returns, so "DRAG FROM THE STAR TO ADD YOUR OWN"
+      // could never begin. The grip test below keeps this to presses inside the
+      // innermost orbit, and a press that turns out to be a tap still sounds
+      // the chord on release, so nothing is taken away.
+      if (runtime.focusedSystemId) {
+        if (propsRef.current.isListener || propsRef.current.interactionMode !== "compose") return;
+        const visual = cosmicLandmarkField.byId.get(runtime.focusedSystemId);
+        const system = visual?.nearbySystem;
+        if (!system) return;
+        const screen = eventPoint(event, renderer.domElement);
+        const star = projectToScreen(visual.group.position, screen);
+        const grip = Math.hypot(screen.x - star.x, screen.y - star.y);
+        if (grip > starGripRadius(screen)) return;
+        if (event.pointerType !== "touch") {
+          event.stopImmediatePropagation();
+          capturePointer(event.pointerId);
+        }
+        runtime.guestBirth = {
+          landmarkId: runtime.focusedSystemId,
+          pointerId: event.pointerId,
+          pointerType: event.pointerType,
+          startScreen: screen,
+          radius: system.band.innerRadius,
+          active: false,
+        };
+        controls.enabled = false;
+        return;
+      }
       const cosmicLandmark = hitCosmicLandmark(event);
       if (cosmicLandmark) {
         if (deferAudio) {
@@ -2777,37 +2850,6 @@ export function SoundflightStage(props) {
           event.stopImmediatePropagation();
           performCosmicAudition(cosmicLandmark);
         }
-        return;
-      }
-      // Inside a visited system the star is still the place worlds come from.
-      // Dragging outward from it adds YOUR world to a real one, and hears where
-      // it lands in that system's chord — the same gesture as at home, in a
-      // sky you travelled to.
-      if (runtime.focusedSystemId) {
-        if (propsRef.current.isListener || propsRef.current.interactionMode !== "compose") return;
-        const visual = cosmicLandmarkField.byId.get(runtime.focusedSystemId);
-        const system = visual?.nearbySystem;
-        if (!system) return;
-        const point = intersectPlane(event);
-        if (!point) return;
-        const grip = Math.hypot(
-          point.x - visual.group.position.x,
-          point.z - visual.group.position.z,
-        );
-        if (grip > system.band.innerRadius * 0.86) return;
-        if (event.pointerType !== "touch") {
-          event.stopImmediatePropagation();
-          capturePointer(event.pointerId);
-        }
-        runtime.guestBirth = {
-          landmarkId: runtime.focusedSystemId,
-          pointerId: event.pointerId,
-          pointerType: event.pointerType,
-          startScreen: eventPoint(event, renderer.domElement),
-          radius: system.band.innerRadius,
-          active: false,
-        };
-        controls.enabled = false;
         return;
       }
       if (propsRef.current.interactionMode === "explore") return;
@@ -2943,7 +2985,7 @@ export function SoundflightStage(props) {
       if (runtime.guestBirth) {
         const visual = cosmicLandmarkField.byId.get(runtime.guestBirth.landmarkId);
         const system = visual?.nearbySystem;
-        const point = system ? intersectPlane(event) : null;
+        const point = system ? intersectSystemPlane(event, visual) : null;
         if (point) {
           const reach = Math.hypot(
             point.x - visual.group.position.x,
@@ -3166,7 +3208,14 @@ export function SoundflightStage(props) {
         propsRef.current.onGuestOrbitPreview(null);
         const visual = cosmicLandmarkField.byId.get(birth.landmarkId);
         const system = visual?.nearbySystem;
-        if (!birth.active || !system) return;
+        if (!system) return;
+        // A press on the star that never became a drag is still a press on the
+        // star: sound the whole system, which is what it did before this
+        // gesture was allowed to begin here.
+        if (!birth.active) {
+          if (visual.landmark) performCosmicAudition(visual.landmark);
+          return;
+        }
         const orbitAu = expandedOrbitAu(birth.radius, system.band);
         propsRef.current.onGuestWorld({ landmark: visual.landmark, orbitAu });
         return;
