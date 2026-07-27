@@ -2,6 +2,7 @@ import { blackbodyColor } from "./cosmicAtlas.js";
 import { STAR_SYSTEMS_BY_ID } from "./starSystems.js";
 import { STAR_CLUSTERS_BY_ID } from "./starClusters.js";
 import { GALAXIES_BY_ID } from "./galaxyRotation.js";
+import { GALAXY_CLUSTERS_BY_ID } from "./galaxyClusters.js";
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -365,6 +366,30 @@ function withRotation(landmark) {
   });
 }
 
+/**
+ * A galaxy cluster, made enterable — and named for what actually happens in it.
+ *
+ * A cluster is bound but it does not turn: its galaxies are on long plunging
+ * orbits in every direction, and what has been measured is the spread of their
+ * speeds. So the duration here is the crossing time rather than a year, the
+ * surface says so, and the cosmic web — which is not bound at all — stays a
+ * light you can touch and nothing more.
+ */
+function withCrossing(landmark) {
+  const cluster = GALAXY_CLUSTERS_BY_ID.get(landmark.id);
+  if (!cluster) return landmark;
+  return Object.freeze({
+    ...landmark,
+    system: Object.freeze({
+      kind: "galaxy-cluster",
+      worlds: cluster.bodies.length,
+      label: cluster.label,
+      star: cluster.star,
+      bodies: cluster.bodies,
+    }),
+  });
+}
+
 const COSMIC_LANDMARKS = Object.freeze({
   neighborhood: NEIGHBOURHOOD_LANDMARKS,
   galaxy: Object.freeze([
@@ -574,7 +599,8 @@ const COSMIC_LANDMARKS = Object.freeze({
         coreStrength: 0.18,
       }),
     }),
-  ]),
+  ].map(withCrossing)),
+
 });
 
 export function cosmicDestination(id) {

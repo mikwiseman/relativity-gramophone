@@ -501,13 +501,19 @@ function createPlanetLabelTexture(planet, appearance) {
   // years, and calling that "9,600,000 DAYS" would be true and useless.
   const days = planet.periodDays;
   const years = days / 365.25;
-  const year = years >= 1e6
-    ? `${(years / 1e6).toFixed(1)} MILLION YEARS`
-    : years >= 1000
-      ? `${Math.round(years).toLocaleString("en-US")} YEARS`
-      : days >= 365
-        ? `${years.toFixed(years >= 10 ? 0 : 1)} YEARS`
-        : `${days >= 10 ? days.toFixed(0) : days.toFixed(1)} DAYS`;
+  const duration = years >= 1e9
+    ? `${(years / 1e9).toFixed(1)} BILLION YEARS`
+    : years >= 1e6
+      ? `${(years / 1e6).toFixed(1)} MILLION YEARS`
+      : years >= 1000
+        ? `${Math.round(years).toLocaleString("en-US")} YEARS`
+        : days >= 365
+          ? `${years.toFixed(years >= 10 ? 0 : 1)} YEARS`
+          : `${days >= 10 ? days.toFixed(0) : days.toFixed(1)} DAYS`;
+  // A galaxy inside a cluster is not going round anything — it is on a long
+  // plunging orbit, and what has been measured is how fast. So this duration is
+  // a crossing time, and the label says so rather than calling it a year.
+  const year = planet.crossing ? `${duration} TO CROSS` : duration;
   // A shell of a star cluster is not a planet, and a mass-radius class is not
   // a thing it has. It says where in the cluster it stands.
   const caption = planet.shell ? `${planet.shell} STARS` : appearance.label;

@@ -257,7 +257,7 @@ const LADDER_FASTEST_SECONDS = 0.5 * 86_400;
 // hang on this one ladder, so it has to be long enough to hold all of them —
 // stopping it at two hundred years pinned every cluster and every galaxy onto
 // the same bottom rung and made them indistinguishable.
-const LADDER_SLOWEST_SECONDS = 1e9 * 365.25 * 86_400;
+const LADDER_SLOWEST_SECONDS = 2e10 * 365.25 * 86_400;
 
 function clamp01(value) {
   return Math.min(1, Math.max(0, value));
