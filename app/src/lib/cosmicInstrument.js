@@ -642,6 +642,48 @@ export function cathedralIntensity(resonance, bodyCount) {
   return clamp(harmonicLock * ensemble, 0, 1);
 }
 
+/**
+ * The cathedral answers a resonance being *won*, not a resonance being true.
+ *
+ * The instrument opens on periods of 10.8, 16.2 and 24.3 days — ratios of
+ * exactly 1.5 and 1.5 — so `findClosestResonance` returns a strength of 1.0
+ * from the first frame of the first session and never lets go. Seven arches
+ * therefore vaulted over the composition permanently, and because the same
+ * level dims the starfield, a reward designed to be rare was holding the whole
+ * sky about 28 per cent dark. A durable decision already says this plainly:
+ * abundance must stay causal, and neither effect may run as ambient
+ * decoration.
+ *
+ * So the level is an envelope. It fires only on the crossing — the moment a
+ * lock is acquired — and then falls away over a few seconds. A system that was
+ * already locked when the player arrived earned nothing and lights nothing.
+ */
+export const CATHEDRAL_LOCK_STRENGTH = 0.82;
+
+export function nextCathedralLevel({
+  level = 0,
+  strength = null,
+  previousStrength = null,
+  bodyCount,
+  delta,
+  decaySeconds = 4,
+}) {
+  if (!Number.isFinite(level) || level < 0) throw new Error("A cathedral level must be a positive number");
+  if (!Number.isFinite(delta) || delta < 0) throw new Error("A cathedral envelope needs an elapsed time");
+  if (!Number.isFinite(decaySeconds) || decaySeconds <= 0) throw new Error("A cathedral decay must be positive");
+  // A first look is not an acquisition: with no previous strength to compare
+  // against there was no moment, and seeding from the current value is what
+  // stops an already-locked opening from lighting itself on load.
+  const acquired = Number.isFinite(previousStrength)
+    && Number.isFinite(strength)
+    && previousStrength < CATHEDRAL_LOCK_STRENGTH
+    && strength >= CATHEDRAL_LOCK_STRENGTH;
+  const decayed = level * Math.exp((-delta * Math.log(100)) / decaySeconds);
+  if (!acquired) return decayed < 0.004 ? 0 : decayed;
+  const struck = cathedralIntensity({ bodyIds: ["a", "b"], strength }, bodyCount);
+  return Math.max(decayed, struck);
+}
+
 export function memoryCometEnvelope(progress) {
   if (!Number.isFinite(progress)) throw new Error("Memory comet progress must be finite");
   if (progress < 0 || progress > 1) {

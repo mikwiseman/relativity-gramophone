@@ -10,6 +10,7 @@ import {
   cosmicLandmarksForScale,
   orbitalSonificationFrequency,
   cathedralIntensity,
+  nextCathedralLevel,
   cosmicScaleForView,
   cosmicScaleForDistance,
   memoryCometEnvelope,
@@ -402,4 +403,75 @@ test("one memory comet has a calm attack, long flight, and complete release", ()
   assert.ok(release.opacity < flight.opacity);
   assert.ok(birth.orbitMix > flight.orbitMix);
   assert.ok(release.galaxyMix > flight.galaxyMix);
+});
+
+test("the cathedral answers a resonance being won, not a resonance being true", () => {
+  // The instrument opens on periods of 10.8, 16.2 and 24.3 days — ratios of
+  // exactly 1.5 — so the resonance strength is 1.0 from the first frame and
+  // stays there. Seven arches used to vault over the composition permanently,
+  // and because the same level dims the starfield, a reward meant to be rare
+  // was holding the whole sky about 28 per cent dark.
+  const opening = nextCathedralLevel({
+    level: 0, strength: 1, previousStrength: null, bodyCount: 3, delta: 0.016,
+  });
+  assert.equal(opening, 0, "a sky that was already locked when you arrived earned nothing");
+
+  // Frame after frame of the same lock changes nothing.
+  let level = 0;
+  for (let frame = 0; frame < 240; frame += 1) {
+    level = nextCathedralLevel({
+      level, strength: 1, previousStrength: 1, bodyCount: 3, delta: 0.016,
+    });
+  }
+  assert.equal(level, 0, "a standing lock is not an event");
+});
+
+test("acquiring a lock lights the cathedral, and it fades on its own", () => {
+  const struck = nextCathedralLevel({
+    level: 0, strength: 0.9, previousStrength: 0.5, bodyCount: 3, delta: 0.016,
+  });
+  assert.ok(struck > 0.2, `the crossing should light it, got ${struck}`);
+  assert.equal(struck, cathedralIntensity({ bodyIds: ["a", "b"], strength: 0.9 }, 3));
+
+  // Held, it falls to nothing over about four seconds.
+  let level = struck;
+  for (let frame = 0; frame < 60 * 4; frame += 1) {
+    level = nextCathedralLevel({
+      level, strength: 0.9, previousStrength: 0.9, bodyCount: 3, delta: 1 / 60,
+    });
+  }
+  assert.equal(level, 0, `four seconds later it is gone, got ${level}`);
+
+  // Halfway there it is still visibly present, so the reward is legible.
+  let half = struck;
+  for (let frame = 0; frame < 60; frame += 1) {
+    half = nextCathedralLevel({
+      level: half, strength: 0.9, previousStrength: 0.9, bodyCount: 3, delta: 1 / 60,
+    });
+  }
+  assert.ok(half > struck * 0.25, `one second in it should still read, got ${half}`);
+});
+
+test("a lock lost and won again lights the cathedral a second time", () => {
+  const first = nextCathedralLevel({
+    level: 0, strength: 0.95, previousStrength: 0.4, bodyCount: 4, delta: 0.016,
+  });
+  let level = first;
+  for (let frame = 0; frame < 60 * 6; frame += 1) {
+    level = nextCathedralLevel({ level, strength: 0.2, previousStrength: 0.2, bodyCount: 4, delta: 1 / 60 });
+  }
+  assert.equal(level, 0);
+  const again = nextCathedralLevel({
+    level, strength: 0.95, previousStrength: 0.4, bodyCount: 4, delta: 1 / 60,
+  });
+  assert.equal(again, first, "the same achievement earns the same light");
+});
+
+test("a cathedral envelope refuses nonsense rather than guessing", () => {
+  assert.throws(() => nextCathedralLevel({ level: -1, bodyCount: 3, delta: 0.016 }), /positive number/);
+  assert.throws(() => nextCathedralLevel({ level: 0, bodyCount: 3, delta: -1 }), /elapsed time/);
+  assert.throws(
+    () => nextCathedralLevel({ level: 0, bodyCount: 3, delta: 0.016, decaySeconds: 0 }),
+    /decay must be positive/,
+  );
 });

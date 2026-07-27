@@ -69,6 +69,7 @@ import {
 import {
   COSMIC_DESTINATIONS,
   cathedralIntensity,
+  nextCathedralLevel,
   cosmicDestination,
   cosmicLandmarkById,
   cosmicLandmarksForScale,
@@ -1589,7 +1590,7 @@ function createResonanceCathedral() {
     return arch;
   });
   group.visible = false;
-  return { group, arches, intensity: 0 };
+  return { group, arches, intensity: 0, lastStrength: null };
 }
 
 function updateResonanceCathedral(
@@ -1599,9 +1600,20 @@ function updateResonanceCathedral(
   bodiesById,
   bodyCount,
   resolution,
+  delta,
 ) {
-  const targetIntensity = cathedralIntensity(resonance, bodyCount);
-  cathedral.intensity += (targetIntensity - cathedral.intensity) * 0.08;
+  // Fired by a lock being won, then left to fade. Chasing the *presence* of a
+  // resonance lit these arches permanently, because the opening composition is
+  // in exact 3:2 resonance from its first frame.
+  const strength = Number.isFinite(resonance?.strength) ? resonance.strength : null;
+  cathedral.intensity = nextCathedralLevel({
+    level: cathedral.intensity,
+    strength,
+    previousStrength: cathedral.lastStrength,
+    bodyCount,
+    delta: Number.isFinite(delta) ? delta : 0,
+  });
+  cathedral.lastStrength = strength;
   if (cathedral.intensity < 0.015 || !resonance?.bodyIds) {
     cathedral.group.visible = false;
     return cathedral.intensity;
@@ -1762,7 +1774,11 @@ const FinishingShader = {
       float vignette = 1.0 - uVignette * smoothstep(0.32, 0.92, dot(centered, centered) * 2.4);
       float grain = (hash(vUv * 967.0 + fract(uTime) * 71.0) - 0.5) * uGrain;
       float luma = dot(color.rgb, vec3(0.299, 0.587, 0.114));
-      color.rgb = color.rgb * vignette + grain * (0.18 + luma);
+      // Grain rides the light, never the dark. The floor this used to keep
+      // was +-0.0045 of noise on true black, and ACES clamps the negative
+      // half, so on black it could only add: it lifted a quarter of the
+      // frame off zero and made 57% of a PAUSED frame change every 16 ms.
+      color.rgb = color.rgb * vignette + grain * luma;
       gl_FragColor = color;
     }
   `,
@@ -3690,6 +3706,7 @@ export function SoundflightStage(props) {
         bodiesById,
         snapshot.bodies.filter((body) => body.kind === "planet").length,
         resolution,
+        delta,
       );
       updateLivingGalaxy(
         livingGalaxy,
