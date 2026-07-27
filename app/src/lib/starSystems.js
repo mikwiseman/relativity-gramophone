@@ -102,6 +102,13 @@ export const STAR_SYSTEMS = Object.freeze([
       Object.freeze({ id: "hd-110067-g", name: "HD 110067 G", kind: "planet", periodDays: 54.76992, orbitAu: 0.2621, radiusEarth: 2.607, eccentricity: 0 }),
     ]),
   }),
+  // HD 10180 c, d and g have no measured radius — they are radial-velocity
+  // worlds, and the archive gives them only a mass, of nine to eleven Jupiters
+  // each. Their radii here are forecast from that mass with Chen & Kipping
+  // (2017) evaluated in its Jovian regime, where a planet stops growing and
+  // starts being squeezed by its own gravity. Read off the Neptunian branch
+  // instead — twenty times past its own validity bound — they came out at 85,
+  // 95 and 97 Earth radii, against a star 121 Earth radii across.
   Object.freeze({
     id: "hd-10180",
     name: "HD 10180",
@@ -117,11 +124,11 @@ export const STAR_SYSTEMS = Object.freeze([
       luminositySuns: 1.49,
     }),
     bodies: Object.freeze([
-      Object.freeze({ id: "hd-10180-c", name: "HD 10180 C", kind: "planet", periodDays: 5.75969, orbitAu: 0.06412, radiusEarth: 85.584, eccentricity: 0.073 }),
-      Object.freeze({ id: "hd-10180-d", name: "HD 10180 D", kind: "planet", periodDays: 16.357, orbitAu: 0.12859, radiusEarth: 95.389, eccentricity: 0.131 }),
+      Object.freeze({ id: "hd-10180-c", name: "HD 10180 C", kind: "planet", periodDays: 5.75969, orbitAu: 0.06412, radiusEarth: 12.522, eccentricity: 0.073 }),
+      Object.freeze({ id: "hd-10180-d", name: "HD 10180 D", kind: "planet", periodDays: 16.357, orbitAu: 0.12859, radiusEarth: 12.421, eccentricity: 0.131 }),
       Object.freeze({ id: "hd-10180-e", name: "HD 10180 E", kind: "planet", periodDays: 49.748, orbitAu: 0.2699, radiusEarth: 5.39, eccentricity: 0.051 }),
       Object.freeze({ id: "hd-10180-f", name: "HD 10180 F", kind: "planet", periodDays: 122.744, orbitAu: 0.4929, radiusEarth: 5.24, eccentricity: 0.119 }),
-      Object.freeze({ id: "hd-10180-g", name: "HD 10180 G", kind: "planet", periodDays: 604.67, orbitAu: 1.427, radiusEarth: 96.736, eccentricity: 0.263 }),
+      Object.freeze({ id: "hd-10180-g", name: "HD 10180 G", kind: "planet", periodDays: 604.67, orbitAu: 1.427, radiusEarth: 12.408, eccentricity: 0.263 }),
       Object.freeze({ id: "hd-10180-h", name: "HD 10180 H", kind: "planet", periodDays: 2205, orbitAu: 3.381, radiusEarth: 9.4, eccentricity: 0.095 }),
     ]),
   }),

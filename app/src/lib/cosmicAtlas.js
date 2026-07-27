@@ -89,6 +89,31 @@ export function habitableZone(luminositySuns) {
   };
 }
 
+/**
+ * The radius a world of a given mass is expected to have, when nobody has
+ * measured its radius.
+ *
+ * Chen & Kipping (2017), "Probabilistic Forecasting of the Masses and Radii of
+ * Other Worlds", ApJ 834, 17 — the mean relation, in Earth units. It is a
+ * broken power law and the breaks are the whole point: above about 132 Earth
+ * masses a planet stops growing and starts to be squeezed by its own gravity,
+ * so the exponent turns negative and a ten-Jupiter-mass world is barely wider
+ * than Jupiter.
+ *
+ * Applying the Neptunian branch past that break is how HD 10180 c, d and g —
+ * three radial-velocity worlds of nine to eleven Jupiter masses, none of which
+ * has a measured radius — were handed radii of 85, 95 and 97 Earth radii. Their
+ * own star is 121 Earth radii across. They were drawn as three worlds each
+ * nearly as wide as the sun they orbit.
+ */
+export function radiusFromMass(massEarth) {
+  assertPositive(massEarth, "A forecast radius requires a positive mass in Earth masses");
+  if (massEarth < 2.04) return 1.008 * massEarth ** 0.279;
+  if (massEarth < 131.6) return 0.808 * massEarth ** 0.589;
+  if (massEarth < 26_600) return 17.74 * massEarth ** -0.044;
+  return 0.00143 * massEarth ** 0.881;
+}
+
 const PLANET_CLASSES = Object.freeze({
   lava: Object.freeze({ id: "lava", label: "MOLTEN ROCK", color: 0xff7a3c }),
   "warm-rocky": Object.freeze({ id: "warm-rocky", label: "WARM ROCK", color: 0xc9855c }),

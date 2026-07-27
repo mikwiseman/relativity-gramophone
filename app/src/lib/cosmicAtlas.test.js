@@ -7,6 +7,7 @@ import {
   habitableZone,
   logSpiralRadius,
   planetAppearance,
+  radiusFromMass,
   expandedOrbitAu,
   periodFromReference,
   systemVoiceFrequencies,
@@ -321,5 +322,43 @@ test("a system that fits keeps its measured intervals exactly", () => {
       Math.abs(voiceRatio / periodRatio - 1) < 1e-9,
       `TRAPPIST-1 interval ${index} drifted: ${voiceRatio} vs ${periodRatio}`,
     );
+  }
+});
+
+test("a forecast radius stops growing where a real planet stops growing", () => {
+  // Chen & Kipping (2017), ApJ 834, 17. The break near 132 Earth masses is the
+  // whole point: above it a world is squeezed by its own gravity, so the
+  // exponent turns negative and ten Jupiter masses is barely wider than one.
+  assert.ok(Math.abs(radiusFromMass(1) - 1.008) < 0.01, "one Earth mass is one Earth radius");
+  assert.ok(radiusFromMass(17.15) > 3.8 && radiusFromMass(17.15) < 4.8, "Neptune lands near four");
+  // Continuous across the Jovian break rather than jumping.
+  const below = radiusFromMass(131.5);
+  const above = radiusFromMass(131.7);
+  assert.ok(Math.abs(below - above) < 0.02, `the break is a corner, not a cliff: ${below} vs ${above}`);
+  // And past it, growing mass makes a *smaller* world.
+  assert.ok(radiusFromMass(3000) < radiusFromMass(300), "a ten-Jupiter world is not ten Jupiters wide");
+  assert.ok(radiusFromMass(3000) > 10 && radiusFromMass(3000) < 14);
+  assert.throws(() => radiusFromMass(0), /positive mass/);
+});
+
+test("no world in the catalogue is drawn wider than physics allows", () => {
+  // HD 10180 c, d and g were carrying 85, 95 and 97 Earth radii — against a
+  // star 121 Earth radii across. The Neptunian branch of the mass-radius
+  // relation had been applied twenty times past its own validity bound.
+  for (const system of STAR_SYSTEMS) {
+    const starRadiusEarth = system.star.radiusSolar * 109.076;
+    for (const body of system.bodies) {
+      assert.ok(
+        body.radiusEarth <= 25,
+        `${body.name} is ${body.radiusEarth} Earth radii; the widest planets known are about 22`,
+      );
+      // A giant around an M-dwarf really is a large fraction of its star —
+      // Gliese 876 b and c sit at about 42% and are not wrong. Seventy per
+      // cent is not a system, it is an arithmetic error.
+      assert.ok(
+        body.radiusEarth < starRadiusEarth * 0.6,
+        `${body.name} is ${(body.radiusEarth / starRadiusEarth * 100).toFixed(0)}% as wide as its own star`,
+      );
+    }
   }
 });
