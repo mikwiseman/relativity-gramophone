@@ -251,7 +251,13 @@ const VOICE_HIGHEST = 1760;
 const LADDER_LOWEST = 110;
 const LADDER_HIGHEST = 440;
 const LADDER_FASTEST_SECONDS = 0.5 * 86_400;
-const LADDER_SLOWEST_SECONDS = 200 * 365.25 * 86_400;
+// A billion years, because the instrument now holds things that take one. A
+// planet's year is days, a star's orbit round a globular cluster is millions
+// of years, and the Sun's lap of the Milky Way is 219 million. All of them
+// hang on this one ladder, so it has to be long enough to hold all of them —
+// stopping it at two hundred years pinned every cluster and every galaxy onto
+// the same bottom rung and made them indistinguishable.
+const LADDER_SLOWEST_SECONDS = 1e9 * 365.25 * 86_400;
 
 function clamp01(value) {
   return Math.min(1, Math.max(0, value));

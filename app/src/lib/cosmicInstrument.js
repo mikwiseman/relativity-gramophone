@@ -1,6 +1,7 @@
 import { blackbodyColor } from "./cosmicAtlas.js";
 import { STAR_SYSTEMS_BY_ID } from "./starSystems.js";
 import { STAR_CLUSTERS_BY_ID } from "./starClusters.js";
+import { GALAXIES_BY_ID } from "./galaxyRotation.js";
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -339,6 +340,31 @@ const NEIGHBOURHOOD_LANDMARKS = Object.freeze(
 // Positions are deliberately schematic. Distances and relationships are real,
 // while each semantic scale is re-authored so a child can read it on one screen.
 // Sources: NASA Exoplanet Archive pscomppars (2026-07-25), NASA Hubble, ESA Gaia.
+/**
+ * A Local Group galaxy, made enterable.
+ *
+ * You cannot enter Andromeda the way you enter TRAPPIST-1 — nobody has
+ * catalogued a planet there — but you do not have to. A galaxy is a thing that
+ * turns, and how fast it turns at each radius has been measured for a century.
+ * That is a year, and a year is a pitch. So each of these four lights carries
+ * the same `system` field a star does, built from its measured rotation curve,
+ * and every gesture already written works inside one.
+ */
+function withRotation(landmark) {
+  const galaxy = GALAXIES_BY_ID.get(landmark.id);
+  if (!galaxy) return landmark;
+  return Object.freeze({
+    ...landmark,
+    system: Object.freeze({
+      kind: "galaxy",
+      worlds: galaxy.bodies.length,
+      label: galaxy.label,
+      star: galaxy.star,
+      bodies: galaxy.bodies,
+    }),
+  });
+}
+
 const COSMIC_LANDMARKS = Object.freeze({
   neighborhood: NEIGHBOURHOOD_LANDMARKS,
   galaxy: Object.freeze([
@@ -474,7 +500,7 @@ const COSMIC_LANDMARKS = Object.freeze({
         coreStrength: 0.24,
       }),
     }),
-  ]),
+  ].map(withRotation)),
   universe: Object.freeze([
     Object.freeze({
       id: "virgo-cluster",
