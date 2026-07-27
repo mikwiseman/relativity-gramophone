@@ -214,9 +214,23 @@ export const MILKY_WAY = Object.freeze({
   ]),
 });
 
-const VOICE_ANCHOR = 220;
 const VOICE_LOWEST = 55;
 const VOICE_HIGHEST = 1760;
+
+// The ladder every system is hung on. Two octaves around A3, leaving a full
+// octave and a half of register above and below for each system's own span to
+// open out into. A system's mean period decides where on this ladder its whole
+// chord sits: half a day at the top, two hundred years at the bottom. Those
+// bounds are stated rather than taken from the catalogue, so adding a system
+// never retunes the ones already there.
+const LADDER_LOWEST = 110;
+const LADDER_HIGHEST = 440;
+const LADDER_FASTEST_SECONDS = 0.5 * 86_400;
+const LADDER_SLOWEST_SECONDS = 200 * 365.25 * 86_400;
+
+function clamp01(value) {
+  return Math.min(1, Math.max(0, value));
+}
 
 /**
  * Turn a system's real orbital periods into one playable chord.
@@ -264,50 +278,53 @@ export function systemVoiceFrequencies(periodsDays) {
   });
 
   // One law carries every scale: the bigger and slower a thing is, the deeper
-  // it sounds. Folding each voice back into the register one octave at a time
-  // broke that law in the most recognisable place in the instrument — in THE
-  // SUN, Earth came out above Venus, and Uranus and Neptune above Saturn —
-  // because a wrap is not order-preserving.
+  // it sounds. It has to hold in two directions at once, and for a long time it
+  // only held in one.
   //
-  // So the system is moved as a block. A span that already fits the register is
-  // shifted by a whole number of octaves, which leaves every interval exactly
-  // as measured. Only a system too wide to fit at all — the Solar System spans
-  // nine octaves — is compressed, and then logarithmically and uniformly about
-  // its own centre, so the ordering and the interval classes survive and the
-  // compression is one stated number rather than eight arbitrary wraps.
+  // WITHIN a system it holds exactly. The system moves as a block — a uniform
+  // shift in log frequency is a transposition, so every ratio survives it, and
+  // TRAPPIST-1's published resonance chain arrives as the real chord it is.
+  // Folding each voice back into the register one octave at a time is what
+  // broke this once: a wrap is not order-preserving, and in THE SUN it put
+  // Earth above Venus.
+  //
+  // BETWEEN systems it did not hold at all. Every system was re-centred on one
+  // shared anchor, and re-centring is precisely the operation that deletes the
+  // only thing saying how slow the system is. Measured across the catalogue,
+  // the rank correlation between a system's mean period and its chord's centre
+  // was +0.44 when it should be −1: HR 8799, whose worlds take a hundred and
+  // fifty years, sang higher than Kepler-80, whose worlds take four days. And
+  // any system too wide for the register was stretched to fill it exactly, so
+  // ten of them ran between the identical two notes and were indistinguishable.
+  //
+  // So the anchor is not a constant. A system's geometric-mean voice is placed
+  // on a stated two-octave ladder by its own mean period, and the system is
+  // then fitted around that place — keeping its measured intervals whole
+  // wherever the register allows, and compressing by one stated logarithmic
+  // factor where it cannot. The ladder wins, because the ladder is the law.
   const logs = seconds.map((period) => Math.log2(1 / period));
-  const highest = Math.max(...logs);
-  const lowest = Math.min(...logs);
-  const span = highest - lowest;
-  // A hair inside the register rather than exactly on it: a system compressed
-  // to the boundary lands its extremes on 55 and 1760 to within floating-point
-  // error, and an instrument should not depend on which way that rounds.
-  const register = Math.log2(VOICE_HIGHEST / VOICE_LOWEST) * 0.98;
-  const centre = (highest + lowest) / 2;
-  const squeeze = span > register ? register / span : 1;
+  const mean = logs.reduce((sum, value) => sum + value, 0) / logs.length;
+  const below = mean - Math.min(...logs);
+  const above = Math.max(...logs) - mean;
 
-  const placed = logs.map((value) => centre + (value - centre) * squeeze);
-  const placedCentre = (Math.max(...placed) + Math.min(...placed)) / 2;
-  // Whole octaves whenever the system fits, so a real resonance arrives as a
-  // real interval. A compressed system is instead centred on the register's own
-  // middle, which is the only placement that needs no clamp — and a clamp would
-  // silently undo both the ordering and the single shared compression.
+  const meanPeriodLog = seconds.reduce((sum, value) => sum + Math.log2(value), 0) / seconds.length;
+  const ladder = clamp01(
+    (Math.log2(LADDER_SLOWEST_SECONDS) - meanPeriodLog)
+    / (Math.log2(LADDER_SLOWEST_SECONDS) - Math.log2(LADDER_FASTEST_SECONDS)),
+  );
+  const target = Math.log2(LADDER_LOWEST) + ladder * Math.log2(LADDER_HIGHEST / LADDER_LOWEST);
+
   const floor = Math.log2(VOICE_LOWEST);
   const ceiling = Math.log2(VOICE_HIGHEST);
-  const lowestPlaced = Math.min(...placed);
-  const highestPlaced = Math.max(...placed);
-  let shift;
-  if (squeeze === 1) {
-    // A whole number of octaves, chosen as near the anchor as the register
-    // allows: a system spanning four of the five available octaves has less
-    // slack than the rounding itself can consume, and rounding blindly walks
-    // its extremes out of hearing.
-    shift = Math.round(Math.log2(VOICE_ANCHOR) - placedCentre);
-    shift = Math.min(shift, Math.floor(ceiling - highestPlaced));
-    shift = Math.max(shift, Math.ceil(floor - lowestPlaced));
-  } else {
-    shift = (floor + ceiling) / 2 - placedCentre;
-  }
+  // A hair inside the register rather than exactly on it: a system fitted to
+  // the boundary lands its extremes on 55 and 1760 to within floating-point
+  // error, and an instrument should not depend on which way that rounds.
+  const room = 0.995;
+  const squeeze = Math.min(
+    1,
+    below > 0 ? ((target - floor) * room) / below : 1,
+    above > 0 ? ((ceiling - target) * room) / above : 1,
+  );
 
-  return placed.map((value) => 2 ** (value + shift));
+  return logs.map((value) => 2 ** (target + (value - mean) * squeeze));
 }

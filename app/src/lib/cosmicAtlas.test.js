@@ -253,3 +253,73 @@ test("a single world can be sounded out of its own system, at its own place in t
     /not a world of this system/i,
   );
 });
+
+test("one law across the whole catalogue: a slower system sounds deeper", () => {
+  // Inside a system this was already true and tested. Between systems it was
+  // inverted: every system was re-centred on the same anchor, which deletes
+  // the only thing that says how slow the system is. Measured before this
+  // test existed, the rank correlation between a system's mean period and its
+  // chord's centre was +0.44 — HR 8799, whose worlds take 150 years, sang
+  // higher than Kepler-80, whose worlds take four days.
+  const rows = STAR_SYSTEMS.map((system) => {
+    const periods = system.bodies.map((body) => body.periodDays);
+    const voices = systemVoiceFrequencies(periods);
+    const geometric = (values) => Math.exp(
+      values.reduce((sum, value) => sum + Math.log(value), 0) / values.length,
+    );
+    return { name: system.name, period: geometric(periods), centre: geometric(voices) };
+  });
+
+  const rank = (values) => {
+    const order = values.map((value, index) => [value, index]).sort((a, b) => a[0] - b[0]);
+    const ranks = new Array(values.length);
+    order.forEach(([, index], position) => { ranks[index] = position + 1; });
+    return ranks;
+  };
+  const n = rows.length;
+  const byPeriod = rank(rows.map((row) => row.period));
+  const byCentre = rank(rows.map((row) => row.centre));
+  const squares = byPeriod.reduce((sum, value, index) => sum + (value - byCentre[index]) ** 2, 0);
+  const spearman = 1 - (6 * squares) / (n * (n * n - 1));
+  assert.ok(spearman <= -0.9, `slower must sound deeper across the catalogue; correlation was ${spearman.toFixed(3)}`);
+});
+
+test("no two systems are given the same chord to sing", () => {
+  // Ten of them were: any system too wide for the register was stretched to
+  // fill it exactly, so THE SUN, Kepler-62, Gliese 876 and seven others all
+  // ran from 56.94 to 1700.05 Hz and were indistinguishable in extent.
+  const extremes = new Map();
+  for (const system of STAR_SYSTEMS) {
+    const voices = systemVoiceFrequencies(system.bodies.map((body) => body.periodDays));
+    const key = `${Math.min(...voices).toFixed(2)}-${Math.max(...voices).toFixed(2)}`;
+    extremes.set(key, [...(extremes.get(key) ?? []), system.name]);
+  }
+  const shared = [...extremes.values()].filter((names) => names.length > 1);
+  assert.deepEqual(shared, [], `systems sharing a chord: ${JSON.stringify(shared)}`);
+});
+
+test("every catalogue voice stays inside the singing register", () => {
+  for (const system of STAR_SYSTEMS) {
+    const voices = systemVoiceFrequencies(system.bodies.map((body) => body.periodDays));
+    for (const voice of voices) {
+      assert.ok(voice >= 54.9 && voice <= 1760.1, `${system.name} sang ${voice} Hz`);
+    }
+  }
+});
+
+test("a system that fits keeps its measured intervals exactly", () => {
+  // TRAPPIST-1's published resonance chain has to arrive as a real chord: a
+  // shift is a transposition and preserves every ratio, whether or not it
+  // lands on a whole octave.
+  const trappist = STAR_SYSTEMS.find((system) => system.name === "TRAPPIST-1");
+  const periods = trappist.bodies.map((body) => body.periodDays);
+  const voices = systemVoiceFrequencies(periods);
+  for (let index = 1; index < periods.length; index += 1) {
+    const periodRatio = periods[index - 1] / periods[index];
+    const voiceRatio = voices[index] / voices[index - 1];
+    assert.ok(
+      Math.abs(voiceRatio / periodRatio - 1) < 1e-9,
+      `TRAPPIST-1 interval ${index} drifted: ${voiceRatio} vs ${periodRatio}`,
+    );
+  }
+});

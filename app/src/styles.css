@@ -1010,30 +1010,6 @@ input:focus-visible {
   opacity: 0;
 }
 
-.soundflight-time-needle i {
-  position: absolute;
-  left: 50%;
-  width: 5px;
-  height: 5px;
-  border: 1px solid rgb(241 199 118 / 66%);
-  border-radius: 50%;
-  background: #090704;
-  box-shadow: 0 0 12px rgb(237 189 101 / 28%);
-  transform: translate(-50%, -50%);
-}
-
-.soundflight-time-needle i:nth-child(1) {
-  top: 16%;
-}
-
-.soundflight-time-needle i:nth-child(2) {
-  top: 50%;
-}
-
-.soundflight-time-needle i:nth-child(3) {
-  top: 84%;
-}
-
 .soundflight-title {
   position: absolute;
   z-index: 4;

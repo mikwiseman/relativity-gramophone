@@ -338,6 +338,8 @@ export function App() {
     : cosmicScale.id === "orbit" || cosmicScale.id === "system"
         ? guidanceDetail
         : currentDestination.guidanceDetail;
+  const locationLabel = visitedSystem?.name
+    ?? (inNeighbourhood ? shell.label : currentDestination.label);
   const playback = playbackControl({ audioState, isPlaying });
 
   const loadStoredScore = useCallback(async (id) => {
@@ -1380,9 +1382,14 @@ export function App() {
 
       {!dialogOpen && storedScoreState === "idle" && !lightOpen && (
         <div className="instrument-topbar">
-          <span className="instrument-location">
-            {visitedSystem?.name ?? (inNeighbourhood ? shell.label : currentDestination.label)}
-          </span>
+          {/* Where you are, but only when the headline is not already saying
+              it. Inside a visited system both read the system's name, 150 px
+              apart in two different typefaces; out in the sky the corner
+              repeats the shell the headline has just named. A label that
+              agrees with the one above it is not orientation, it is ink. */}
+          {!activeGuidance.includes(locationLabel) && (
+            <span className="instrument-location">{locationLabel}</span>
+          )}
           <button
             type="button"
             className="instrument-menu-trigger"

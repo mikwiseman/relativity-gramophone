@@ -333,18 +333,25 @@ test("touching a real system plays a chord that falls as the orbits widen", () =
         `${landmark.name}: a wider orbit must be a deeper voice`,
       );
     }
-    // A system narrow enough to fit the register is only ever moved by whole
-    // octaves, so its intervals arrive exactly as measured.
-    const span = Math.log2(Math.max(...periods) / Math.min(...periods));
-    if (span <= Math.log2(1760 / 55)) {
-      for (let index = 1; index < voices.length; index += 1) {
-        const octaves = Math.log2((voices[index - 1] / voices[index])
-          / (periods[index] / periods[index - 1]));
-        assert.ok(
-          Math.abs(octaves - Math.round(octaves)) < 1e-9,
-          `${landmark.name} must keep every interval a real period ratio`,
-        );
-      }
+    // However far a system has to be compressed to sit at its own place on the
+    // ladder, the compression is ONE number for the whole system. Every
+    // interval is the real period ratio raised to that single power, so the
+    // ordering and the interval classes survive and the surface can state the
+    // compression as a fact rather than as eight separate fudges.
+    const ratios = [];
+    for (let index = 1; index < voices.length; index += 1) {
+      ratios.push(
+        Math.log2(voices[index - 1] / voices[index])
+        / Math.log2(periods[index] / periods[index - 1]),
+      );
+    }
+    for (const ratio of ratios) {
+      assert.ok(ratio > 0, `${landmark.name}: every interval keeps its direction`);
+      assert.ok(
+        Math.abs(ratio - ratios[0]) < 1e-9,
+        `${landmark.name} must compress by one shared factor, not per interval`,
+      );
+      assert.ok(ratio <= 1 + 1e-9, `${landmark.name} may be compressed, never stretched`);
     }
     for (const frequency of voices) {
       assert.ok(frequency >= 55 && frequency <= 1760, `${landmark.name} stays audible`);

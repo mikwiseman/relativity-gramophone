@@ -4,6 +4,7 @@ import {
   moonHarmonicFrequency,
   voiceParameters,
   voicePluckParameters,
+  systemChordVoicing,
 } from "./sonification.js";
 import { systemVoiceFrequencies, systemWorldVoice } from "./cosmicAtlas.js";
 
@@ -1063,7 +1064,8 @@ export class AudioEngine {
       const panner = this.context.createStereoPanner();
       const reverbSend = this.context.createGain();
       const onset = now + index * (systemFrequencies.length > 0 ? 0.09 : 0.055);
-      const peak = 0.024 / (1 + index * 0.2);
+      const voicing = systemChordVoicing({ frequency, index, count: frequencies.length });
+      const peak = voicing.peak;
 
       this.applyVoiceWave(oscillator, landmark.voice, COSMIC_VOICES[landmark.voice].waveform);
       oscillator.frequency.setValueAtTime(frequency * 0.988, onset);
@@ -1072,13 +1074,11 @@ export class AudioEngine {
         onset + 0.12,
       );
       filter.type = "lowpass";
-      filter.frequency.setValueAtTime(980 + index * 720, onset);
-      filter.frequency.exponentialRampToValueAtTime(420 + index * 260, onset + duration);
-      filter.Q.value = 1.1 + index * 0.34;
-      panner.pan.value = frequencies.length === 1
-        ? 0
-        : -0.62 + (index / (frequencies.length - 1)) * 1.24;
-      reverbSend.gain.value = 0.34 + index * 0.05;
+      filter.frequency.setValueAtTime(voicing.cutoffOpen, onset);
+      filter.frequency.exponentialRampToValueAtTime(voicing.cutoffClose, onset + duration);
+      filter.Q.value = voicing.q;
+      panner.pan.value = voicing.pan;
+      reverbSend.gain.value = voicing.reverb;
 
       gain.gain.setValueAtTime(0.0001, onset);
       gain.gain.exponentialRampToValueAtTime(peak, onset + 0.055 + index * 0.018);

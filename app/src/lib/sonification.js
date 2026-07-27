@@ -304,6 +304,43 @@ export function voicePluckParameters(body, { offset, strength }) {
   };
 }
 
+/**
+ * How one voice of a whole-system chord is sounded.
+ *
+ * It has to be decided by the voice's own pitch, never by its position in the
+ * list. Keying both loudness and brightness to the index put the chord upside
+ * down in all twenty-eight systems: the innermost world is the fastest, so it
+ * is the highest note, and it was given both the loudest peak and the darkest
+ * filter — a 980 Hz lowpass on a 1700 Hz fundamental removes the fundamental
+ * altogether. The result was loud muffled treble over quiet bright bass, which
+ * is the opposite of how any ensemble sits.
+ *
+ * The cutoff therefore opens above this voice's own fundamental and closes
+ * towards it, so the note darkens as it decays without ever losing itself. The
+ * peak tilts gently down with pitch, because equal amplitude is not equal
+ * loudness and the deep voices are what carry a chord.
+ */
+export function systemChordVoicing({ frequency, index, count }) {
+  if (!Number.isFinite(frequency) || frequency <= 0) {
+    throw new Error("A chord voice needs a positive frequency");
+  }
+  if (!Number.isInteger(index) || index < 0) throw new Error("A chord voice needs its position");
+  if (!Number.isInteger(count) || count <= index) throw new Error("A chord needs a valid voice count");
+  return {
+    // A gentle tilt, not a ramp: an octave up is about 14 per cent quieter.
+    peak: 0.026 * clamp((220 / frequency) ** 0.2, 0.72, 1.34),
+    // Six harmonics of headroom at the strike, closing to just above the
+    // fundamental. Both are floored so a 55 Hz voice still has a body.
+    cutoffOpen: clamp(frequency * 6, 900, 14_000),
+    cutoffClose: clamp(frequency * 2.1, 320, 6_000),
+    q: 0.9 + clamp(Math.log2(frequency / 55) / 5, 0, 1) * 0.5,
+    pan: count === 1 ? 0 : -0.62 + (index / (count - 1)) * 1.24,
+    // Distance in a chord reads as reverb, and the deep voices are the far
+    // ones — a slow world is a wide orbit.
+    reverb: 0.3 + clamp((220 / frequency) ** 0.35, 0.6, 1.6) * 0.14,
+  };
+}
+
 export function isResonanceChallengeComplete(resonance, target, threshold = 0.82) {
   return Boolean(resonance && resonance.label === target && resonance.strength >= threshold);
 }

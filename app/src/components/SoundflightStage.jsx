@@ -2069,7 +2069,6 @@ export function SoundflightStage(props) {
     const timeNeedle = document.createElement("div");
     timeNeedle.className = "soundflight-time-needle";
     timeNeedle.setAttribute("aria-hidden", "true");
-    for (let index = 0; index < 3; index += 1) timeNeedle.appendChild(document.createElement("i"));
     mount.appendChild(timeNeedle);
 
     const runtime = {

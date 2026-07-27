@@ -13,6 +13,7 @@ import {
   visibleWavelengthToAudibleFrequency,
   voiceParameters,
   voicePluckParameters,
+  systemChordVoicing,
 } from "./sonification.js";
 
 const BODY = {
@@ -165,4 +166,41 @@ test("every cosmic voice has an audible harmonic recipe anchored to its fundamen
       assert.ok(amplitude > 0 && amplitude < 1, `${voiceId} overtones stay below the fundamental`);
     }
   }
+});
+
+test("a system chord is voiced by pitch, not by position in the list", () => {
+  // Keying loudness and brightness to the index put the chord upside down in
+  // every system: the innermost world is the fastest and so the highest note,
+  // and it was given both the loudest peak and the darkest filter — a 980 Hz
+  // lowpass on a 1700 Hz fundamental removes the fundamental altogether.
+  const chord = [1700, 880, 440, 220, 110, 57].map((frequency, index, all) => ({
+    frequency,
+    ...systemChordVoicing({ frequency, index, count: all.length }),
+  }));
+
+  for (let index = 1; index < chord.length; index += 1) {
+    assert.ok(
+      chord[index].peak >= chord[index - 1].peak,
+      `a deeper voice is never quieter: ${chord[index].frequency} Hz`,
+    );
+  }
+  for (const voice of chord) {
+    assert.ok(
+      voice.cutoffOpen > voice.frequency,
+      `${voice.frequency} Hz must keep its own fundamental when struck`,
+    );
+    assert.ok(
+      voice.cutoffClose > voice.frequency || voice.frequency > 2000,
+      `${voice.frequency} Hz must still have a fundamental as it decays`,
+    );
+  }
+  // A chord is spread across the field, and one voice sits in the middle.
+  assert.equal(systemChordVoicing({ frequency: 220, index: 0, count: 1 }).pan, 0);
+  assert.ok(chord[0].pan < 0 && chord[chord.length - 1].pan > 0);
+});
+
+test("chord voicing refuses a voice it cannot place", () => {
+  assert.throws(() => systemChordVoicing({ frequency: 0, index: 0, count: 1 }), /positive frequency/);
+  assert.throws(() => systemChordVoicing({ frequency: 220, index: -1, count: 1 }), /its position/);
+  assert.throws(() => systemChordVoicing({ frequency: 220, index: 3, count: 3 }), /valid voice count/);
 });
