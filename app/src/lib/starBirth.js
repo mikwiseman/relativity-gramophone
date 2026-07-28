@@ -5,7 +5,14 @@ const TAU = Math.PI * 2;
 
 export const STAR_CORE_RADIUS = 0.075;
 export const BIRTH_MIN_RADIUS = 0.14;
-export const BIRTH_MAX_RADIUS = 0.56;
+// Ten times the innermost possible orbit — one stated bound instead of an
+// invisible wall just past the preset strings. The old ceiling of 0.56 sat a
+// hair beyond the outermost authored orbit, so "drag outward to choose a
+// pitch" ended four per cent past the last string and every far world quietly
+// became the same near world. Kepler turns the 10:1 span of radius into a
+// 31:1 span of period: five octaves of pitch under one gesture, and the
+// composition camera auto-fits whatever the player builds.
+export const BIRTH_MAX_RADIUS = 1.4;
 export const BIRTH_MIN_MASS = 0.34;
 export const BIRTH_MAX_MASS = 1.18;
 export const AIM_DEADZONE = 0.02;

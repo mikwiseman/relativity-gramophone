@@ -1,0 +1,18 @@
+{
+  "capturedAt": "2026-07-28",
+  "release": "post-8c6499f working tree (vignette removed, serif unified, 7px raised)",
+  "viewport": [1280, 800],
+  "how": "window.__rgBeauty.measureCanvas(canvas, { capture: { immediate: true } }) on the opening frame, plus renderProfile from __rgDebugState. Drawing-buffer read, never a screenshot.",
+  "size": [2560, 1440],
+  "inkCoverage": 0.0313,
+  "black": 0.9436,
+  "clipped": 0,
+  "p50": 0,
+  "p95": 0.0243,
+  "p999": 0.6365,
+  "max": 0.9955,
+  "colouredShare": 0.0257,
+  "distinctHues": 6,
+  "pixelRatio": 2,
+  "samples": 4
+}

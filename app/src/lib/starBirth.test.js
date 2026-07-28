@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  BIRTH_MAX_RADIUS,
   BIRTH_MAX_MASS,
   BIRTH_MIN_MASS,
   BIRTH_MIN_RADIUS,
@@ -217,4 +218,41 @@ test("every born world carries the fields the score and the instrument need", ()
   assert.ok(spec.pan >= -1 && spec.pan <= 1);
   assert.ok(Number.isInteger(spec.sprite) && spec.sprite >= 1 && spec.sprite <= 3);
   assert.equal(spec.created, true);
+});
+
+test("a world can be born at any distance, near or ten times further out", () => {
+  // The owner's ask, verbatim: worlds at any distance. The bound that remains
+  // is stated — ten times the innermost orbit — not an invisible wall a few
+  // per cent past the last preset string, which is what 0.56 was.
+  assert.ok(BIRTH_MAX_RADIUS / BIRTH_MIN_RADIUS >= 10 - 1e-9, "the reachable span is at least 10:1");
+
+  const star = { x: 0, y: 0, vx: 0, vy: 0, mass: 1 };
+  const near = birthBodyFromRadialLaunch({
+    release: { x: BIRTH_MIN_RADIUS, y: 0 },
+    star,
+    existingIds: [],
+    existingBodies: [],
+    birthIndex: 0,
+  });
+  const far = birthBodyFromRadialLaunch({
+    release: { x: BIRTH_MAX_RADIUS, y: 0 },
+    star,
+    existingIds: [],
+    existingBodies: [],
+    birthIndex: 1,
+  });
+  const radius = (body) => Math.hypot(body.x - star.x, body.y - star.y);
+  assert.ok(Math.abs(radius(near) - BIRTH_MIN_RADIUS) < 1e-9);
+  assert.ok(Math.abs(radius(far) - BIRTH_MAX_RADIUS) < 1e-9, `far world landed at ${radius(far)}`);
+  // Kepler turns the 10:1 span of radius into a 31:1 span of period. The
+  // audible pitch is that frequency clamped into the singing register, so the
+  // ear gets a little over four octaves and the floor of the register — not an
+  // arbitrary wall — is what catches the farthest worlds.
+  const period = (body) => Math.hypot(body.x - star.x, body.y - star.y) ** 1.5;
+  assert.ok(
+    period(far) / period(near) > 31,
+    `period span was ${period(far) / period(near)}`,
+  );
+  assert.ok(near.frequency / far.frequency > 16, `pitch span was ${near.frequency / far.frequency}`);
+  assert.ok(far.frequency >= 55, "the deepest world still sits inside the register");
 });

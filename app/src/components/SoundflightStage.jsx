@@ -958,7 +958,7 @@ function createLandmarkLabelTexture(landmark) {
   context.shadowBlur = 18;
   context.shadowColor = "rgba(0, 0, 0, 0.95)";
   context.fillStyle = "#f5d596";
-  context.font = "34px Georgia, serif";
+  context.font = "34px 'Iowan Old Style', Georgia, serif";
   context.fillText(landmark.name, canvas.width / 2, 58);
   context.shadowBlur = 12;
   context.fillStyle = "rgba(188, 236, 255, 0.78)";
@@ -1749,7 +1749,11 @@ const FinishingShader = {
   uniforms: {
     tDiffuse: { value: null },
     uTime: { value: 0 },
-    uVignette: { value: 0.34 },
+    // Measured before removal: the vignette's mean effect over every lit pixel
+    // was 0.999 — invisible on the artwork — while its one real action was
+    // taking a third of the brightness off the corner where the scale label
+    // and the menu live. A frame this dark needs no help going dark.
+    uVignette: { value: 0 },
     uGrain: { value: 0.05 },
   },
   vertexShader: `
