@@ -89,6 +89,7 @@ export function stringsAlongSweep(from, to, strings, threshold) {
       if (approach.distance <= threshold && (!best || approach.distance < best.distance)) {
         best = {
           bodyId: string.bodyId,
+          visited: Boolean(string.visited),
           distance: approach.distance,
           offset: (traversed + segmentLength * approach.t) / pathLength,
           x: approach.x,
@@ -138,6 +139,10 @@ export function nearestStringPoint(point, strings, threshold) {
       if (distance <= threshold && (!best || distance < best.distance)) {
         best = {
           bodyId: string.bodyId,
+          // Whose harp this string belongs to travels with the hit. Without it
+          // a string of a system you travelled to was looked up in the engine
+          // running your own, found nothing, and went silent.
+          visited: Boolean(string.visited),
           distance,
           offset: (traversed + segmentLength * projection) / pathLength,
           x: closestX,

@@ -649,7 +649,8 @@ export function createStarSystemObject(system, {
         alphaToCoverage: false,
       }),
     );
-    orbit.geometry.setPositions(ellipsePoints(drawnRadius, planet.eccentricity ?? 0, 256));
+    const orbitPoints = ellipsePoints(drawnRadius, planet.eccentricity ?? 0, 256);
+    orbit.geometry.setPositions(orbitPoints);
     orbit.computeLineDistances();
     orbit.frustumCulled = false;
     group.add(orbit);
@@ -749,6 +750,9 @@ export function createStarSystemObject(system, {
       rings,
       drawnRadius,
       bodyRadius,
+      // The ring's own points, so it can be a string you touch rather than a
+      // line you look at. An orbit is a string everywhere in this instrument.
+      orbitPoints,
       touchBaseRadius,
       // Filled in once every world's drawn radius is known: a target may not
       // swell past its share of the gap to the next orbit.

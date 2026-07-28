@@ -980,11 +980,15 @@ export function App() {
   }, [announceSonicCue, guestWorlds, performHaptic, startAudio]);
 
   /** One world of a visited system, touched on its own. */
-  const handleSystemWorldAudition = useCallback(async ({ landmark, planetId }) => {
+  const handleSystemWorldAudition = useCallback(async ({ landmark, planetId, pluck }) => {
     try {
       setHeardSystemWorld(true);
+      // Touching the ring rather than the world is a pluck: where along the
+      // orbit you caught it sets the timbre, and how fast you swept sets how
+      // hard it is struck — exactly as the harp works at home.
+      if (pluck) setHasPluckedOrbit(true);
       await startAudio(true);
-      const voice = audioRef.current.playSystemWorld(landmark, planetId);
+      const voice = audioRef.current.playSystemWorld(landmark, planetId, pluck);
       if (!voice) return;
       const days = voice.planet.periodDays;
       const year = days >= 365

@@ -99,3 +99,16 @@ test("degenerate strings are ignored by a sweep too", () => {
   const dot = { bodyId: "callisto", points: [{ x: 5, y: 5 }] };
   assert.deepEqual(stringsAlongSweep({ x: 0, y: 5 }, { x: 10, y: 5 }, [dot], 14), []);
 });
+
+test("a hit remembers whose harp the string belongs to", () => {
+  // A string of a system you travelled to is not a body of the engine running
+  // your own. Losing that flag on the way through meant the note was looked up
+  // in the wrong place, found nothing, and every ring in twenty-eight systems
+  // stayed silent.
+  const visited = { bodyId: "neptune", visited: true, points: RUNG_A.points };
+  assert.equal(nearestStringPoint({ x: 20, y: 0 }, [visited], 14).visited, true);
+  assert.equal(stringsAlongSweep({ x: 0, y: 0 }, { x: 40, y: 0 }, [visited], 14)[0].visited, true);
+  // And a home string still says it is a home string.
+  assert.equal(nearestStringPoint({ x: 20, y: 0 }, [RUNG_A], 14).visited, false);
+  assert.equal(stringsAlongSweep({ x: 0, y: 0 }, { x: 40, y: 0 }, [RUNG_A], 14)[0].visited, false);
+});

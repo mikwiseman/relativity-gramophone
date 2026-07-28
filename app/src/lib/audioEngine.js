@@ -1097,7 +1097,7 @@ export class AudioEngine {
    * system's chord. Longer and softer than the whole-system strike, so a child
    * can walk the seven worlds of TRAPPIST-1 one at a time and hear the chain.
    */
-  playSystemWorld(landmark, planetId) {
+  playSystemWorld(landmark, planetId, pluck = null) {
     if (!this.context || this.context.state !== "running") return null;
     if (!landmark?.system || !COSMIC_VOICES[landmark.voice]) {
       throw new Error("A system world requires a landmark with a playable voice");
@@ -1117,17 +1117,23 @@ export class AudioEngine {
     oscillator.frequency.setValueAtTime(voice.frequency * 0.984, now);
     oscillator.frequency.exponentialRampToValueAtTime(voice.frequency, now + 0.14);
     filter.type = "lowpass";
-    filter.frequency.setValueAtTime(2600, now);
-    filter.frequency.exponentialRampToValueAtTime(560, now + duration);
+    // A plucked string carries where it was caught. Near the world the note is
+    // dark and long, far from it bright and short — the same rule the harp at
+    // home has always used, now that a visited orbit is a string too.
+    const brightness = pluck ? 0.4 + Math.abs(0.5 - pluck.offset) * 1.6 : 1;
+    filter.frequency.setValueAtTime(2600 * brightness, now);
+    filter.frequency.exponentialRampToValueAtTime(560 * brightness, now + duration);
     filter.Q.value = 1.4;
     // A world's place in its own system is where it sits in the stereo field:
     // the innermost world on the left, the outermost on the right.
     panner.pan.value = count > 1 ? -0.6 + (voice.index / (count - 1)) * 1.2 : 0;
     reverbSend.gain.value = 0.42;
 
+    // How hard the string was swept is how loud it speaks.
+    const peak = 0.05 * (pluck ? 0.55 + pluck.strength * 0.9 : 1);
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.05, now + 0.05);
-    gain.gain.exponentialRampToValueAtTime(0.02, now + 0.7);
+    gain.gain.exponentialRampToValueAtTime(peak, now + 0.05);
+    gain.gain.exponentialRampToValueAtTime(peak * 0.4, now + 0.7);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
 
     oscillator.connect(filter).connect(gain).connect(panner).connect(this.master);

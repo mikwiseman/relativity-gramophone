@@ -2176,6 +2176,16 @@ export function SoundflightStage(props) {
             parentId: body.parentId,
           })),
           birth: runtime.birth ? { active: runtime.birth.active, phase: runtime.birth.phase } : null,
+          // Which gesture, if any, has claimed the pointer — the fastest way to
+          // see why a touch did not do what it looked like it should.
+          claimed: runtime.pluck ? "pluck"
+            : runtime.guestBirth ? "guestBirth"
+            : runtime.systemMoon ? "systemMoon"
+            : runtime.pendingSystemWorldTap ? "systemWorldTap"
+            : runtime.pendingCosmicTap ? "cosmicTap"
+            : runtime.pendingBodyTap ? "bodyTap"
+            : null,
+          strings: runtime.focusedSystemId ? trailPaths().length : null,
           moonBirth: runtime.moonBirth
             ? {
                 active: runtime.moonBirth.active,
@@ -2447,7 +2457,44 @@ export function SoundflightStage(props) {
       return landmarkId ? cosmicLandmarkField.byId.get(landmarkId)?.landmark ?? null : null;
     };
 
+    /**
+     * The orbit strings of a system you have travelled to, in the same screen
+     * space the harp at home uses.
+     *
+     * An orbit is a string everywhere in this instrument, not only at home.
+     * Out here the rings were drawn and inert: you could touch a world but not
+     * the ring it rides, so the one gesture the whole product is named for did
+     * not exist in twenty-eight of its twenty-nine systems.
+     */
+    const visitedStringPaths = () => {
+      if (!runtime.focusedSystemId) return [];
+      const visual = cosmicLandmarkField.byId.get(runtime.focusedSystemId);
+      const system = visual?.nearbySystem;
+      if (!system) return [];
+      const rect = renderer.domElement.getBoundingClientRect();
+      const origin = visual.group.position;
+      const scale = system.group.scale.x || 1;
+      return system.worlds
+        .filter((world) => world.orbitPoints?.length > 5)
+        .map((world) => {
+          const points = [];
+          for (let index = 0; index < world.orbitPoints.length; index += 3) {
+            runtime.projected.set(
+              origin.x + world.orbitPoints[index] * scale,
+              origin.y + world.orbitPoints[index + 1] * scale,
+              origin.z + world.orbitPoints[index + 2] * scale,
+            ).project(camera);
+            points.push({
+              x: (runtime.projected.x * 0.5 + 0.5) * rect.width,
+              y: (-runtime.projected.y * 0.5 + 0.5) * rect.height,
+            });
+          }
+          return { bodyId: world.planet.id, visited: true, points };
+        });
+    };
+
     const trailPaths = () => {
+      if (runtime.focusedSystemId) return visitedStringPaths();
       const rect = renderer.domElement.getBoundingClientRect();
       return [...runtime.bodyVisuals.entries()]
         .filter(([, visual]) => visual.orbitPoints.length > 1)
@@ -2515,6 +2562,24 @@ export function SoundflightStage(props) {
     };
 
     const performPluck = (hit, strength) => {
+      // A string of a system you have travelled to belongs to that system, not
+      // to the engine running your own. It sounds the world it carries, at
+      // exactly the pitch that world contributes to its system's chord.
+      if (hit.visited) {
+        const visual = cosmicLandmarkField.byId.get(runtime.focusedSystemId);
+        const system = visual?.nearbySystem;
+        if (!system) return;
+        system.strike(hit.bodyId);
+        propsRef.current.onSystemWorldAudition({
+          landmark: visual.landmark,
+          planetId: hit.bodyId,
+          pluck: {
+            offset: Number(clamp(hit.offset, 0, 1).toFixed(3)),
+            strength: Number(clamp(strength, 0, 1).toFixed(2)),
+          },
+        });
+        return;
+      }
       const engine = engineRef.current;
       const body = engine.getBody(hit.bodyId);
       if (!body) return;
@@ -2887,29 +2952,32 @@ export function SoundflightStage(props) {
       // could never begin. The grip test below keeps this to presses inside the
       // innermost orbit, and a press that turns out to be a tap still sounds
       // the chord on release, so nothing is taken away.
-      if (runtime.focusedSystemId) {
-        if (propsRef.current.isListener || propsRef.current.interactionMode !== "compose") return;
+      if (runtime.focusedSystemId && !propsRef.current.isListener
+        && propsRef.current.interactionMode === "compose") {
         const visual = cosmicLandmarkField.byId.get(runtime.focusedSystemId);
         const system = visual?.nearbySystem;
-        if (!system) return;
         const screen = eventPoint(event, renderer.domElement);
-        const star = projectToScreen(visual.group.position, screen);
-        const grip = Math.hypot(screen.x - star.x, screen.y - star.y);
-        if (grip > starGripRadius(screen)) return;
-        if (event.pointerType !== "touch") {
-          event.stopImmediatePropagation();
-          capturePointer(event.pointerId);
+        const star = system ? projectToScreen(visual.group.position, screen) : null;
+        // Only a press ON the star claims the pointer. Anything else has to
+        // fall through to the strings below — an orbit is a string here too,
+        // and returning early is what left twenty-eight systems with rings you
+        // could look at and not touch.
+        if (star && Math.hypot(screen.x - star.x, screen.y - star.y) <= starGripRadius(screen)) {
+          if (event.pointerType !== "touch") {
+            event.stopImmediatePropagation();
+            capturePointer(event.pointerId);
+          }
+          runtime.guestBirth = {
+            landmarkId: runtime.focusedSystemId,
+            pointerId: event.pointerId,
+            pointerType: event.pointerType,
+            startScreen: screen,
+            radius: system.band.innerRadius,
+            active: false,
+          };
+          controls.enabled = false;
+          return;
         }
-        runtime.guestBirth = {
-          landmarkId: runtime.focusedSystemId,
-          pointerId: event.pointerId,
-          pointerType: event.pointerType,
-          startScreen: screen,
-          radius: system.band.innerRadius,
-          active: false,
-        };
-        controls.enabled = false;
-        return;
       }
       const cosmicLandmark = hitCosmicLandmark(event);
       if (cosmicLandmark) {
