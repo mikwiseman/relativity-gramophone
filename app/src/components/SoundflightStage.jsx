@@ -61,7 +61,7 @@ import {
   setMaxAnisotropy,
   VISITED_SYSTEM_OUTER_RADIUS,
 } from "./cosmicScenery.js";
-import { expandedOrbitAu } from "../lib/cosmicAtlas.js";
+import { OUTER_REACH, expandedOrbitAu } from "../lib/cosmicAtlas.js";
 import {
   birthSatelliteFromRadialLaunch,
   satelliteStabilityBand,
@@ -3016,7 +3016,7 @@ export function SoundflightStage(props) {
           runtime.guestBirth.radius = clamp(
             reach,
             system.band.innerRadius * 0.62,
-            system.band.outerRadius * 1.28,
+            system.band.outerRadius * OUTER_REACH,
           );
           const screen = eventPoint(event, renderer.domElement);
           runtime.guestBirth.active = Math.hypot(
@@ -3777,7 +3777,7 @@ export function SoundflightStage(props) {
       // system, not the player's own. Its outermost drawn orbit is what the
       // editorial fit has to clear, or a portrait phone cuts two worlds off.
       runtime.systemRadius = focusedSystemVisual
-        ? VISITED_SYSTEM_OUTER_RADIUS
+        ? (focusedSystemVisual.nearbySystem?.outerDrawnRadius ?? VISITED_SYSTEM_OUTER_RADIUS)
         : systemRadius;
       const semanticScaleId = runtime.authoredScaleId
         ?? (runtime.cosmicScale.id === "orbit" ? "system" : runtime.cosmicScale.id);

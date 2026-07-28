@@ -4,9 +4,27 @@ const DEFAULT_STATE = Object.freeze({ mode: "compose", followingBodyId: null });
 export const INITIAL_PLAYBACK = true;
 export const INSTRUMENT_TITLE = "WAI GRAMOPHONE";
 
-export function reconcileAudioState({ engineState, intentionalPause }) {
+/**
+ * Sound that has never started and sound the browser took away are not the
+ * same state, and collapsing them into one is what put a full-screen "TOUCH TO
+ * HEAR · ONE TAP STARTS THE UNIVERSE" over a universe the player had already
+ * made. Switching to another tab suspends the audio context; coming back then
+ * claimed nothing had ever happened — and because the canvas is deliberately
+ * inert behind that gate, it also took away every gesture at once. A player
+ * who could not make a planet, could not make a moon and could not touch an
+ * orbit was not hitting three bugs. They were hitting this one.
+ *
+ * So `locked` now means only what it says: this instrument has never made a
+ * sound, and a trusted gesture is still owed. Once it has sounded, a suspended
+ * context is `suspended` — the canvas stays alive, and the next thing the
+ * player touches starts the sound on its way to doing what they asked.
+ */
+export function reconcileAudioState({ engineState, intentionalPause, hasSounded = false }) {
   if (typeof engineState !== "string" || typeof intentionalPause !== "boolean") {
     throw new Error("Audio reconciliation requires engine state and intentional pause");
+  }
+  if (typeof hasSounded !== "boolean") {
+    throw new Error("Audio reconciliation requires whether this instrument has ever sounded");
   }
   if (intentionalPause) {
     return {
@@ -14,14 +32,15 @@ export function reconcileAudioState({ engineState, intentionalPause }) {
       shouldSuspend: engineState === "running",
     };
   }
+  if (engineState === "running") return { audioState: "running", shouldSuspend: false };
   return {
-    audioState: engineState === "running" ? "running" : "locked",
+    audioState: hasSounded ? "suspended" : "locked",
     shouldSuspend: false,
   };
 }
 
 export function playbackControl({ audioState, isPlaying }) {
-  if (!["locked", "paused", "running"].includes(audioState)) {
+  if (!["locked", "suspended", "paused", "running"].includes(audioState)) {
     throw new Error(`Unknown audio state: ${audioState ?? "missing"}`);
   }
   if (audioState === "locked") {
@@ -800,7 +819,7 @@ export function instrumentLesson({
   hasBornWorld = false,
   hasBornMoon = false,
 }) {
-  if (!["locked", "paused", "running"].includes(audioState)) {
+  if (!["locked", "suspended", "paused", "running"].includes(audioState)) {
     throw new Error(`Unknown instrument lesson audio state: ${audioState}`);
   }
   if (!Number.isInteger(planetCount) || planetCount < 0) {

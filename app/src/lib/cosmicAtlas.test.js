@@ -9,6 +9,8 @@ import {
   planetAppearance,
   radiusFromMass,
   expandedOrbitAu,
+  OUTER_REACH,
+  OUTER_REACH_AU,
   periodFromReference,
   systemVoiceFrequencies,
   systemWorldVoice,
@@ -360,5 +362,31 @@ test("no world in the catalogue is drawn wider than physics allows", () => {
         `${body.name} is ${(body.radiusEarth / starRadiusEarth * 100).toFixed(0)}% as wide as its own star`,
       );
     }
+  }
+});
+
+test("reaching past the outermost orbit is even, and goes properly far", () => {
+  // Inside the measured system the map is logarithmic, because that is what
+  // makes nine octaves of orbit fit one screen. Outside it there is nothing
+  // left to compress and the same map runs away: in the Solar System, twenty
+  // eight per cent past Neptune's ring landed a world at 157 AU — five times
+  // further out for a quarter more finger travel — and then stopped dead.
+  const band = { minimumAu: 0.387, maximumAu: 30.07, innerRadius: 1.1, outerRadius: 4.2 };
+  const at = (fraction) => expandedOrbitAu(band.outerRadius * fraction, band);
+
+  assert.ok(Math.abs(at(1) - 30.07) < 1e-6, "the outermost ring is still the outermost orbit");
+  // Half way along the tail is half way out in astronomical units, not five times.
+  const half = at(1 + (OUTER_REACH - 1) / 2);
+  assert.ok(Math.abs(half - (30.07 + 30.07 * (OUTER_REACH_AU - 1) / 2)) < 1e-6, `half the tail gave ${half}`);
+  assert.ok(Math.abs(at(OUTER_REACH) - 30.07 * OUTER_REACH_AU) < 1e-6, "the far edge is four times the outermost orbit");
+  assert.ok(at(OUTER_REACH) > 100, "a world can be put properly far away");
+});
+
+test("drawing and placing an orbit are exact inverses, inside the system and beyond it", () => {
+  const band = { minimumAu: 0.387, maximumAu: 30.07, innerRadius: 1.1, outerRadius: 4.2 };
+  for (const au of [0.387, 1, 5.2, 30.07, 45, 80, 120.28]) {
+    const radius = compressedOrbitRadius(au, band);
+    const back = expandedOrbitAu(radius, band);
+    assert.ok(Math.abs(back / au - 1) < 1e-9, `${au} AU drew at ${radius} and came back as ${back}`);
   }
 });

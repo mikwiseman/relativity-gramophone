@@ -833,3 +833,44 @@ test("a visited system's elevation refuses a frame it cannot read", () => {
   assert.throws(() => visitedSystemElevation(0), /finite aspect/);
   assert.throws(() => visitedSystemElevation(Number.NaN), /finite aspect/);
 });
+
+test("sound the browser took away is not sound that never started", () => {
+  // Switching to another tab suspends the audio context. Coming back used to
+  // put a full-screen "TOUCH TO HEAR · ONE TAP STARTS THE UNIVERSE" over a
+  // universe the player had already made — and because the canvas is inert
+  // behind that gate, it took away every gesture at once. A player who could
+  // not make a planet, could not make a moon and could not touch an orbit was
+  // hitting this one bug, not three.
+  assert.deepEqual(
+    reconcileAudioState({ engineState: "suspended", intentionalPause: false, hasSounded: false }),
+    { audioState: "locked", shouldSuspend: false },
+    "before the first sound, a trusted gesture is genuinely still owed",
+  );
+  assert.deepEqual(
+    reconcileAudioState({ engineState: "suspended", intentionalPause: false, hasSounded: true }),
+    { audioState: "suspended", shouldSuspend: false },
+    "after it has sounded, the instrument stays touchable",
+  );
+  assert.deepEqual(
+    reconcileAudioState({ engineState: "interrupted", intentionalPause: false, hasSounded: true }),
+    { audioState: "suspended", shouldSuspend: false },
+  );
+  // An intentional pause still reads as a pause, whatever has gone before.
+  assert.equal(
+    reconcileAudioState({ engineState: "suspended", intentionalPause: true, hasSounded: true }).audioState,
+    "paused",
+  );
+  assert.throws(
+    () => reconcileAudioState({ engineState: "suspended", intentionalPause: false, hasSounded: "yes" }),
+    /ever sounded/i,
+  );
+});
+
+test("a suspended instrument offers PLAY, not START SOUND", () => {
+  assert.deepEqual(playbackControl({ audioState: "suspended", isPlaying: true }), {
+    icon: "play",
+    label: "PLAY",
+    ariaLabel: "Play music",
+    pressed: false,
+  });
+});

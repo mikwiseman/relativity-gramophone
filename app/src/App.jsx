@@ -148,6 +148,7 @@ export function App() {
   const thereminRequestRef = useRef(0);
   const thereminReleaseTimeoutRef = useRef(null);
   const intentionalPauseRef = useRef(false);
+  const hasSoundedRef = useRef(false);
   const audioStartPromiseRef = useRef(null);
   const shareRequestRef = useRef(0);
   const journeyTargetRef = useRef(null);
@@ -382,9 +383,16 @@ export function App() {
   }, [initial.storedId, loadStoredScore]);
 
   useEffect(() => audioRef.current.subscribeState((state) => {
+    if (state === "running") hasSoundedRef.current = true;
     const reconciliation = reconcileAudioState({
       engineState: state,
       intentionalPause: intentionalPauseRef.current,
+      // Sound the browser took away is not sound that never started. Switching
+      // tabs suspends the context, and reporting that as "locked" put a
+      // full-screen gate over a universe the player had already made — and,
+      // because the canvas is inert behind that gate, took away every gesture
+      // at once.
+      hasSounded: hasSoundedRef.current,
     });
     setAudioState(reconciliation.audioState);
     if (reconciliation.shouldSuspend) {
@@ -403,7 +411,7 @@ export function App() {
         setAudioState("running");
         setRuntimeError(null);
       } catch {
-        setAudioState("locked");
+        setAudioState(hasSoundedRef.current ? "suspended" : "locked");
       }
     };
     const handleVisibility = () => {
@@ -529,6 +537,7 @@ export function App() {
     let request;
     request = audioRef.current.activateFromGesture(activateField)
       .then((state) => {
+        hasSoundedRef.current = true;
         setAudioState("running");
         return state;
       })
@@ -540,14 +549,14 @@ export function App() {
   }, []);
 
   const handleAudioUnlock = useCallback(() => {
-    if (audioState !== "locked") return;
+    if (audioState === "running" || audioState === "paused") return;
     startAudio(true)
       .then(() => {
         setIsPlaying(true);
         setRuntimeError(null);
       })
       .catch((error) => {
-        setAudioState("locked");
+        setAudioState(hasSoundedRef.current ? "suspended" : "locked");
         setRuntimeError(error instanceof Error ? error.message : "Audio could not start");
       });
   }, [audioState, startAudio]);
@@ -1457,7 +1466,7 @@ export function App() {
             </button>
           )}
 
-          {audioState === "running"
+          {audioState !== "locked"
             && !lightOpen
             && !utilityOpen
             && (

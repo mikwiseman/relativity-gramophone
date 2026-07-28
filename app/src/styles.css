@@ -2234,6 +2234,11 @@ input:focus-visible {
  * yet — killed every touch on the canvas, including the seven worlds of a
  * system the player had travelled to.
  */
+/* Inert only while this instrument has never made a sound — that is the one
+   state where a trusted gesture is genuinely still owed. A context the
+   browser suspended when the player looked at another tab is "suspended",
+   and the canvas stays alive: the next thing they touch starts the sound on
+   its way to doing what they asked. */
 .app-shell[data-audio-state="locked"] .soundflight-stage {
   pointer-events: none;
 }

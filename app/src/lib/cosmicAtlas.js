@@ -146,12 +146,31 @@ export function planetAppearance({ radiusEarth, orbitAu, luminositySuns }) {
  * spanning 0.01 AU to 30 AU still reads on one screen and the real ordering and
  * relative spacing survive. The surface must say that spacing is compressed.
  */
+/**
+ * How far past the outermost measured orbit a player may reach, and how much
+ * further out in astronomical units that buys.
+ *
+ * Outside the measured system the logarithmic map has nothing left to compress
+ * and simply runs away with itself: in the Solar System, dragging 28 per cent
+ * past Neptune's ring landed a world at 157 AU, five times further out than
+ * Neptune for a quarter more finger travel — and then it stopped dead, because
+ * the reach was clamped there. So the tail is linear instead: the last stretch
+ * of the drag runs evenly from the outermost measured orbit to eight times it,
+ * which is predictable to a hand and lets a world be put properly far away.
+ */
+export const OUTER_REACH = 1.55;
+export const OUTER_REACH_AU = 8;
+
 export function compressedOrbitRadius(au, { minimumAu, maximumAu, innerRadius, outerRadius }) {
   assertPositive(au, "Orbit compression requires a positive semi-major axis in AU");
   assertPositive(minimumAu, "Orbit compression requires a positive minimum semi-major axis");
   assertPositive(maximumAu, "Orbit compression requires a positive maximum semi-major axis");
   if (!Number.isFinite(innerRadius) || !Number.isFinite(outerRadius) || outerRadius <= innerRadius) {
     throw new Error("Orbit compression requires an outward drawable band");
+  }
+  if (au > maximumAu && maximumAu > minimumAu) {
+    const beyond = Math.min(1, (au - maximumAu) / (maximumAu * (OUTER_REACH_AU - 1)));
+    return outerRadius + beyond * (outerRadius * OUTER_REACH - outerRadius);
   }
   const progress = maximumAu === minimumAu
     ? 0.5
@@ -172,6 +191,10 @@ export function expandedOrbitAu(radius, { minimumAu, maximumAu, innerRadius, out
     throw new Error("Orbit expansion requires a finite drawable band");
   }
   if (minimumAu === maximumAu) return minimumAu;
+  if (radius > outerRadius) {
+    const beyond = Math.min(1, (radius - outerRadius) / (outerRadius * (OUTER_REACH - 1)));
+    return maximumAu + beyond * maximumAu * (OUTER_REACH_AU - 1);
+  }
   const progress = (radius - innerRadius) / (outerRadius - innerRadius);
   return Math.exp(Math.log(minimumAu) + progress * (Math.log(maximumAu) - Math.log(minimumAu)));
 }

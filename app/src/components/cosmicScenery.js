@@ -795,6 +795,14 @@ export function createStarSystemObject(system, {
     star,
     worlds,
     habitableBand,
+    /**
+     * How far out this system is actually drawn — which is not the authored
+     * rim once a player has put a world beyond it. The camera fits this, so a
+     * world placed far away stays in the picture instead of leaving it.
+     */
+    get outerDrawnRadius() {
+      return worlds.reduce((furthest, world) => Math.max(furthest, world.drawnRadius), outerRadius);
+    },
     band: Object.freeze({ minimumAu, maximumAu, innerRadius, outerRadius }),
     /**
      * A world the player adds to a real system. It keeps its own voice colour
