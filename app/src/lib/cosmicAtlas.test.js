@@ -8,6 +8,11 @@ import {
   logSpiralRadius,
   planetAppearance,
   radiusFromMass,
+  massFromRadius,
+  hillRadiusAu,
+  moonPeriodDays,
+  moonBand,
+  JOVIAN_BREAK_MASS,
   expandedOrbitAu,
   OUTER_REACH,
   OUTER_REACH_AU,
@@ -389,4 +394,138 @@ test("drawing and placing an orbit are exact inverses, inside the system and bey
     const back = expandedOrbitAu(radius, band);
     assert.ok(Math.abs(back / au - 1) < 1e-9, `${au} AU drew at ${radius} and came back as ${back}`);
   }
+});
+
+test("a mass forecast from a radius is the inverse of the radius forecast", () => {
+  for (const mass of [0.5, 1, 5, 17.15, 60, 131]) {
+    const back = massFromRadius(radiusFromMass(mass));
+    assert.ok(Math.abs(back / mass - 1) < 1e-6, `${mass} Earth masses came back as ${back}`);
+  }
+  // Above the Jovian break the relation turns over, so a radius names no single
+  // mass. Rather than pick one and call it knowledge, it stops at the break.
+  assert.equal(massFromRadius(20), JOVIAN_BREAK_MASS);
+  assert.throws(() => massFromRadius(0), /positive radius/);
+});
+
+test("a world's Hill radius says how far its own gravity reaches", () => {
+  // The Earth's is about 0.01 AU — 1.5 million kilometres, and the Moon at
+  // 0.00257 AU sits comfortably inside a quarter of it.
+  const earth = hillRadiusAu({ orbitAu: 1, massEarth: 1, starMassSuns: 1 });
+  assert.ok(Math.abs(earth - 0.01) < 0.0005, `Earth's Hill radius came out ${earth}`);
+  assert.ok(0.00257 < earth * 0.35, "the Moon is inside the stable third of it");
+  // A heavier world reaches further; a closer one reaches less far.
+  assert.ok(hillRadiusAu({ orbitAu: 1, massEarth: 300, starMassSuns: 1 }) > earth);
+  assert.ok(hillRadiusAu({ orbitAu: 0.4, massEarth: 1, starMassSuns: 1 }) < earth);
+  assert.throws(() => hillRadiusAu({ orbitAu: 1, massEarth: 1, starMassSuns: 0 }), /stellar mass/);
+});
+
+test("a moon's year follows Kepler about its own world", () => {
+  // Our Moon: 0.00257 AU from a one-Earth-mass world, 27.3 days.
+  const moon = moonPeriodDays({ moonAu: 0.00257, massEarth: 1 });
+  assert.ok(Math.abs(moon - 27.3) < 1.5, `our Moon came out at ${moon} days`);
+  // Io: 0.002819 AU from Jupiter's 317.8 Earth masses, 1.77 days.
+  const io = moonPeriodDays({ moonAu: 0.002819, massEarth: 317.8 });
+  assert.ok(Math.abs(io - 1.77) < 0.1, `Io came out at ${io} days`);
+  assert.throws(() => moonPeriodDays({ moonAu: 0, massEarth: 1 }), /positive orbit/);
+});
+
+test("every world you can visit carries a mass, and says whether anyone weighed it", () => {
+  // A moon's orbit follows from its parent's mass, so a catalogue that carries
+  // only radii cannot have moons in it. 124 of the 131 worlds have a mass in
+  // the archive; the seven Kepler-90 worlds are transit-only and theirs is
+  // forecast from radius — which the data says out loud rather than implying.
+  let measured = 0;
+  let inferred = 0;
+  for (const system of STAR_SYSTEMS) {
+    assert.ok(system.star.massSolar > 0, `${system.name} needs a stellar mass for Hill radii`);
+    for (const body of system.bodies) {
+      assert.ok(body.massEarth > 0, `${body.name} has no mass`);
+      assert.ok(["measured", "inferred"].includes(body.massSource), `${body.name} does not say where its mass came from`);
+      if (body.massSource === "measured") measured += 1; else inferred += 1;
+    }
+  }
+  assert.equal(measured + inferred, 131);
+  // Seven Kepler-90 worlds are transit-only, and Kepler-80 f's archive mass is
+  // impossible for its size, so its mass is forecast too.
+  assert.ok(inferred <= 8, `only the unweighable worlds may be forecast; ${inferred} are`);
+});
+
+test("TRAPPIST-1 e weighs what it was measured to weigh", () => {
+  const trappist = STAR_SYSTEMS.find((system) => system.name === "TRAPPIST-1");
+  const e = trappist.bodies.find((body) => body.name.endsWith(" E"));
+  assert.ok(Math.abs(e.massEarth - 0.69) < 0.02, `got ${e.massEarth}`);
+  assert.equal(e.massSource, "measured");
+  // And its Hill radius is small, because its star is a tenth of the Sun.
+  const hill = hillRadiusAu({
+    orbitAu: e.orbitAu,
+    massEarth: e.massEarth,
+    starMassSuns: trappist.star.massSolar,
+    eccentricity: e.eccentricity,
+  });
+  assert.ok(hill > 0 && hill < e.orbitAu * 0.05, `TRAPPIST-1 e reaches ${hill} AU`);
+  const moon = moonPeriodDays({ moonAu: hill * 0.3, massEarth: e.massEarth });
+  assert.ok(moon > 0.5 && moon < 40, `a moon there would take ${moon} days`);
+});
+
+test("no world is given a mass its own size could not hold", () => {
+  // The archive's own row for Kepler-80 f says 4,459 Earth masses in a body
+  // 1.21 Earth radii across — a density two and a half thousand times Earth's,
+  // which is not a planet. A mass is only taken when the world's own size can
+  // hold it; otherwise it is forecast from the radius and said to be forecast.
+  for (const system of STAR_SYSTEMS) {
+    for (const body of system.bodies) {
+      const density = body.massEarth / body.radiusEarth ** 3;
+      assert.ok(
+        density > 0.01 && density < 30,
+        `${body.name} is ${density.toFixed(1)} times Earth's density`,
+      );
+    }
+  }
+});
+
+test("every world in every visited system can hold a moon with a sane year", () => {
+  // A moon of TRAPPIST-1 e and a moon of Jupiter keep different years because
+  // those two worlds really do hold on differently. What must be true of all of
+  // them is that the band is real: wide enough to place a moon in, and a year
+  // a child can be told.
+  let widest = 0;
+  let narrowest = Infinity;
+  let impossible = 0;
+  for (const system of STAR_SYSTEMS) {
+    for (const body of system.bodies) {
+      const hill = hillRadiusAu({
+        orbitAu: body.orbitAu,
+        massEarth: body.massEarth,
+        starMassSuns: system.star.massSolar,
+        eccentricity: body.eccentricity ?? 0,
+      });
+      assert.ok(hill > 0, `${body.name} has no Hill radius`);
+      const band = moonBand({ hillAu: hill, radiusEarth: body.radiusEarth });
+      if (!band.possible) {
+        // A world this close in cannot hold anything: its Hill sphere is barely
+        // wider than the world itself. 55 Cancri e goes round its star in
+        // eighteen hours.
+        impossible += 1;
+        continue;
+      }
+      for (const moonAu of [band.inner, band.outer]) {
+        const period = moonPeriodDays({ moonAu, massEarth: body.massEarth });
+        assert.ok(
+          // HR 8799 b is five Jupiter masses at sixty-eight astronomical units,
+          // so its grip reaches seven AU and a moon out there really would take
+          // fifty-five years. That is the kind of fact this instrument is for.
+          period > 0.02 && period < 40_000,
+          `a moon of ${body.name} would take ${period} days`,
+        );
+        widest = Math.max(widest, period);
+        narrowest = Math.min(narrowest, period);
+      }
+    }
+  }
+  // And the range across the catalogue is wide, which is the point: a moon says
+  // something about the world it is hung on.
+  assert.ok(widest / narrowest > 100, `moon years span only ${widest / narrowest}`);
+  // A handful of scorched inner worlds genuinely cannot hold a moon, and the
+  // instrument must say that rather than invent one.
+  assert.ok(impossible > 0 && impossible < 30, `${impossible} worlds cannot hold a moon`);
 });

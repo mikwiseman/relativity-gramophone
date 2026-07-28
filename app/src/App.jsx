@@ -40,7 +40,7 @@ import {
   NEIGHBOURHOOD_SHELLS,
   thereminParameters,
 } from "./lib/cosmicInstrument.js";
-import { periodFromReference } from "./lib/cosmicAtlas.js";
+import { moonPeriodDays, periodFromReference } from "./lib/cosmicAtlas.js";
 import { IDLE_JOURNEY, nextJourneyState } from "./lib/cosmicJourney.js";
 import { COSMIC_VOICES, hapticPattern, voiceParameters } from "./lib/sonification.js";
 import {
@@ -116,6 +116,7 @@ export function App() {
   const [visitedSystemId, setVisitedSystemId] = useState(null);
   const [shellIndex, setShellIndex] = useState(0);
   const [guestWorlds, setGuestWorlds] = useState(() => new Map());
+  const [systemMoons, setSystemMoons] = useState(() => new Map());
   const [guestPreview, setGuestPreview] = useState(null);
   const [journey, setJourney] = useState(IDLE_JOURNEY);
   const journeyTarget = journey.journeyTarget;
@@ -337,7 +338,13 @@ export function App() {
           : "HOLD THE STAR · PULL OUTWARD · RELEASE"
         : "TOUCH A BRIGHT REGION TO HEAR IT"
     : visitedSystem
-      ? guestPreview
+      ? guestPreview?.moonOf
+        // A moon is measured against its own world, not against the star, so it
+        // is told in days rather than in astronomical units.
+        ? `A MOON OF ${guestPreview.moonName} · ${guestPreview.periodDays >= 1
+            ? `${guestPreview.periodDays.toFixed(guestPreview.periodDays >= 10 ? 0 : 1)} DAYS`
+            : `${(guestPreview.periodDays * 24).toFixed(1)} HOURS`} · RELEASE TO HEAR IT`
+      : guestPreview
         ? `YOUR WORLD AT ${guestPreview.orbitAu < 0.1
             ? guestPreview.orbitAu.toFixed(3)
             : guestPreview.orbitAu.toFixed(2)} AU · RELEASE TO HEAR IT`
@@ -892,6 +899,49 @@ export function App() {
    * the whole point: you can hear where a world of your own would sit inside
    * TRAPPIST-1's rhythm.
    */
+  /**
+   * A moon the player hangs on a world of a system they travelled to.
+   *
+   * Its year follows Kepler about that world's own measured mass, so a moon of
+   * TRAPPIST-1 e and a moon of Jupiter keep different years because those two
+   * worlds really do hold on differently. It sounds an overtone of its parent's
+   * voice, which is what a moon is in this instrument.
+   */
+  const handleSystemMoon = useCallback(async ({ landmarkId, planetId, moonAu, hillAu }) => {
+    try {
+      const landmark = cosmicLandmarkById(landmarkId);
+      const planet = landmark.system.bodies.find((body) => body.id === planetId);
+      if (!planet?.massEarth) throw new Error("Nobody has weighed this world, so it cannot hold a moon");
+      const held = systemMoons.get(landmarkId) ?? [];
+      if (held.filter((moon) => moon.parentId === planetId).length >= 2) {
+        setRuntimeError("This world already holds two moons.");
+        return;
+      }
+      const periodDays = moonPeriodDays({ moonAu, massEarth: planet.massEarth });
+      const moon = Object.freeze({
+        id: `${planetId}-moon-${held.length + 1}`,
+        parentId: planetId,
+        moonAu,
+        hillAu,
+        periodDays,
+      });
+      setSystemMoons((current) => {
+        const next = new Map(current);
+        next.set(landmarkId, [...(current.get(landmarkId) ?? []), moon]);
+        return next;
+      });
+      await startAudio(true);
+      audioRef.current.playSystemWorld(landmark, planetId);
+      const year = periodDays >= 1
+        ? `${periodDays.toFixed(periodDays >= 10 ? 0 : 1)} DAYS`
+        : `${(periodDays * 24).toFixed(1)} HOURS`;
+      announceSonicCue(`A MOON OF ${planet.name} · ${year}`, 3000);
+      performHaptic({ kind: "birth", strength: 0.55 });
+    } catch (error) {
+      setRuntimeError(error instanceof Error ? error.message : "That moon could not form");
+    }
+  }, [announceSonicCue, performHaptic, startAudio, systemMoons]);
+
   const handleGuestWorld = useCallback(async ({ landmark, orbitAu }) => {
     try {
       const reference = landmark.system.bodies[0];
@@ -1381,6 +1431,8 @@ export function App() {
         onCosmicAudition={handleCosmicAudition}
         onSystemWorldAudition={handleSystemWorldAudition}
         onGuestWorld={handleGuestWorld}
+        onSystemMoon={handleSystemMoon}
+        systemMoons={systemMoons}
         onGuestOrbitPreview={setGuestPreview}
         guestWorlds={guestWorlds}
         onCosmicScale={handleCosmicScale}

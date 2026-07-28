@@ -753,6 +753,7 @@ export function createStarSystemObject(system, {
       // Filled in once every world's drawn radius is known: a target may not
       // swell past its share of the gap to the next orbit.
       neighbourGap: Infinity,
+      moons: [],
       eccentricity: planet.eccentricity ?? 0,
       phase: random() * Math.PI * 2,
       impulse: 0,
@@ -804,6 +805,47 @@ export function createStarSystemObject(system, {
       return worlds.reduce((furthest, world) => Math.max(furthest, world.drawnRadius), outerRadius);
     },
     band: Object.freeze({ minimumAu, maximumAu, innerRadius, outerRadius }),
+    /**
+     * A moon the player hangs on one of a real system's worlds.
+     *
+     * The orbit is drawn magnified — a Hill radius is about a thousandth of the
+     * world's own orbit and would land inside a single pixel — but the period
+     * is the one Kepler gives for the parent's measured mass at the real
+     * distance the finger chose, so what you hear is true even though what you
+     * see is enlarged. The magnification is one stated number for the whole
+     * system, so two moons of the same world keep their exact ratio.
+     */
+    addMoon({ parentId, id, moonAu, periodDays, hillAu, color }) {
+      const parent = api.worldById.get(parentId);
+      if (!parent) throw new Error(`No world ${parentId} to hang a moon on`);
+      const reach = parent.bodyRadius * 3.4;
+      const drawnRadius = parent.bodyRadius * 1.5 + (moonAu / hillAu) * (reach - parent.bodyRadius * 1.5);
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(Math.max(0.012, parent.bodyRadius * 0.26), 18, 14),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, toneMapped: false }),
+      );
+      mesh.renderOrder = 4;
+      group.add(mesh);
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(drawnRadius * 0.995, drawnRadius * 1.005, 72),
+        new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          toneMapped: false,
+        }),
+      );
+      ring.rotation.x = -Math.PI / 2;
+      ring.renderOrder = 3;
+      group.add(ring);
+      const moon = { id, parentId, moonAu, periodDays, drawnRadius, mesh, ring, phase: random() * Math.PI * 2 };
+      parent.moons.push(moon);
+      api.moons.push(moon);
+      return moon;
+    },
+    moons: [],
     /**
      * A world the player adds to a real system. It keeps its own voice colour
      * rather than a measured class colour, because it is not a measurement:
@@ -876,6 +918,22 @@ export function createStarSystemObject(system, {
           .normalize();
         world.body.material.uniforms.uImpulse.value = world.impulse;
         world.impulse *= Math.exp(-decayDelta * 2.2);
+        // A moon goes round its own world, at its own real period. The drawn
+        // orbit is uniformly magnified — a Hill radius is a thousandth of an
+        // orbit and would be one pixel — but the period is the one Kepler
+        // gives for the parent's measured mass, and the ratios between a
+        // world's moons are exact.
+        for (const moon of world.moons) {
+          const moonRevolutions = delta / (secondsPerFastestOrbit
+            * (moon.periodDays / fastestPeriod));
+          moon.phase += moonRevolutions * Math.PI * 2;
+          moon.mesh.position.set(
+            world.body.position.x + Math.cos(moon.phase) * moon.drawnRadius,
+            0.012,
+            world.body.position.z + Math.sin(moon.phase) * moon.drawnRadius * 0.62,
+          );
+          moon.ring.position.set(world.body.position.x, 0.008, world.body.position.z);
+        }
       }
     },
     /**
@@ -885,6 +943,10 @@ export function createStarSystemObject(system, {
      */
     setOpacity(opacity, labelMix = 0) {
       group.visible = opacity > 0.01;
+      for (const moon of api.moons) {
+        moon.mesh.material.opacity = opacity;
+        moon.ring.material.opacity = opacity * 0.42;
+      }
       star.material.uniforms.uOpacity.value = opacity;
       // A ring passing BEHIND its star is the strongest depth cue any picture
       // of a planetary system has, and without a depth buffer it happens

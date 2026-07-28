@@ -61,7 +61,7 @@ import {
   setMaxAnisotropy,
   VISITED_SYSTEM_OUTER_RADIUS,
 } from "./cosmicScenery.js";
-import { OUTER_REACH, expandedOrbitAu } from "../lib/cosmicAtlas.js";
+import { OUTER_REACH, expandedOrbitAu, hillRadiusAu, moonBand, moonPeriodDays } from "../lib/cosmicAtlas.js";
 import {
   birthSatelliteFromRadialLaunch,
   satelliteStabilityBand,
@@ -2138,6 +2138,7 @@ export function SoundflightStage(props) {
       pendingBodyTap: null,
       pendingCosmicTap: null,
       pendingSystemWorldTap: null,
+      systemMoon: null,
       guestBirth: null,
       activeTouchPointers: new Set(),
       cancelledPointerIds: new Set(),
@@ -2375,6 +2376,56 @@ export function SoundflightStage(props) {
       const planetId = hit?.object?.userData?.systemPlanetId;
       if (!planetId) return null;
       return { landmark: visual.landmark, planetId, system };
+    };
+
+    /**
+     * Hanging a moon on a world of a system you have travelled to.
+     *
+     * The band is that world's own: from a tenth of its Hill radius — inside
+     * which an orbit is grazing the world itself — out to a third of it, past
+     * which the star pulls a moon away over time. Both ends come from the
+     * world's measured mass and its star's, so a moon of TRAPPIST-1 e keeps a
+     * different year from a moon of Jupiter because those two worlds really do
+     * hold on differently.
+     */
+    const beginSystemMoon = (pending, screen) => {
+      const { landmark, planetId, system } = pending.world;
+      if (propsRef.current.isListener) return;
+      const planet = landmark.system.bodies.find((body) => body.id === planetId);
+      const starMassSuns = landmark.system.star?.massSolar;
+      if (!planet?.massEarth || !starMassSuns) {
+        propsRef.current.onBirthRefused("Nobody has weighed this world, so it cannot hold a moon.");
+        return;
+      }
+      const hillAu = hillRadiusAu({
+        orbitAu: planet.orbitAu,
+        massEarth: planet.massEarth,
+        starMassSuns,
+        eccentricity: planet.eccentricity ?? 0,
+      });
+      // Some worlds simply cannot hold one. 55 Cancri e goes round its star in
+      // eighteen hours, and its grip reaches barely past its own surface.
+      const band = moonBand({ hillAu, radiusEarth: planet.radiusEarth });
+      if (!band.possible) {
+        propsRef.current.onBirthRefused(
+          `${planet.name} orbits too close to hold a moon — its star would take it.`,
+        );
+        return;
+      }
+      runtime.systemMoon = {
+        pointerId: pending.pointerId,
+        pointerType: pending.pointerType,
+        landmarkId: landmark.id,
+        planetId,
+        planetName: planet.name,
+        massEarth: planet.massEarth,
+        system,
+        hillAu,
+        band,
+        startScreen: pending.startScreen,
+        fraction: 0.1,
+      };
+      controls.enabled = false;
     };
 
     const performSystemWorldAudition = ({ landmark, planetId, system }) => {
@@ -2811,17 +2862,18 @@ export function SoundflightStage(props) {
       }
       const systemWorld = hitSystemWorld(event);
       if (systemWorld) {
-        if (deferAudio) {
-          runtime.pendingSystemWorldTap = {
-            pointerId: event.pointerId,
-            pointerType: event.pointerType,
-            world: systemWorld,
-            startScreen: eventPoint(event, renderer.domElement),
-          };
-        } else {
-          event.stopImmediatePropagation();
-          performSystemWorldAudition(systemWorld);
-        }
+        // A press on a world of a visited system is not yet a tap: it might be
+        // the beginning of a moon. So it always waits for the hand to decide —
+        // let go where you pressed and the world sounds its year; pull outward
+        // and you are hanging a moon on it, exactly as you would at home.
+        event.stopImmediatePropagation();
+        if (event.pointerType !== "touch") capturePointer(event.pointerId);
+        runtime.pendingSystemWorldTap = {
+          pointerId: event.pointerId,
+          pointerType: event.pointerType,
+          world: systemWorld,
+          startScreen: eventPoint(event, renderer.domElement),
+        };
         return;
       }
       // Inside a visited system the star is still the place worlds come from.
@@ -3002,7 +3054,35 @@ export function SoundflightStage(props) {
           screen.x - pending.startScreen.x,
           screen.y - pending.startScreen.y,
         );
-        if (traveled > CREATION_DRAG_THRESHOLD) runtime[pendingKey] = null;
+        if (traveled > CREATION_DRAG_THRESHOLD) {
+          // A press on a world of a visited system that turns into a pull is a
+          // moon, not an abandoned tap. The same gesture as at home, in a sky
+          // you travelled to.
+          if (pendingKey === "pendingSystemWorldTap") beginSystemMoon(pending, screen);
+          runtime[pendingKey] = null;
+        }
+      }
+      if (runtime.systemMoon) {
+        event.stopImmediatePropagation();
+        const screen = eventPoint(event, renderer.domElement);
+        const pulled = Math.hypot(
+          screen.x - runtime.systemMoon.startScreen.x,
+          screen.y - runtime.systemMoon.startScreen.y,
+        );
+        // A tenth of the Hill radius to a third of it: closer grazes the world,
+        // further and the star takes the moon away over time.
+        const reach = clamp((pulled - CREATION_DRAG_THRESHOLD) / 260, 0, 1);
+        const moonAu = runtime.systemMoon.band.inner
+          + reach * (runtime.systemMoon.band.outer - runtime.systemMoon.band.inner);
+        runtime.systemMoon.moonAu = moonAu;
+        propsRef.current.onGuestOrbitPreview({
+          landmarkId: runtime.systemMoon.landmarkId,
+          moonOf: runtime.systemMoon.planetId,
+          moonName: runtime.systemMoon.planetName,
+          moonAu,
+          periodDays: moonPeriodDays({ moonAu, massEarth: runtime.systemMoon.massEarth }),
+        });
+        return;
       }
       if (runtime.guestBirth) {
         const visual = cosmicLandmarkField.byId.get(runtime.guestBirth.landmarkId);
@@ -3240,6 +3320,20 @@ export function SoundflightStage(props) {
         }
         const orbitAu = expandedOrbitAu(birth.radius, system.band);
         propsRef.current.onGuestWorld({ landmark: visual.landmark, orbitAu });
+        return;
+      }
+      if (runtime.systemMoon?.pointerId === event.pointerId) {
+        const moon = runtime.systemMoon;
+        runtime.systemMoon = null;
+        controls.enabled = true;
+        releaseCapturedPointer(event.pointerId);
+        propsRef.current.onGuestOrbitPreview(null);
+        propsRef.current.onSystemMoon({
+          landmarkId: moon.landmarkId,
+          planetId: moon.planetId,
+          moonAu: moon.moonAu ?? moon.band.inner,
+          hillAu: moon.hillAu,
+        });
         return;
       }
       if (runtime.pendingSystemWorldTap?.pointerId === event.pointerId) {
@@ -3736,6 +3830,28 @@ export function SoundflightStage(props) {
           for (const world of worlds) {
             if (system.worldById.has(world.id)) continue;
             system.addWorld(world);
+          }
+        }
+      }
+      // And the moons hung on those systems' worlds, adopted exactly once each.
+      const systemMoons = propsRef.current.systemMoons;
+      if (systemMoons && systemMoons.size > 0) {
+        for (const [landmarkId, moons] of systemMoons) {
+          const visual = cosmicLandmarkField.byId.get(landmarkId);
+          const system = visual?.ensureSystem(cosmicLandmarkField.resolution);
+          if (!system) continue;
+          for (const moon of moons) {
+            if (system.moons.some((existing) => existing.id === moon.id)) continue;
+            const parent = system.worldById.get(moon.parentId);
+            if (!parent) continue;
+            system.addMoon({
+              parentId: moon.parentId,
+              id: moon.id,
+              moonAu: moon.moonAu,
+              periodDays: moon.periodDays,
+              hillAu: moon.hillAu,
+              color: parent.color,
+            });
           }
         }
       }

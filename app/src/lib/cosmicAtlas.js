@@ -114,6 +114,76 @@ export function radiusFromMass(massEarth) {
   return 0.00143 * massEarth ** 0.881;
 }
 
+/**
+ * The mass a world of a given radius is expected to have, when nobody has
+ * weighed it.
+ *
+ * The inverse of `radiusFromMass`, and only where that relation is actually
+ * invertible. Chen & Kipping's mean radius rises to about 14.3 Earth radii at
+ * the Jovian break and then *falls*, so a radius above that break names no
+ * single mass at all — an inflated hot Jupiter and a brown dwarf sit on the
+ * same line. Rather than pick one and call it knowledge, anything that wide is
+ * given the mass at the break and the surface records the answer as inferred.
+ */
+export const JOVIAN_BREAK_MASS = 131.6;
+export const JOVIAN_BREAK_RADIUS = 14.31;
+
+export function massFromRadius(radiusEarth) {
+  assertPositive(radiusEarth, "A forecast mass requires a positive radius in Earth radii");
+  if (radiusEarth < 1.232) return (radiusEarth / 1.008) ** (1 / 0.279);
+  if (radiusEarth < JOVIAN_BREAK_RADIUS) return (radiusEarth / 0.808) ** (1 / 0.589);
+  return JOVIAN_BREAK_MASS;
+}
+
+/**
+ * The Hill radius of a world in astronomical units — the distance out to which
+ * its own gravity, not its star's, decides what orbits it. Everything a moon
+ * can be is inside this, and about a third of it in practice, because orbits
+ * near the edge are not stable over the long run.
+ */
+export function hillRadiusAu({ orbitAu, massEarth, starMassSuns, eccentricity = 0 }) {
+  assertPositive(orbitAu, "A Hill radius requires a positive semi-major axis in AU");
+  assertPositive(massEarth, "A Hill radius requires a positive planet mass in Earth masses");
+  assertPositive(starMassSuns, "A Hill radius requires a positive stellar mass in solar masses");
+  if (!Number.isFinite(eccentricity) || eccentricity < 0 || eccentricity >= 1) {
+    throw new Error("Eccentricity must sit between 0 and 1");
+  }
+  const massRatio = (massEarth / 332_946) / (3 * starMassSuns);
+  return orbitAu * (1 - eccentricity) * Math.cbrt(massRatio);
+}
+
+/** Earth radii in one astronomical unit. */
+export const EARTH_RADII_PER_AU = 23_481.4;
+
+/**
+ * The band a moon can actually live in, around one world.
+ *
+ * Bounded below by the world itself — an orbit inside the surface is not an
+ * orbit — and above by a third of the Hill radius, past which the star pulls a
+ * moon away over time. Some worlds have no band at all: 55 Cancri e orbits its
+ * star in eighteen hours, and its Hill sphere is barely wider than the planet,
+ * so nothing can go round it. That is a fact about that world, and the gesture
+ * says so rather than inventing a moon inside a planet.
+ */
+export function moonBand({ hillAu, radiusEarth }) {
+  assertPositive(hillAu, "A moon band needs a positive Hill radius");
+  assertPositive(radiusEarth, "A moon band needs the world's radius");
+  const surfaceAu = radiusEarth / EARTH_RADII_PER_AU;
+  const inner = Math.max(surfaceAu * 1.6, hillAu * 0.1);
+  const outer = hillAu * 0.35;
+  return { inner, outer, possible: outer > inner };
+}
+
+/**
+ * The period, in days, of a moon at `moonAu` from a world of `massEarth`.
+ * Kepler's third law again, about the world instead of about the star.
+ */
+export function moonPeriodDays({ moonAu, massEarth }) {
+  assertPositive(moonAu, "A moon needs a positive orbit in AU");
+  assertPositive(massEarth, "A moon needs a parent with a positive mass");
+  return 365.25 * Math.sqrt(moonAu ** 3 / (massEarth / 332_946));
+}
+
 const PLANET_CLASSES = Object.freeze({
   lava: Object.freeze({ id: "lava", label: "MOLTEN ROCK", color: 0xff7a3c }),
   "warm-rocky": Object.freeze({ id: "warm-rocky", label: "WARM ROCK", color: 0xc9855c }),
