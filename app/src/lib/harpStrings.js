@@ -90,6 +90,9 @@ export function stringsAlongSweep(from, to, strings, threshold) {
         best = {
           bodyId: string.bodyId,
           visited: Boolean(string.visited),
+          // A moon's string belongs to its parent's voice; whose moon it is
+          // travels with the hit exactly like the visited flag does.
+          moonOf: string.moonOf ?? null,
           distance: approach.distance,
           offset: (traversed + segmentLength * approach.t) / pathLength,
           x: approach.x,
@@ -143,6 +146,7 @@ export function nearestStringPoint(point, strings, threshold) {
           // a string of a system you travelled to was looked up in the engine
           // running your own, found nothing, and went silent.
           visited: Boolean(string.visited),
+          moonOf: string.moonOf ?? null,
           distance,
           offset: (traversed + segmentLength * projection) / pathLength,
           x: closestX,

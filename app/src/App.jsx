@@ -40,7 +40,8 @@ import {
   NEIGHBOURHOOD_SHELLS,
   thereminParameters,
 } from "./lib/cosmicInstrument.js";
-import { moonPeriodDays, periodFromReference } from "./lib/cosmicAtlas.js";
+import { massFromRadius, moonPeriodDays, periodFromReference, withGuestWorlds } from "./lib/cosmicAtlas.js";
+import { MAX_WORLDS } from "./lib/physicsEngine.js";
 import { IDLE_JOURNEY, nextJourneyState } from "./lib/cosmicJourney.js";
 import { COSMIC_VOICES, hapticPattern, voiceParameters } from "./lib/sonification.js";
 import {
@@ -860,7 +861,12 @@ export function App() {
   const handleCosmicAudition = useCallback(async (landmark) => {
     try {
       await startAudio(true);
-      audioRef.current.playCosmicLandmark(landmark);
+      // The chord is the system as it actually is — measured worlds plus any
+      // the player pulled out of its star, so a tap on the star and a walk
+      // across the worlds are the same music heard two ways.
+      audioRef.current.playCosmicLandmark(
+        withGuestWorlds(landmark, guestWorlds.get(landmark.id) ?? []),
+      );
       if (landmark.system) {
         // Entering a system supersedes any flight still in the air. The camera
         // is being sent somewhere else, so the flight can never report that it
@@ -888,7 +894,7 @@ export function App() {
       setAudioState("locked");
       setRuntimeError(error instanceof Error ? error.message : "The cosmic voice could not start");
     }
-  }, [announceSonicCue, startAudio]);
+  }, [announceSonicCue, guestWorlds, startAudio]);
 
   /**
    * A world the player adds to a real system.
@@ -910,7 +916,10 @@ export function App() {
   const handleSystemMoon = useCallback(async ({ landmarkId, planetId, moonAu, hillAu }) => {
     try {
       const landmark = cosmicLandmarkById(landmarkId);
-      const planet = landmark.system.bodies.find((body) => body.id === planetId);
+      // The world may be one the player added themselves — the effective
+      // system counts measured and guest worlds alike.
+      const effective = withGuestWorlds(landmark, guestWorlds.get(landmarkId) ?? []);
+      const planet = effective.system.bodies.find((body) => body.id === planetId);
       if (!planet?.massEarth) throw new Error("Nobody has weighed this world, so it cannot hold a moon");
       const held = systemMoons.get(landmarkId) ?? [];
       if (held.filter((moon) => moon.parentId === planetId).length >= 2) {
@@ -931,7 +940,10 @@ export function App() {
         return next;
       });
       await startAudio(true);
-      audioRef.current.playSystemWorld(landmark, planetId);
+      // A moon sounds its own first note: an overtone of its parent's voice
+      // at the pitch its own period earns — not the parent's voice repeated,
+      // which is all it used to say.
+      audioRef.current.playSystemMoon(effective, planetId, moon);
       const year = periodDays >= 1
         ? `${periodDays.toFixed(periodDays >= 10 ? 0 : 1)} DAYS`
         : `${(periodDays * 24).toFixed(1)} HOURS`;
@@ -940,13 +952,19 @@ export function App() {
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : "That moon could not form");
     }
-  }, [announceSonicCue, performHaptic, startAudio, systemMoons]);
+  }, [announceSonicCue, guestWorlds, performHaptic, startAudio, systemMoons]);
 
   const handleGuestWorld = useCallback(async ({ landmark, orbitAu }) => {
     try {
+      const heldMoons = systemMoons.get(landmark.id) ?? [];
+      const existing = guestWorlds.get(landmark.id) ?? [];
+      if (landmark.system.bodies.length + existing.length + heldMoons.length >= MAX_WORLDS) {
+        setRuntimeError("The sky is full. Remove a world before adding another.");
+        return;
+      }
       const reference = landmark.system.bodies[0];
       const periodDays = periodFromReference(orbitAu, reference);
-      const index = (guestWorlds.get(landmark.id)?.length ?? 0) + 1;
+      const index = existing.length + 1;
       const world = Object.freeze({
         id: `${landmark.id}-yours-${index}`,
         name: `YOUR WORLD ${index}`,
@@ -954,6 +972,11 @@ export function App() {
         periodDays,
         orbitAu,
         radiusEarth: 1,
+        // Nobody has weighed a world you made, but its radius says what it
+        // should weigh — the same forecast the catalogue uses for unweighed
+        // worlds — so it can hold a moon of its own.
+        massEarth: massFromRadius(1),
+        massSource: "inferred",
         eccentricity: 0,
         guest: true,
       });
@@ -963,10 +986,8 @@ export function App() {
         return next;
       });
       await startAudio(true);
-      const bodies = [...landmark.system.bodies, world]
-        .sort((first, second) => first.periodDays - second.periodDays);
       audioRef.current.playSystemWorld(
-        { ...landmark, system: { ...landmark.system, bodies } },
+        withGuestWorlds(landmark, [...existing, world]),
         world.id,
       );
       const year = periodDays >= 365
@@ -977,10 +998,15 @@ export function App() {
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : "That world could not form");
     }
-  }, [announceSonicCue, guestWorlds, performHaptic, startAudio]);
+  }, [announceSonicCue, guestWorlds, performHaptic, startAudio, systemMoons]);
 
-  /** One world of a visited system, touched on its own. */
-  const handleSystemWorldAudition = useCallback(async ({ landmark, planetId, pluck }) => {
+  /**
+   * One world of a visited system, touched on its own — measured, guest or
+   * moon. The voice comes from the system as it actually is: the measured
+   * bodies plus the player's own worlds, so a ring you made sounds at exactly
+   * the pitch it was born at instead of falling out of the chord lookup.
+   */
+  const handleSystemWorldAudition = useCallback(async ({ landmark, planetId, moonOf, pluck }) => {
     try {
       setHeardSystemWorld(true);
       // Touching the ring rather than the world is a pluck: where along the
@@ -988,12 +1014,19 @@ export function App() {
       // hard it is struck — exactly as the harp works at home.
       if (pluck) setHasPluckedOrbit(true);
       await startAudio(true);
-      const voice = audioRef.current.playSystemWorld(landmark, planetId, pluck);
+      const effective = withGuestWorlds(landmark, guestWorlds.get(landmark.id) ?? []);
+      const moons = systemMoons.get(landmark.id) ?? [];
+      const moon = moons.find((candidate) => candidate.id === planetId);
+      const voice = moon
+        ? audioRef.current.playSystemMoon(effective, moon.parentId, moon, pluck)
+        : audioRef.current.playSystemWorld(effective, planetId, pluck);
       if (!voice) return;
       const days = voice.planet.periodDays;
       const year = days >= 365
         ? `${(days / 365.25).toFixed(days / 365.25 >= 10 ? 0 : 1)} YEARS`
-        : `${days >= 10 ? days.toFixed(0) : days.toFixed(1)} DAYS`;
+        : days >= 1
+          ? `${days >= 10 ? days.toFixed(0) : days.toFixed(1)} DAYS`
+          : `${(days * 24).toFixed(1)} HOURS`;
       announceSonicCue(
         `${voice.planet.name.toUpperCase()} · ${year} · ${voice.appearance.label}`,
         2600,
@@ -1003,7 +1036,7 @@ export function App() {
       setAudioState("locked");
       setRuntimeError(error instanceof Error ? error.message : "That world could not sound");
     }
-  }, [announceSonicCue, performHaptic, startAudio]);
+  }, [announceSonicCue, guestWorlds, performHaptic, startAudio, systemMoons]);
 
   useEffect(() => {
     const onEscape = (event) => {

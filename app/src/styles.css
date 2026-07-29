@@ -4318,3 +4318,198 @@ input:focus-visible {
     transition: none;
   }
 }
+
+/* ============================================================ LIQUID GLASS
+   The chrome's material, redesigned as real glass at the owner's request.
+
+   The artwork is black lacquer and self-luminous worlds; the interface floats
+   above it as panes of glass, so the sky itself is what every control is made
+   of. Real glass on the web is layers, in this order:
+
+     1. the backdrop, blurred and slightly over-saturated — the refraction;
+     2. a near-neutral smoked tint so text can sit on any sky;
+     3. a hairline stroke where the pane's edge catches the light;
+     4. one specular line inside the top edge and a soft shade inside the
+        bottom — the thickness of the pane;
+     5. a drop shadow that lifts the pane off the artwork.
+
+   Two disciplines survive the redesign untouched: the only accents anywhere
+   are still --sf-gold and --sf-accent (glass is neutral — a gold-tinted pane
+   would poison every colour behind it), and the artwork itself is never
+   glass — orbits, worlds and labels live in the WebGL scene, not in chrome.
+
+   Honest fallbacks: without backdrop-filter the panes go opaque instead of
+   unreadable; prefers-reduced-transparency gets the same; prefers-contrast
+   strengthens the stroke. */
+
+:root {
+  --glass-blur: 24px;
+  --glass-saturate: 160%;
+  --glass-tint:
+    linear-gradient(
+      155deg,
+      rgb(255 250 240 / 9%),
+      rgb(255 250 240 / 3%) 34%,
+      rgb(12 10 7 / 16%) 82%
+    );
+  --glass-sheen:
+    radial-gradient(
+      120% 90% at 18% 0%,
+      rgb(255 252 244 / 12%),
+      transparent 46%
+    );
+  --glass-stroke: rgb(255 249 233 / 17%);
+  --glass-edge:
+    inset 0 1px 0 rgb(255 252 242 / 30%),
+    inset 0 -1px 0 rgb(255 252 242 / 6%),
+    inset 0 -18px 30px -22px rgb(0 0 0 / 52%);
+  --glass-lift: 0 18px 44px -24px rgb(0 0 0 / 72%);
+}
+
+/* The material itself, on every surface that floats over the sky. */
+:is(
+  .sound-gate,
+  .instrument-controls button,
+  .instrument-selection button,
+  .instrument-menu-trigger,
+  .instrument-menu,
+  .playing-guide,
+  .inscription-dialog,
+  .runtime-message,
+  .light-instrument__back,
+  .sound-atlas-trigger,
+  .sound-atlas-panel,
+  .relativity-trigger,
+  .relativity-lens,
+  .soundflight-systems-trigger
+) {
+  border: 1px solid var(--glass-stroke);
+  background:
+    var(--glass-sheen),
+    var(--glass-tint);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow:
+    var(--glass-edge),
+    var(--glass-lift);
+}
+
+/* Panels are thicker panes than buttons: more blur, a longer shadow, and a
+   continuous large radius. */
+:is(.instrument-menu, .playing-guide, .inscription-dialog, .sound-atlas-panel, .relativity-lens) {
+  --glass-blur: 34px;
+  border-radius: 22px;
+}
+
+.runtime-message {
+  border-radius: 18px;
+}
+
+/* The location pill and the guide's small chrome keep the pill shape. */
+:is(.light-instrument__back, .playing-guide__start) {
+  border-radius: 999px;
+}
+
+/* The gate is the deepest pane in the product — the first thing ever touched.
+   Its cyan invitation stays: colour belongs to the accent tokens, the glass
+   stays neutral underneath. */
+.sound-gate {
+  background:
+    radial-gradient(circle at 32% 22%, rgb(255 252 244 / 9%), transparent 50%),
+    radial-gradient(circle, color-mix(in srgb, var(--rg-cyan) 7%, transparent), rgb(6 6 5 / 22%) 70%);
+  backdrop-filter: blur(9px) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(9px) saturate(var(--glass-saturate));
+  box-shadow:
+    inset 0 1px 0 rgb(255 252 242 / 26%),
+    inset 0 -20px 34px -24px rgb(0 0 0 / 55%),
+    0 0 0 1px color-mix(in srgb, var(--rg-cyan) 9%, transparent),
+    0 0 54px color-mix(in srgb, var(--rg-cyan) 14%, transparent),
+    var(--glass-lift);
+}
+
+/* Light hits a pane you are about to press. */
+:is(
+  .instrument-controls button,
+  .instrument-selection button,
+  .instrument-menu-trigger,
+  .light-instrument__back,
+  .sound-atlas-trigger,
+  .relativity-trigger,
+  .soundflight-systems-trigger
+):hover:not(:disabled) {
+  background:
+    radial-gradient(120% 90% at 22% 0%, rgb(255 252 244 / 19%), transparent 52%),
+    var(--glass-tint);
+  box-shadow:
+    inset 0 1px 0 rgb(255 252 242 / 40%),
+    inset 0 -1px 0 rgb(255 252 242 / 8%),
+    inset 0 -18px 30px -22px rgb(0 0 0 / 46%),
+    var(--glass-lift);
+}
+
+/* A pressed pane sinks: the specular dims, the shadow shortens. */
+:is(
+  .instrument-controls button,
+  .instrument-selection button,
+  .instrument-menu-trigger,
+  .light-instrument__back,
+  .sound-gate
+):active {
+  box-shadow:
+    inset 0 1px 0 rgb(255 252 242 / 14%),
+    inset 0 2px 10px rgb(0 0 0 / 30%),
+    0 8px 22px -16px rgb(0 0 0 / 70%);
+}
+
+/* Scrims behind open panels are glass too — the sky dims and defocuses
+   instead of disappearing behind a flat wash. */
+:is(.instrument-menu-backdrop, .playing-guide-backdrop) {
+  background: rgb(3 3 2 / 42%);
+  backdrop-filter: blur(9px) saturate(120%);
+  -webkit-backdrop-filter: blur(9px) saturate(120%);
+}
+
+/* Honesty when glass cannot exist. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :is(
+    .sound-gate,
+    .instrument-controls button,
+    .instrument-selection button,
+    .instrument-menu-trigger,
+    .instrument-menu,
+    .playing-guide,
+    .inscription-dialog,
+    .runtime-message,
+    .light-instrument__back,
+    .sound-atlas-panel,
+    .relativity-lens
+  ) {
+    background: rgb(13 11 9 / 92%);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :is(
+    .sound-gate,
+    .instrument-controls button,
+    .instrument-selection button,
+    .instrument-menu-trigger,
+    .instrument-menu,
+    .playing-guide,
+    .inscription-dialog,
+    .runtime-message,
+    .light-instrument__back,
+    .sound-atlas-panel,
+    .relativity-lens
+  ) {
+    background: rgb(13 11 9 / 92%);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --glass-stroke: rgb(255 249 233 / 38%);
+  }
+}

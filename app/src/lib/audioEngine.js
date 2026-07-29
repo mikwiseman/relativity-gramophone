@@ -6,7 +6,7 @@ import {
   voicePluckParameters,
   systemChordVoicing,
 } from "./sonification.js";
-import { systemVoiceFrequencies, systemWorldVoice } from "./cosmicAtlas.js";
+import { systemMoonFrequency, systemVoiceFrequencies, systemWorldVoice } from "./cosmicAtlas.js";
 
 const REVERB_SECONDS = 3.1;
 const AUDIO_CLOCK_PROBE_MS = 90;
@@ -1141,6 +1141,69 @@ export class AudioEngine {
     oscillator.start(now);
     oscillator.stop(now + duration + 0.08);
     return voice;
+  }
+
+  /**
+   * A moon hung on a world of a visited system, sounded alone.
+   *
+   * At home a moon is an overtone of its parent's voice at the pitch its own
+   * period earns, and the parents do not retune when it arrives. The same law
+   * holds out here: the moon reads its period through the system's own voice
+   * fit — computed from the worlds alone — folded by whole octaves into the
+   * register, and it sits at its parent's seat in the stereo field, a little
+   * softer, because an overtone is not a soloist.
+   */
+  playSystemMoon(landmark, parentId, moon, pluck = null) {
+    if (!this.context || this.context.state !== "running") return null;
+    if (!landmark?.system || !COSMIC_VOICES[landmark.voice]) {
+      throw new Error("A system moon requires a landmark with a playable voice");
+    }
+    const parent = systemWorldVoice({ system: landmark.system, planetId: parentId });
+    const frequency = systemMoonFrequency({
+      systemPeriodsDays: landmark.system.bodies.map((body) => body.periodDays),
+      moonPeriodDays: moon.periodDays,
+    });
+
+    const now = this.context.currentTime;
+    const duration = 2.2;
+    const oscillator = this.context.createOscillator();
+    const filter = this.context.createBiquadFilter();
+    const gain = this.context.createGain();
+    const panner = this.context.createStereoPanner();
+    const reverbSend = this.context.createGain();
+    const count = landmark.system.bodies.length;
+
+    this.applyVoiceWave(oscillator, landmark.voice, COSMIC_VOICES[landmark.voice].waveform);
+    oscillator.frequency.setValueAtTime(frequency * 0.984, now);
+    oscillator.frequency.exponentialRampToValueAtTime(frequency, now + 0.12);
+    filter.type = "lowpass";
+    // Where along the string it was caught sets the timbre — the same rule as
+    // every other string in the instrument, home or away.
+    const brightness = pluck ? 0.4 + Math.abs(0.5 - pluck.offset) * 1.6 : 1;
+    filter.frequency.setValueAtTime(2600 * brightness, now);
+    filter.frequency.exponentialRampToValueAtTime(560 * brightness, now + duration);
+    filter.Q.value = 1.4;
+    panner.pan.value = count > 1 ? -0.6 + (parent.index / (count - 1)) * 1.2 : 0;
+    reverbSend.gain.value = 0.38;
+
+    const peak = 0.05 * 0.66 * (pluck ? 0.55 + pluck.strength * 0.9 : 1);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(peak, now + 0.05);
+    gain.gain.exponentialRampToValueAtTime(peak * 0.4, now + 0.6);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+    oscillator.connect(filter).connect(gain).connect(panner).connect(this.master);
+    panner.connect(reverbSend).connect(this.reverb);
+    oscillator.start(now);
+    oscillator.stop(now + duration + 0.08);
+    return {
+      frequency,
+      appearance: parent.appearance,
+      planet: {
+        name: `A MOON OF ${parent.planet.name}`,
+        periodDays: moon.periodDays,
+      },
+    };
   }
 
   playChallengeSuccess() {

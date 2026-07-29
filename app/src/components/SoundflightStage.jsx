@@ -41,11 +41,14 @@ import {
   shouldAutoSoundBody,
   shouldAdvancePhysics,
   shouldArmDirectMoon,
+  shouldArmGuestWorld,
   shouldBeginThereminHold,
   shouldCancelDirectManipulation,
   shouldDeferStringPluck,
   shouldSoundSweptString,
   shouldSoundThereminOnRelease,
+  homeSystemInteractive,
+  shouldSoundHomeSequencer,
   shouldOrbitAffectCameraFit,
   shouldShowMoonPlacementGuide,
   sonicIntensity,
@@ -61,7 +64,7 @@ import {
   setMaxAnisotropy,
   VISITED_SYSTEM_OUTER_RADIUS,
 } from "./cosmicScenery.js";
-import { OUTER_REACH, expandedOrbitAu, hillRadiusAu, moonBand, moonPeriodDays } from "../lib/cosmicAtlas.js";
+import { OUTER_REACH, expandedOrbitAu, hillRadiusAu, moonBand, moonPeriodDays, periodFromReference, systemMoonFrequency, systemVoiceFrequencies } from "../lib/cosmicAtlas.js";
 import {
   birthSatelliteFromRadialLaunch,
   satelliteStabilityBand,
@@ -2360,6 +2363,14 @@ export function SoundflightStage(props) {
     };
 
     const hitBody = (event) => {
+      // Your own worlds answer exactly when they are drawn. Inside a visited
+      // system — or out among the galaxies, where your system shrinks to its
+      // star — an invisible body must not swallow a touch meant for what the
+      // screen actually shows.
+      if (!homeSystemInteractive({
+        focusedSystemId: runtime.focusedSystemId,
+        systemMix: runtime.cosmicScale.systemMix,
+      })) return null;
       const point = eventPoint(event, renderer.domElement);
       runtime.pointer.set((point.x / point.width) * 2 - 1, -(point.y / point.height) * 2 + 1);
       runtime.raycaster.setFromCamera(runtime.pointer, camera);
@@ -2386,10 +2397,36 @@ export function SoundflightStage(props) {
       const point = eventPoint(event, renderer.domElement);
       runtime.pointer.set((point.x / point.width) * 2 - 1, -(point.y / point.height) * 2 + 1);
       runtime.raycaster.setFromCamera(runtime.pointer, camera);
-      const hit = runtime.raycaster.intersectObjects(system.touchAreas, false)[0];
+      const hit = runtime.raycaster.intersectObjects(system.touchAreas, false)
+        // A moon's touch sphere floats inside its parent's much larger one.
+        // The most specific target — the smallest sphere — is the thing the
+        // finger meant, or a tap on a moon would always sound its parent.
+        .sort((first, second) => first.object.userData.touchSize - second.object.userData.touchSize)[0];
       const planetId = hit?.object?.userData?.systemPlanetId;
       if (!planetId) return null;
       return { landmark: visual.landmark, planetId, system };
+    };
+
+    /**
+     * The bodies a visited system actually has: the measured ones plus every
+     * world the player pulled out of its star. One list, so hit tests, caps
+     * and voices never disagree about what exists.
+     */
+    const effectiveSystemBodies = (landmark) => [
+      ...landmark.system.bodies,
+      ...(propsRef.current.guestWorlds?.get(landmark.id) ?? []),
+    ];
+
+    /**
+     * A world's seat in the stereo field: the innermost on the left, the
+     * outermost on the right — the same rule `playSystemWorld` uses, so a drag
+     * hums from where the voice will sit.
+     */
+    const systemWorldPan = (landmark, planetId) => {
+      const sorted = [...effectiveSystemBodies(landmark)]
+        .sort((first, second) => first.periodDays - second.periodDays);
+      const index = sorted.findIndex((body) => body.id === planetId);
+      return sorted.length > 1 && index >= 0 ? -0.6 + (index / (sorted.length - 1)) * 1.2 : 0;
     };
 
     /**
@@ -2401,13 +2438,32 @@ export function SoundflightStage(props) {
      * world's measured mass and its star's, so a moon of TRAPPIST-1 e keeps a
      * different year from a moon of Jupiter because those two worlds really do
      * hold on differently.
+     *
+     * The arming rule is the home rule, `shouldArmDirectMoon`, unchanged:
+     * compose mode, a planet, fewer than two moons already, room in the sky.
+     * Where the rule says no, the gesture is simply a tap — as it is at home.
      */
     const beginSystemMoon = (pending, screen) => {
       const { landmark, planetId, system } = pending.world;
-      if (propsRef.current.isListener) return;
-      const planet = landmark.system.bodies.find((body) => body.id === planetId);
+      // A press on a moon is only ever a tap on that moon — moons do not hold
+      // moons of their own, here or at home.
+      if ((propsRef.current.systemMoons?.get(landmark.id) ?? [])
+        .some((moon) => moon.id === planetId)) return;
+      const planet = effectiveSystemBodies(landmark).find((body) => body.id === planetId);
       const starMassSuns = landmark.system.star?.massSolar;
-      if (!planet?.massEarth || !starMassSuns) {
+      if (!planet) return;
+      const heldMoons = propsRef.current.systemMoons?.get(landmark.id) ?? [];
+      const siblingCount = heldMoons.filter((moon) => moon.parentId === planetId).length;
+      const liveBodyCount = effectiveSystemBodies(landmark).length + heldMoons.length;
+      if (!shouldArmDirectMoon({
+        body: planet,
+        interactionMode: propsRef.current.interactionMode,
+        isListener: propsRef.current.isListener,
+        siblingCount,
+        liveBodyCount,
+        maxWorlds: MAX_WORLDS,
+      })) return;
+      if (!planet.massEarth || !starMassSuns) {
         propsRef.current.onBirthRefused("Nobody has weighed this world, so it cannot hold a moon.");
         return;
       }
@@ -2478,27 +2534,71 @@ export function SoundflightStage(props) {
       const rect = renderer.domElement.getBoundingClientRect();
       const origin = visual.group.position;
       const scale = system.group.scale.x || 1;
-      return system.worlds
+      const projectPoint = (localX, localY, localZ) => {
+        runtime.projected.set(
+          origin.x + localX * scale,
+          origin.y + localY * scale,
+          origin.z + localZ * scale,
+        ).project(camera);
+        return {
+          x: (runtime.projected.x * 0.5 + 0.5) * rect.width,
+          y: (-runtime.projected.y * 0.5 + 0.5) * rect.height,
+        };
+      };
+      const paths = system.worlds
         .filter((world) => world.orbitPoints?.length > 5)
         .map((world) => {
           const points = [];
           for (let index = 0; index < world.orbitPoints.length; index += 3) {
-            runtime.projected.set(
-              origin.x + world.orbitPoints[index] * scale,
-              origin.y + world.orbitPoints[index + 1] * scale,
-              origin.z + world.orbitPoints[index + 2] * scale,
-            ).project(camera);
-            points.push({
-              x: (runtime.projected.x * 0.5 + 0.5) * rect.width,
-              y: (-runtime.projected.y * 0.5 + 0.5) * rect.height,
-            });
+            points.push(projectPoint(
+              world.orbitPoints[index],
+              world.orbitPoints[index + 1],
+              world.orbitPoints[index + 2],
+            ));
           }
-          return { bodyId: world.planet.id, visited: true, points };
+          return {
+            bodyId: world.planet.id,
+            visited: true,
+            moonOf: null,
+            bodyPoint: projectPoint(world.body.position.x, world.body.position.y, world.body.position.z),
+            points,
+          };
         });
+      // A moon's ring is a string too — a short local one around its world,
+      // exactly the way a home moon's magnified orbit is. The ring moves with
+      // its parent, so it is rebuilt from the parent's position every pass.
+      for (const world of system.worlds) {
+        for (const moon of world.moons) {
+          const points = [];
+          for (let index = 0; index < 72; index += 1) {
+            const angle = (index / 72) * Math.PI * 2;
+            points.push(projectPoint(
+              world.body.position.x + Math.cos(angle) * moon.drawnRadius,
+              0.008,
+              world.body.position.z + Math.sin(angle) * moon.drawnRadius,
+            ));
+          }
+          paths.push({
+            bodyId: moon.id,
+            visited: true,
+            moonOf: world.planet.id,
+            bodyPoint: projectPoint(moon.mesh.position.x, moon.mesh.position.y, moon.mesh.position.z),
+            points,
+          });
+        }
+      }
+      return paths;
     };
 
     const trailPaths = () => {
       if (runtime.focusedSystemId) return visitedStringPaths();
+      // Beyond the system scale your own worlds and their strings are not
+      // drawn — and what is not drawn must not answer a touch, or a swipe
+      // through empty galaxy sky plucks strings that are not there.
+      if (!homeSystemInteractive({
+        focusedSystemId: runtime.focusedSystemId,
+        systemMix: runtime.cosmicScale.systemMix,
+      })) return [];
       const rect = renderer.domElement.getBoundingClientRect();
       return [...runtime.bodyVisuals.entries()]
         .filter(([, visual]) => visual.orbitPoints.length > 1)
@@ -2577,6 +2677,7 @@ export function SoundflightStage(props) {
         propsRef.current.onSystemWorldAudition({
           landmark: visual.landmark,
           planetId: hit.bodyId,
+          moonOf: hit.moonOf ?? null,
           pluck: {
             offset: Number(clamp(hit.offset, 0, 1).toFixed(3)),
             strength: Number(clamp(strength, 0, 1).toFixed(2)),
@@ -2909,6 +3010,7 @@ export function SoundflightStage(props) {
         visual?.nearbySystem?.setBirthPreview(null);
         visual?.nearbySystem?.setMoonPreview(null);
         propsRef.current.onGuestOrbitPreview(null);
+        propsRef.current.onGestationTone(null);
       }
       runtime.guestBirth = null;
       runtime.systemMoon = null;
@@ -3149,28 +3251,47 @@ export function SoundflightStage(props) {
       }
       if (runtime.systemMoon?.pointerId === event.pointerId) {
         event.stopImmediatePropagation();
-        const screen = eventPoint(event, renderer.domElement);
-        const pulled = Math.hypot(
-          screen.x - runtime.systemMoon.startScreen.x,
-          screen.y - runtime.systemMoon.startScreen.y,
+        const visual = cosmicLandmarkField.byId.get(runtime.systemMoon.landmarkId);
+        const system = visual?.nearbySystem ?? runtime.systemMoon.system;
+        const parent = system?.worldById.get(runtime.systemMoon.planetId);
+        const point = visual && system ? intersectSystemPlane(event, visual) : null;
+        if (!point || !parent) return;
+        // The finger is measured on the system's own plane against the world
+        // itself — the same spatial truth the home moon drag uses, not a count
+        // of pixels. The ring under your finger is the orbit you get: the
+        // preview draws moonAu/hillAu of the world's reach, so the drag
+        // inverts exactly that.
+        const scale = system.group.scale.x || 1;
+        const drawn = Math.hypot(
+          (point.x - visual.group.position.x) / scale - parent.body.position.x,
+          (point.z - visual.group.position.z) / scale - parent.body.position.z,
         );
-        // A tenth of the Hill radius to a third of it: closer grazes the world,
-        // further and the star takes the moon away over time.
-        const reach = clamp((pulled - CREATION_DRAG_THRESHOLD) / 260, 0, 1);
-        const moonAu = runtime.systemMoon.band.inner
-          + reach * (runtime.systemMoon.band.outer - runtime.systemMoon.band.inner);
+        const moonAu = clamp(
+          runtime.systemMoon.hillAu * (drawn - parent.bodyRadius * 1.5) / (parent.bodyRadius * 1.9),
+          runtime.systemMoon.band.inner,
+          runtime.systemMoon.band.outer,
+        );
         runtime.systemMoon.moonAu = moonAu;
-        runtime.systemMoon.system?.setMoonPreview({
+        system.setMoonPreview({
           parentId: runtime.systemMoon.planetId,
           moonAu,
           hillAu: runtime.systemMoon.hillAu,
         });
+        const periodDays = moonPeriodDays({ moonAu, massEarth: runtime.systemMoon.massEarth });
         propsRef.current.onGuestOrbitPreview({
           landmarkId: runtime.systemMoon.landmarkId,
           moonOf: runtime.systemMoon.planetId,
           moonName: runtime.systemMoon.planetName,
           moonAu,
-          periodDays: moonPeriodDays({ moonAu, massEarth: runtime.systemMoon.massEarth }),
+          periodDays,
+        });
+        // And the drag hums the pitch the moon will keep, exactly as a forming
+        // world hums its future note at home.
+        const periods = effectiveSystemBodies(visual.landmark).map((body) => body.periodDays);
+        propsRef.current.onGestationTone({
+          frequency: systemMoonFrequency({ systemPeriodsDays: periods, moonPeriodDays: periodDays }),
+          pan: systemWorldPan(visual.landmark, runtime.systemMoon.planetId),
+          deferAudio: audioUnlockPhase(runtime.systemMoon.pointerType) === "pointerup",
         });
         return;
       }
@@ -3207,13 +3328,48 @@ export function SoundflightStage(props) {
           }
           runtime.guestBirth.active = dragged > CREATION_DRAG_THRESHOLD;
           if (runtime.guestBirth.active) {
+            // The sky-is-full rule is the home rule: twelve bodies is twelve
+            // bodies, whoever put them there — measured worlds, your worlds
+            // and their moons all count. A full sky refuses the drag but
+            // keeps the chord: a tap on the star still sounds the system.
+            const heldMoons = propsRef.current.systemMoons?.get(visual.landmark.id) ?? [];
+            if (!shouldArmGuestWorld({
+              interactionMode: propsRef.current.interactionMode,
+              isListener: propsRef.current.isListener,
+              liveBodyCount: effectiveSystemBodies(visual.landmark).length + heldMoons.length,
+              maxWorlds: MAX_WORLDS,
+            })) {
+              runtime.guestBirth = null;
+              system.setBirthPreview(null);
+              propsRef.current.onGuestOrbitPreview(null);
+              propsRef.current.onGestationTone(null);
+              controls.enabled = true;
+              propsRef.current.onBirthRefused("The sky is full. Remove a world before adding another.");
+              return;
+            }
             system.setBirthPreview({
               radius: runtime.guestBirth.radius,
               azimuth: Math.atan2(localZ, localX),
             });
+            const orbitAu = expandedOrbitAu(runtime.guestBirth.radius, system.band);
             propsRef.current.onGuestOrbitPreview({
               landmarkId: runtime.guestBirth.landmarkId,
-              orbitAu: expandedOrbitAu(runtime.guestBirth.radius, system.band),
+              orbitAu,
+            });
+            // The drag hums the note the world will keep — the same gestation
+            // tone a home birth sings, pitched by the system's own Kepler
+            // constant and seated where the world will sit in the chord.
+            const periodDays = periodFromReference(orbitAu, visual.landmark.system.bodies[0]);
+            const periods = [
+              ...effectiveSystemBodies(visual.landmark).map((body) => body.periodDays),
+              periodDays,
+            ];
+            const frequencies = systemVoiceFrequencies(periods);
+            const seat = [...periods].sort((first, second) => first - second).indexOf(periodDays);
+            propsRef.current.onGestationTone({
+              frequency: frequencies[frequencies.length - 1],
+              pan: periods.length > 1 ? -0.6 + (seat / (periods.length - 1)) * 1.2 : 0,
+              deferAudio: audioUnlockPhase(runtime.guestBirth.pointerType) === "pointerup",
             });
           }
         }
@@ -3415,6 +3571,7 @@ export function SoundflightStage(props) {
         controls.enabled = true;
         releaseCapturedPointer(event.pointerId);
         propsRef.current.onGuestOrbitPreview(null);
+        propsRef.current.onGestationTone(null);
         const visual = cosmicLandmarkField.byId.get(birth.landmarkId);
         const system = visual?.nearbySystem;
         system?.setBirthPreview(null);
@@ -3437,6 +3594,7 @@ export function SoundflightStage(props) {
         controls.enabled = true;
         releaseCapturedPointer(event.pointerId);
         propsRef.current.onGuestOrbitPreview(null);
+        propsRef.current.onGestationTone(null);
         propsRef.current.onSystemMoon({
           landmarkId: moon.landmarkId,
           planetId: moon.planetId,
@@ -3657,6 +3815,10 @@ export function SoundflightStage(props) {
 
       engine.step();
       const star = engine.getBody("star");
+      // Inside a visited system THAT system is the instrument: your home
+      // worlds keep circling, but their meridian notes stay quiet, or two
+      // songs play over each other at once.
+      const homeAudible = shouldSoundHomeSequencer({ focusedSystemId: runtime.focusedSystemId });
       for (const body of engine.state.bodies) {
         if (body.kind === "star") continue;
         const focus = body.kind === "moon" ? engine.getBody(body.parentId) : star;
@@ -3666,6 +3828,7 @@ export function SoundflightStage(props) {
           && side
           && previousSide !== side
           && !runtime.drag
+          && homeAudible
           && shouldAutoSoundBody(body)) {
           const note = {
             ...body,
@@ -3685,7 +3848,7 @@ export function SoundflightStage(props) {
           const radialVelocity = (dx * (body.vx - focus.vx) + dy * (body.vy - focus.vy)) /
             Math.max(0.001, Math.hypot(dx, dy));
           const previous = previousRadialVelocityRef.current.get(body.id);
-          if (previous < 0 && radialVelocity >= 0 && shouldAutoSoundBody(body)) {
+          if (previous < 0 && radialVelocity >= 0 && homeAudible && shouldAutoSoundBody(body)) {
             currentProps.onHaptic({ kind: "pericenter", strength: body.displayMass });
           }
           previousRadialVelocityRef.current.set(body.id, radialVelocity);

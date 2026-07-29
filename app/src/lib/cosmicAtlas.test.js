@@ -17,8 +17,11 @@ import {
   OUTER_REACH,
   OUTER_REACH_AU,
   periodFromReference,
+  systemMoonFrequency,
+  systemVoiceFit,
   systemVoiceFrequencies,
   systemWorldVoice,
+  withGuestWorlds,
 } from "./cosmicAtlas.js";
 import { STAR_SYSTEMS } from "./starSystems.js";
 
@@ -543,4 +546,103 @@ test("every system lists its worlds innermost first, because gestures rely on it
       );
     }
   }
+});
+
+test("the shared fit and the voice ladder agree exactly, after the split", () => {
+  // systemVoiceFrequencies is the fit evaluated per world; the moon voice and
+  // the drag previews read the same fit directly. If those two paths ever
+  // disagreed, a moon would be pitched by a different law than its parents.
+  const periods = [1.51, 2.42, 4.05, 6.1, 9.21, 12.35, 18.77];
+  const fit = systemVoiceFit(periods);
+  const voices = systemVoiceFrequencies(periods);
+  periods.forEach((period, index) => {
+    const throughFit = 2 ** (fit.target + (Math.log2(1 / (period * 86_400)) - fit.mean) * fit.squeeze);
+    assert.ok(Math.abs(throughFit / voices[index] - 1) < 1e-12, `${period}d mapped two ways`);
+  });
+});
+
+test("a moon of a visited system sounds its own period through the system's law", () => {
+  // A moon of TRAPPIST-1 e at a third of its Hill reach takes about 9 days
+  // less a good deal — hours to a few days — so it must sit ABOVE its parent's
+  // place in the chord, as a home moon sits above its parent's note.
+  const periods = [1.51, 2.42, 4.05, 6.1, 9.21, 12.35, 18.77];
+  const parentVoice = systemVoiceFrequencies(periods)[3];
+  const moonFrequency = systemMoonFrequency({ systemPeriodsDays: periods, moonPeriodDays: 0.4 });
+  assert.ok(moonFrequency > parentVoice, `moon at ${moonFrequency}, parent at ${parentVoice}`);
+  // Always inside the register, however fast the moon: folding is by whole
+  // octaves, which is the only move that keeps every interval honest.
+  for (const moonDays of [0.02, 0.1, 0.4, 2, 9, 30]) {
+    const frequency = systemMoonFrequency({ systemPeriodsDays: periods, moonPeriodDays: moonDays });
+    assert.ok(frequency >= 55 && frequency <= 1760, `${moonDays}d moon landed at ${frequency}`);
+  }
+});
+
+test("a moon's fold is a whole number of octaves, never a retune", () => {
+  // The unfolded value the fit gives a fast moon can sit far above the
+  // register. What reaches the ear may differ from that only by 2^k.
+  const periods = [1.51, 2.42, 4.05, 6.1, 9.21, 12.35, 18.77];
+  const fit = systemVoiceFit(periods);
+  for (const moonDays of [0.02, 0.05, 0.13, 0.31, 0.77, 1.9]) {
+    const raw = 2 ** (fit.target + (Math.log2(1 / (moonDays * 86_400)) - fit.mean) * fit.squeeze);
+    const heard = systemMoonFrequency({ systemPeriodsDays: periods, moonPeriodDays: moonDays });
+    const folds = Math.log2(raw / heard);
+    assert.ok(Math.abs(folds - Math.round(folds)) < 1e-9, `${moonDays}d folded by ${folds}`);
+  }
+});
+
+test("a moon does not retune the worlds it was hung on", () => {
+  // The fit is computed from the worlds alone. A moon arriving or leaving must
+  // not move any planet's pitch — the same law as at home, where a moon's
+  // birth never retunes the system's voices.
+  const periods = [1.51, 2.42, 4.05, 6.1, 9.21, 12.35, 18.77];
+  const before = systemVoiceFrequencies(periods);
+  const after = systemVoiceFrequencies(periods);
+  assert.deepEqual(before, after);
+  assert.throws(() => systemMoonFrequency({ systemPeriodsDays: [], moonPeriodDays: 1 }), /at least one period/);
+  assert.throws(() => systemMoonFrequency({ systemPeriodsDays: periods, moonPeriodDays: 0 }), /positive period/);
+});
+
+test("a guest world joins the chord lookup instead of falling out of it", () => {
+  // The crash this pins: a world you pulled out of TRAPPIST-1's star was
+  // touched, the voice lookup ran over the measured bodies alone, found no
+  // such id, threw, and locked the whole instrument behind TOUCH TO HEAR.
+  const trappist = STAR_SYSTEMS.find((system) => system.id === "trappist-1");
+  const landmark = {
+    id: trappist.id,
+    name: trappist.name,
+    voice: trappist.voice,
+    system: { star: trappist.star, bodies: trappist.bodies },
+  };
+  const guest = {
+    id: "trappist-1-yours-1",
+    name: "YOUR WORLD 1",
+    kind: "planet",
+    periodDays: 3.1,
+    orbitAu: 0.03,
+    radiusEarth: 1,
+    guest: true,
+  };
+  // No guests: the landmark itself comes back, untouched.
+  assert.equal(withGuestWorlds(landmark), landmark);
+  assert.equal(withGuestWorlds(landmark, []), landmark);
+  const effective = withGuestWorlds(landmark, [guest]);
+  assert.notEqual(effective, landmark);
+  // The measured bodies are still first-class and in period order with the guest.
+  assert.equal(effective.system.bodies.length, landmark.system.bodies.length + 1);
+  for (let index = 1; index < effective.system.bodies.length; index += 1) {
+    assert.ok(
+      effective.system.bodies[index].periodDays >= effective.system.bodies[index - 1].periodDays,
+      "the effective chord stays in period order",
+    );
+  }
+  // The original is never mutated.
+  assert.equal(landmark.system.bodies.length, 7);
+  assert.ok(!landmark.system.bodies.some((body) => body.id === guest.id));
+  // And the guest is findable — this exact call used to throw.
+  const voice = systemWorldVoice({ system: effective.system, planetId: guest.id });
+  assert.ok(Number.isFinite(voice.frequency) && voice.frequency > 0);
+  assert.throws(
+    () => systemWorldVoice({ system: landmark.system, planetId: guest.id }),
+    /is not a world of this system/,
+  );
 });

@@ -112,3 +112,15 @@ test("a hit remembers whose harp the string belongs to", () => {
   assert.equal(nearestStringPoint({ x: 20, y: 0 }, [RUNG_A], 14).visited, false);
   assert.equal(stringsAlongSweep({ x: 0, y: 0 }, { x: 40, y: 0 }, [RUNG_A], 14)[0].visited, false);
 });
+
+test("a moon's string remembers whose moon it is", () => {
+  // A plucked moon sounds an overtone of its parent's voice, so the hit has to
+  // carry the parent home — losing it on the way through is how a moon's ring
+  // came to sound like a copy of its world.
+  const moonString = { bodyId: "e-moon-1", visited: true, moonOf: "e", points: RUNG_A.points };
+  assert.equal(nearestStringPoint({ x: 20, y: 0 }, [moonString], 14).moonOf, "e");
+  assert.equal(stringsAlongSweep({ x: 0, y: 0 }, { x: 40, y: 0 }, [moonString], 14)[0].moonOf, "e");
+  // A world answers for itself: no parent travels with the hit.
+  assert.equal(nearestStringPoint({ x: 20, y: 0 }, [RUNG_A], 14).moonOf, null);
+  assert.equal(stringsAlongSweep({ x: 0, y: 0 }, { x: 40, y: 0 }, [RUNG_A], 14)[0].moonOf, null);
+});

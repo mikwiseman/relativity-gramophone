@@ -29,11 +29,14 @@ import {
   shouldApplyGestationUpdate,
   shouldApplyThereminRelease,
   shouldArmDirectMoon,
+  shouldArmGuestWorld,
   shouldBeginThereminHold,
   shouldCelebrateThereminEnd,
   shouldCancelDirectManipulation,
   shouldDeferStringPluck,
   shouldSoundSweptString,
+  homeSystemInteractive,
+  shouldSoundHomeSequencer,
   thereminReleaseDisposition,
   shouldSoundThereminOnRelease,
   shouldShowMoonPlacementGuide,
@@ -873,4 +876,44 @@ test("a suspended instrument offers PLAY, not START SOUND", () => {
     ariaLabel: "Play music",
     pressed: false,
   });
+});
+
+test("a guest world from a visited star follows the home birth rule", () => {
+  // Compose mode, your own session, room in the sky — the drag arms. Every
+  // other case refuses, and "room" counts measured worlds too: twelve bodies
+  // is twelve bodies, whoever put them there.
+  assert.equal(shouldArmGuestWorld({
+    interactionMode: "compose", isListener: false, liveBodyCount: 7, maxWorlds: 12,
+  }), true);
+  assert.equal(shouldArmGuestWorld({
+    interactionMode: "compose", isListener: false, liveBodyCount: 12, maxWorlds: 12,
+  }), false);
+  assert.equal(shouldArmGuestWorld({
+    interactionMode: "explore", isListener: false, liveBodyCount: 3, maxWorlds: 12,
+  }), false);
+  assert.equal(shouldArmGuestWorld({
+    interactionMode: "compose", isListener: true, liveBodyCount: 3, maxWorlds: 12,
+  }), false);
+  assert.throws(() => shouldArmGuestWorld({
+    interactionMode: "compose", isListener: false, liveBodyCount: 1.5, maxWorlds: 12,
+  }), /explicit interaction state/);
+});
+
+test("your own system answers a touch exactly when it is drawn", () => {
+  // At home the worlds and their strings are on screen and answer. Inside a
+  // visited system, or out among the galaxies where your worlds are not even
+  // drawn, an invisible string must not sound.
+  assert.equal(homeSystemInteractive({ focusedSystemId: null, systemMix: 1 }), true);
+  assert.equal(homeSystemInteractive({ focusedSystemId: null, systemMix: 0.73 }), true);
+  assert.equal(homeSystemInteractive({ focusedSystemId: "trappist-1", systemMix: 1 }), false);
+  assert.equal(homeSystemInteractive({ focusedSystemId: null, systemMix: 0.5 }), false);
+  assert.equal(homeSystemInteractive({ focusedSystemId: null, systemMix: 0 }), false);
+  assert.throws(() => homeSystemInteractive({ focusedSystemId: null, systemMix: Number.NaN }), /system mix/);
+});
+
+test("the home sequencer goes quiet only inside another system", () => {
+  // Inside a visited system THAT system is the instrument; everywhere else
+  // your composition is the soundtrack you carry with you.
+  assert.equal(shouldSoundHomeSequencer({ focusedSystemId: null }), true);
+  assert.equal(shouldSoundHomeSequencer({ focusedSystemId: "hd-110067" }), false);
 });

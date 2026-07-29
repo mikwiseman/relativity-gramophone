@@ -702,6 +702,7 @@ export function createStarSystemObject(system, {
       }),
     );
     touchArea.userData.systemPlanetId = planet.id;
+    touchArea.userData.touchSize = touchBaseRadius;
     touchArea.frustumCulled = false;
     group.add(touchArea);
 
@@ -921,8 +922,9 @@ export function createStarSystemObject(system, {
       if (!parent) throw new Error(`No world ${parentId} to hang a moon on`);
       const reach = parent.bodyRadius * 3.4;
       const drawnRadius = parent.bodyRadius * 1.5 + (moonAu / hillAu) * (reach - parent.bodyRadius * 1.5);
+      const meshRadius = Math.max(0.012, parent.bodyRadius * 0.26);
       const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(Math.max(0.012, parent.bodyRadius * 0.26), 18, 14),
+        new THREE.SphereGeometry(meshRadius, 18, 14),
         new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, toneMapped: false }),
       );
       mesh.renderOrder = 4;
@@ -941,9 +943,45 @@ export function createStarSystemObject(system, {
       ring.rotation.x = -Math.PI / 2;
       ring.renderOrder = 3;
       group.add(ring);
-      const moon = { id, parentId, moonAu, periodDays, drawnRadius, mesh, ring, phase: random() * Math.PI * 2 };
+      // A moon is a world in miniature: it gets the same generous invisible
+      // touch sphere, so tapping it and plucking its ring work exactly as they
+      // do for its parent.
+      const touchBaseRadius = Math.max(meshRadius * 3.4, 0.05);
+      const touchArea = new THREE.Mesh(
+        new THREE.SphereGeometry(touchBaseRadius, 10, 8),
+        new THREE.MeshBasicMaterial({
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+          colorWrite: false,
+        }),
+      );
+      touchArea.userData.systemPlanetId = id;
+      touchArea.userData.touchSize = touchBaseRadius;
+      touchArea.frustumCulled = false;
+      group.add(touchArea);
+      const siblingGaps = parent.moons.map((sibling) => Math.abs(sibling.drawnRadius - drawnRadius));
+      const moon = {
+        id,
+        parentId,
+        moonAu,
+        periodDays,
+        drawnRadius,
+        mesh,
+        meshRadius,
+        ring,
+        touchArea,
+        touchBaseRadius,
+        neighbourGap: siblingGaps.length > 0 ? Math.min(...siblingGaps) : Infinity,
+        phase: random() * Math.PI * 2,
+        impulse: 1,
+      };
+      for (const sibling of parent.moons) {
+        sibling.neighbourGap = Math.min(sibling.neighbourGap, Math.abs(sibling.drawnRadius - drawnRadius));
+      }
       parent.moons.push(moon);
       api.moons.push(moon);
+      api.touchAreas.push(touchArea);
       return moon;
     },
     moons: [],
@@ -988,6 +1026,16 @@ export function createStarSystemObject(system, {
           neighbourGap: world.neighbourGap,
         });
         world.touchArea.scale.setScalar(radius / world.touchBaseRadius);
+        world.touchArea.userData.touchSize = radius;
+      }
+      for (const moon of api.moons) {
+        const radius = systemTouchRadius({
+          bodyRadius: moon.meshRadius,
+          pixelsPerWorldUnit,
+          neighbourGap: moon.neighbourGap,
+        });
+        moon.touchArea.scale.setScalar(radius / moon.touchBaseRadius);
+        moon.touchArea.userData.touchSize = radius;
       }
     },
     touchAreas: worlds.map((world) => world.touchArea),
@@ -1036,12 +1084,17 @@ export function createStarSystemObject(system, {
           const moonRevolutions = delta / (secondsPerFastestOrbit
             * (moon.periodDays / fastestPeriod));
           moon.phase += moonRevolutions * Math.PI * 2;
+          // The moon rides its ring exactly: the drawn circle IS the path, so
+          // the ring can be a string the finger can find. A squashed shortcut
+          // here once let the moon drift off its own line twice a lap.
           moon.mesh.position.set(
             world.body.position.x + Math.cos(moon.phase) * moon.drawnRadius,
             0.012,
-            world.body.position.z + Math.sin(moon.phase) * moon.drawnRadius * 0.62,
+            world.body.position.z + Math.sin(moon.phase) * moon.drawnRadius,
           );
+          moon.touchArea.position.copy(moon.mesh.position);
           moon.ring.position.set(world.body.position.x, 0.008, world.body.position.z);
+          moon.impulse *= Math.exp(-decayDelta * 2.2);
         }
       }
     },
@@ -1054,7 +1107,8 @@ export function createStarSystemObject(system, {
       group.visible = opacity > 0.01;
       for (const moon of api.moons) {
         moon.mesh.material.opacity = opacity;
-        moon.ring.material.opacity = opacity * 0.42;
+        moon.ring.material.opacity = opacity * (0.42 + (moon.impulse ?? 0) * 0.58);
+        moon.touchArea.visible = labelMix > 0.5;
       }
       star.material.uniforms.uOpacity.value = opacity;
       // A ring passing BEHIND its star is the strongest depth cue any picture
@@ -1098,12 +1152,29 @@ export function createStarSystemObject(system, {
     },
     strike(planetId) {
       const world = worlds.find((candidate) => candidate.planet.id === planetId);
-      if (!world) return null;
-      world.impulse = 1;
-      starImpulse = Math.max(starImpulse, 0.55);
-      return world;
+      if (world) {
+        world.impulse = 1;
+        starImpulse = Math.max(starImpulse, 0.55);
+        return world;
+      }
+      // A struck moon answers too — its own ring flashes, and its parent
+      // carries the impulse, the way a home moon's note lights its world.
+      const moon = api.moons.find((candidate) => candidate.id === planetId);
+      if (!moon) return null;
+      moon.impulse = 1;
+      const parent = api.worldById.get(moon.parentId);
+      if (parent) parent.impulse = Math.max(parent.impulse, 0.6);
+      return moon;
     },
     dispose() {
+      for (const moon of api.moons) {
+        moon.mesh.geometry.dispose();
+        moon.mesh.material.dispose();
+        moon.ring.geometry.dispose();
+        moon.ring.material.dispose();
+        moon.touchArea.geometry.dispose();
+        moon.touchArea.material.dispose();
+      }
       for (const world of worlds) {
         world.orbit.geometry.dispose();
         world.orbit.material.dispose();

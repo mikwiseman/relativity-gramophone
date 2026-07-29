@@ -186,6 +186,52 @@ export function shouldArmDirectMoon({
     && liveBodyCount < maxWorlds;
 }
 
+/**
+ * Dragging a new world out of a visited system's star follows exactly the rule
+ * the home star follows: compose mode, nobody else's session, and room left in
+ * the sky. Out here "the sky is full" counts the measured worlds too — twelve
+ * bodies is twelve bodies, whoever put them there.
+ */
+export function shouldArmGuestWorld({
+  interactionMode,
+  isListener,
+  liveBodyCount,
+  maxWorlds,
+}) {
+  if (typeof interactionMode !== "string"
+    || typeof isListener !== "boolean"
+    || !Number.isInteger(liveBodyCount)
+    || !Number.isInteger(maxWorlds)) {
+    throw new Error("Guest world creation requires an explicit interaction state");
+  }
+  return !isListener
+    && interactionMode === "compose"
+    && liveBodyCount < maxWorlds;
+}
+
+/**
+ * Whether your own system's bodies and strings may answer a hand. They answer
+ * exactly when they are shown: standing inside another system, or out among
+ * the galaxies where your worlds are not even drawn, an invisible string must
+ * not sound — a touch has to hit what it can see.
+ */
+export function homeSystemInteractive({ focusedSystemId, systemMix }) {
+  if (!Number.isFinite(systemMix)) {
+    throw new Error("Home interactivity requires the cosmic system mix");
+  }
+  return focusedSystemId == null && systemMix > 0.72;
+}
+
+/**
+ * Whether your own composition's meridian notes sound right now. Inside a
+ * visited system THAT system is the instrument, and your home worlds singing
+ * over it is two songs at once; everywhere else your composition is the
+ * soundtrack you carry with you.
+ */
+export function shouldSoundHomeSequencer({ focusedSystemId }) {
+  return focusedSystemId == null;
+}
+
 export function audioUnlockPhase(pointerType) {
   if (typeof pointerType !== "string" || pointerType.length === 0) {
     throw new Error("Audio unlock requires a pointer type");

@@ -392,14 +392,66 @@ export function systemWorldVoice({ system, planetId }) {
   };
 }
 
-export function systemVoiceFrequencies(periodsDays) {
+/**
+ * The fit every voice of one system shares: where on the ladder the system's
+ * centre sits, where its own mean is, and how hard its span was squeezed into
+ * the register. Worlds are pitched through it, and so are the moons hung on
+ * those worlds — one mapping, so a moon and its parents speak the same law.
+ */
+export function systemVoiceFit(periodsDays) {
   if (!Array.isArray(periodsDays) || periodsDays.length === 0) {
     throw new Error("A system voice needs at least one period");
   }
-  const seconds = periodsDays.map((period) => {
+  return voiceFitFromSeconds(periodsDays.map((period) => {
     assertPositive(period, "A system voice requires a positive period in days");
     return period * 86_400;
+  }));
+}
+
+export function systemVoiceFrequencies(periodsDays) {
+  const fit = systemVoiceFit(periodsDays);
+  return periodsDays.map((period) => {
+    assertPositive(period, "A system voice requires a positive period in days");
+    return 2 ** (fit.target + (Math.log2(1 / (period * 86_400)) - fit.mean) * fit.squeeze);
   });
+}
+
+/**
+ * The voice of a moon hung on a world of a system you travelled to.
+ *
+ * At home a moon's pitch is its own orbital period, and the parents do not
+ * retune when it arrives — so out here the moon is read through the system's
+ * own fit, which is computed from the WORLDS alone and never re-made by the
+ * moon. A moon's period is hours where its parents' are days, so it can land
+ * above the register; folding it back by whole octaves is the only move that
+ * keeps every interval it makes honest.
+ */
+export function systemMoonFrequency({ systemPeriodsDays, moonPeriodDays }) {
+  const fit = systemVoiceFit(systemPeriodsDays);
+  assertPositive(moonPeriodDays, "A moon voice requires a positive period in days");
+  let frequency = 2 ** (fit.target
+    + (Math.log2(1 / (moonPeriodDays * 86_400)) - fit.mean) * fit.squeeze);
+  while (frequency > VOICE_HIGHEST) frequency /= 2;
+  while (frequency < VOICE_LOWEST) frequency *= 2;
+  return frequency;
+}
+
+/**
+ * The landmark as it actually is once the player has put worlds of their own
+ * into it: the measured bodies plus the guest worlds, in period order, so the
+ * chord, a world's solo voice and the pitch a drag previews all come from one
+ * list. The measured landmark itself is never mutated.
+ */
+export function withGuestWorlds(landmark, guestWorlds = []) {
+  if (!landmark?.system || !Array.isArray(guestWorlds) || guestWorlds.length === 0) {
+    return landmark;
+  }
+  const bodies = [...landmark.system.bodies, ...guestWorlds]
+    .sort((first, second) => first.periodDays - second.periodDays);
+  return { ...landmark, system: { ...landmark.system, bodies } };
+}
+
+function voiceFitFromSeconds(seconds) {
 
   // One law carries every scale: the bigger and slower a thing is, the deeper
   // it sounds. It has to hold in two directions at once, and for a long time it
@@ -450,5 +502,5 @@ export function systemVoiceFrequencies(periodsDays) {
     above > 0 ? ((ceiling - target) * room) / above : 1,
   );
 
-  return logs.map((value) => 2 ** (target + (value - mean) * squeeze));
+  return { target, mean, squeeze };
 }
