@@ -2870,6 +2870,9 @@ export function SoundflightStage(props) {
         runtime.pluck?.pointerId,
         runtime.pendingBodyTap?.pointerId,
         runtime.pendingCosmicTap?.pointerId,
+        runtime.pendingSystemWorldTap?.pointerId,
+        runtime.guestBirth?.pointerId,
+        runtime.systemMoon?.pointerId,
       ].filter((pointerId) => Number.isInteger(pointerId));
       if (rememberPointers) {
         for (const pointerId of [
@@ -2898,7 +2901,17 @@ export function SoundflightStage(props) {
       runtime.pendingBodyTap = null;
       runtime.pendingCosmicTap = null;
       runtime.pendingSystemWorldTap = null;
+      // A cancelled gesture in a visited system must clear its preview too, or
+      // the gold ring outlives the hand that was drawing it — and a systemMoon
+      // left armed eats every later pointer move.
+      if (runtime.guestBirth || runtime.systemMoon) {
+        const visual = cosmicLandmarkField.byId.get(runtime.focusedSystemId);
+        visual?.nearbySystem?.setBirthPreview(null);
+        visual?.nearbySystem?.setMoonPreview(null);
+        propsRef.current.onGuestOrbitPreview(null);
+      }
       runtime.guestBirth = null;
+      runtime.systemMoon = null;
       directPointerIds.forEach(releaseCapturedPointer);
       controls.enabled = true;
     };
@@ -3134,7 +3147,7 @@ export function SoundflightStage(props) {
           runtime[pendingKey] = null;
         }
       }
-      if (runtime.systemMoon) {
+      if (runtime.systemMoon?.pointerId === event.pointerId) {
         event.stopImmediatePropagation();
         const screen = eventPoint(event, renderer.domElement);
         const pulled = Math.hypot(
@@ -3147,6 +3160,11 @@ export function SoundflightStage(props) {
         const moonAu = runtime.systemMoon.band.inner
           + reach * (runtime.systemMoon.band.outer - runtime.systemMoon.band.inner);
         runtime.systemMoon.moonAu = moonAu;
+        runtime.systemMoon.system?.setMoonPreview({
+          parentId: runtime.systemMoon.planetId,
+          moonAu,
+          hillAu: runtime.systemMoon.hillAu,
+        });
         propsRef.current.onGuestOrbitPreview({
           landmarkId: runtime.systemMoon.landmarkId,
           moonOf: runtime.systemMoon.planetId,
@@ -3156,26 +3174,43 @@ export function SoundflightStage(props) {
         });
         return;
       }
-      if (runtime.guestBirth) {
+      if (runtime.guestBirth?.pointerId === event.pointerId) {
         const visual = cosmicLandmarkField.byId.get(runtime.guestBirth.landmarkId);
         const system = visual?.nearbySystem;
         const point = system ? intersectSystemPlane(event, visual) : null;
         if (point) {
-          const reach = Math.hypot(
-            point.x - visual.group.position.x,
-            point.z - visual.group.position.z,
-          );
-          runtime.guestBirth.radius = clamp(
-            reach,
-            system.band.innerRadius * 0.62,
-            system.band.outerRadius * OUTER_REACH,
-          );
+          const localX = point.x - visual.group.position.x;
+          const localZ = point.z - visual.group.position.z;
+          const reach = Math.hypot(localX, localZ);
           const screen = eventPoint(event, renderer.domElement);
-          runtime.guestBirth.active = Math.hypot(
+          const dragged = Math.hypot(
             screen.x - runtime.guestBirth.startScreen.x,
             screen.y - runtime.guestBirth.startScreen.y,
-          ) > CREATION_DRAG_THRESHOLD;
+          );
+          if (reach <= system.band.outerRadius) {
+            // Inside the drawn system the mapping is spatial truth: a finger
+            // on ring d is a world at ring d.
+            runtime.guestBirth.rimScreen = null;
+            runtime.guestBirth.radius = Math.max(reach, system.band.innerRadius * 0.62);
+          } else {
+            // Past the rim the drawn tail is a stated compression, so the
+            // finger should not have to cross it physically: 180 more pixels
+            // of drag is the whole tail, out to eight times the outermost
+            // measured orbit. Before this, reaching the far edge meant
+            // dragging half again past the rim — off the canvas on a laptop.
+            if (!Number.isFinite(runtime.guestBirth.rimScreen)) {
+              runtime.guestBirth.rimScreen = dragged;
+            }
+            const tail = clamp((dragged - runtime.guestBirth.rimScreen) / 180, 0, 1);
+            runtime.guestBirth.radius = system.band.outerRadius
+              * (1 + tail * (OUTER_REACH - 1));
+          }
+          runtime.guestBirth.active = dragged > CREATION_DRAG_THRESHOLD;
           if (runtime.guestBirth.active) {
+            system.setBirthPreview({
+              radius: runtime.guestBirth.radius,
+              azimuth: Math.atan2(localZ, localX),
+            });
             propsRef.current.onGuestOrbitPreview({
               landmarkId: runtime.guestBirth.landmarkId,
               orbitAu: expandedOrbitAu(runtime.guestBirth.radius, system.band),
@@ -3382,6 +3417,7 @@ export function SoundflightStage(props) {
         propsRef.current.onGuestOrbitPreview(null);
         const visual = cosmicLandmarkField.byId.get(birth.landmarkId);
         const system = visual?.nearbySystem;
+        system?.setBirthPreview(null);
         if (!system) return;
         // A press on the star that never became a drag is still a press on the
         // star: sound the whole system, which is what it did before this
@@ -3397,6 +3433,7 @@ export function SoundflightStage(props) {
       if (runtime.systemMoon?.pointerId === event.pointerId) {
         const moon = runtime.systemMoon;
         runtime.systemMoon = null;
+        moon.system?.setMoonPreview(null);
         controls.enabled = true;
         releaseCapturedPointer(event.pointerId);
         propsRef.current.onGuestOrbitPreview(null);

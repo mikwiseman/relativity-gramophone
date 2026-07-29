@@ -529,3 +529,18 @@ test("every world in every visited system can hold a moon with a sane year", () 
   // instrument must say that rather than invent one.
   assert.ok(impossible > 0 && impossible < 30, `${impossible} worlds cannot hold a moon`);
 });
+
+test("every system lists its worlds innermost first, because gestures rely on it", () => {
+  // A world added to a real system takes its Kepler constant from bodies[0].
+  // That is only right if bodies[0] is a real measured world of the system —
+  // any of them carries the same constant — and the guides read the array in
+  // order, so the order is a contract, not a habit.
+  for (const system of STAR_SYSTEMS) {
+    for (let index = 1; index < system.bodies.length; index += 1) {
+      assert.ok(
+        system.bodies[index].periodDays >= system.bodies[index - 1].periodDays,
+        `${system.name} lists ${system.bodies[index].name} out of order`,
+      );
+    }
+  }
+});

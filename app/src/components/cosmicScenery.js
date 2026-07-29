@@ -764,6 +764,54 @@ export function createStarSystemObject(system, {
     };
   };
 
+  // Drag previews: a unit ring scaled to the chosen radius, and a seed. Gold,
+  // hairline, additive-free, gone the moment the hand decides.
+  const birthPreviewRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.994, 1.006, 128),
+    new THREE.MeshBasicMaterial({
+      color: 0xf1c776,
+      transparent: true,
+      opacity: 0.55,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      toneMapped: false,
+    }),
+  );
+  birthPreviewRing.rotation.x = -Math.PI / 2;
+  birthPreviewRing.renderOrder = 5;
+  birthPreviewRing.visible = false;
+  group.add(birthPreviewRing);
+  const birthPreviewSeed = new THREE.Mesh(
+    new THREE.SphereGeometry(0.05, 16, 12),
+    new THREE.MeshBasicMaterial({ color: 0xf1c776, transparent: true, opacity: 0.9, toneMapped: false }),
+  );
+  birthPreviewSeed.renderOrder = 5;
+  birthPreviewSeed.visible = false;
+  group.add(birthPreviewSeed);
+  const moonPreviewRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.99, 1.01, 96),
+    new THREE.MeshBasicMaterial({
+      color: 0xf1c776,
+      transparent: true,
+      opacity: 0.5,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      toneMapped: false,
+    }),
+  );
+  moonPreviewRing.rotation.x = -Math.PI / 2;
+  moonPreviewRing.renderOrder = 5;
+  moonPreviewRing.visible = false;
+  group.add(moonPreviewRing);
+  const moonPreviewSeed = new THREE.Mesh(
+    new THREE.SphereGeometry(0.028, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0xf1c776, transparent: true, opacity: 0.9, toneMapped: false }),
+  );
+  moonPreviewSeed.renderOrder = 5;
+  moonPreviewSeed.visible = false;
+  group.add(moonPreviewSeed);
+  const moonPreviewState = { parentId: null, drawnRadius: 0 };
+
   const worlds = planets.map(makeWorld);
   // Two worlds that both claim the same pixel are worse than one that is
   // small, so each target's ceiling is half the distance to its nearer
@@ -809,6 +857,55 @@ export function createStarSystemObject(system, {
       return worlds.reduce((furthest, world) => Math.max(furthest, world.drawnRadius), outerRadius);
     },
     band: Object.freeze({ minimumAu, maximumAu, innerRadius, outerRadius }),
+    /**
+     * The preview a drag draws while it is still deciding.
+     *
+     * At home a forming world shows its orbit before it exists; out here the
+     * only feedback used to be a line of text, and a gesture whose result is
+     * invisible reads as a gesture that does not work — the owner's exact
+     * words were "it does not stretch". One gold ring at the chosen radius and
+     * one seed under the finger, both gone the moment the hand decides.
+     */
+    setBirthPreview(preview) {
+      if (!preview) {
+        birthPreviewRing.visible = false;
+        birthPreviewSeed.visible = false;
+        return;
+      }
+      birthPreviewRing.visible = true;
+      birthPreviewSeed.visible = true;
+      birthPreviewRing.scale.setScalar(preview.radius);
+      birthPreviewSeed.position.set(
+        Math.cos(preview.azimuth) * preview.radius,
+        0.012,
+        Math.sin(preview.azimuth) * preview.radius,
+      );
+    },
+    /** The same honesty for a moon being hung on one of this system's worlds. */
+    setMoonPreview(preview) {
+      if (!preview) {
+        moonPreviewState.parentId = null;
+        moonPreviewRing.visible = false;
+        moonPreviewSeed.visible = false;
+        return;
+      }
+      const parent = api.worldById.get(preview.parentId);
+      if (!parent) return;
+      const reach = parent.bodyRadius * 3.4;
+      const drawnRadius = parent.bodyRadius * 1.5
+        + (preview.moonAu / preview.hillAu) * (reach - parent.bodyRadius * 1.5);
+      moonPreviewState.parentId = preview.parentId;
+      moonPreviewState.drawnRadius = drawnRadius;
+      moonPreviewRing.visible = true;
+      moonPreviewSeed.visible = true;
+      moonPreviewRing.scale.setScalar(drawnRadius);
+      moonPreviewRing.position.set(parent.body.position.x, 0.01, parent.body.position.z);
+      moonPreviewSeed.position.set(
+        parent.body.position.x + drawnRadius,
+        0.014,
+        parent.body.position.z,
+      );
+    },
     /**
      * A moon the player hangs on one of a real system's worlds.
      *
@@ -927,6 +1024,14 @@ export function createStarSystemObject(system, {
         // orbit and would be one pixel — but the period is the one Kepler
         // gives for the parent's measured mass, and the ratios between a
         // world's moons are exact.
+        if (moonPreviewState.parentId === world.planet.id && moonPreviewRing.visible) {
+          moonPreviewRing.position.set(world.body.position.x, 0.01, world.body.position.z);
+          moonPreviewSeed.position.set(
+            world.body.position.x + moonPreviewState.drawnRadius,
+            0.014,
+            world.body.position.z,
+          );
+        }
         for (const moon of world.moons) {
           const moonRevolutions = delta / (secondsPerFastestOrbit
             * (moon.periodDays / fastestPeriod));
