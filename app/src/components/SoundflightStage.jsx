@@ -3776,6 +3776,40 @@ export function SoundflightStage(props) {
             appliedEventIndexRef.current += 1;
             continue;
           }
+          // A journey replays through exactly the handlers the live gestures
+          // call: the listener hears the concert the author played, rebuilt
+          // from the same numbers, in the same order, on the same atlas.
+          if (event.kind === "system-pluck") {
+            const landmark = cosmicLandmarkById(event.systemId);
+            const system = cosmicLandmarkField.byId.get(event.systemId)?.nearbySystem;
+            if (system) system.strike(event.bodyId);
+            currentProps.onSystemWorldAudition({
+              landmark,
+              planetId: event.bodyId,
+              moonOf: null,
+              pluck: event.offset !== undefined
+                ? { offset: event.offset, strength: event.strength ?? 0.62 }
+                : null,
+            });
+            appliedEventIndexRef.current += 1;
+            continue;
+          }
+          if (event.kind === "add-guest-world") {
+            const landmark = cosmicLandmarkById(event.systemId);
+            currentProps.onGuestWorld({ landmark, orbitAu: event.world.orbitAu });
+            appliedEventIndexRef.current += 1;
+            continue;
+          }
+          if (event.kind === "add-guest-moon") {
+            currentProps.onSystemMoon({
+              landmarkId: event.systemId,
+              planetId: event.planetId,
+              moonAu: event.moon.moonAu,
+              hillAu: event.moon.hillAu,
+            });
+            appliedEventIndexRef.current += 1;
+            continue;
+          }
           if (event.kind === "pluck") {
             const body = engine.getBody(event.bodyId);
             if (body) {
@@ -4092,39 +4126,42 @@ export function SoundflightStage(props) {
           : null,
       );
       // Worlds the player has added to real systems live in React state so the
-      // score can carry them; the scene adopts each one exactly once.
+      // score can carry them; the scene adopts each one exactly once — and
+      // forgets each one exactly once. React state is the source of truth in
+      // both directions: a universe that starts without guests must find every
+      // built system emptied of the worlds and moons of the universe before it.
       const guestWorlds = propsRef.current.guestWorlds;
-      if (guestWorlds && guestWorlds.size > 0) {
-        for (const [landmarkId, worlds] of guestWorlds) {
-          const visual = cosmicLandmarkField.byId.get(landmarkId);
-          const system = visual?.ensureSystem(cosmicLandmarkField.resolution);
-          if (!system) continue;
-          for (const world of worlds) {
-            if (system.worldById.has(world.id)) continue;
-            system.addWorld(world);
+      const systemMoons = propsRef.current.systemMoons;
+      for (const [landmarkId, visual] of cosmicLandmarkField.byId) {
+        const system = visual?.nearbySystem;
+        if (!system) continue;
+        const wantedWorlds = guestWorlds?.get(landmarkId) ?? [];
+        const wantedWorldIds = new Set(wantedWorlds.map((world) => world.id));
+        for (const world of [...system.worlds]) {
+          if (world.planet.guest && !wantedWorldIds.has(world.planet.id)) {
+            system.removeWorld(world.planet.id);
           }
         }
-      }
-      // And the moons hung on those systems' worlds, adopted exactly once each.
-      const systemMoons = propsRef.current.systemMoons;
-      if (systemMoons && systemMoons.size > 0) {
-        for (const [landmarkId, moons] of systemMoons) {
-          const visual = cosmicLandmarkField.byId.get(landmarkId);
-          const system = visual?.ensureSystem(cosmicLandmarkField.resolution);
-          if (!system) continue;
-          for (const moon of moons) {
-            if (system.moons.some((existing) => existing.id === moon.id)) continue;
-            const parent = system.worldById.get(moon.parentId);
-            if (!parent) continue;
-            system.addMoon({
-              parentId: moon.parentId,
-              id: moon.id,
-              moonAu: moon.moonAu,
-              periodDays: moon.periodDays,
-              hillAu: moon.hillAu,
-              color: parent.color,
-            });
-          }
+        for (const world of wantedWorlds) {
+          if (!system.worldById.has(world.id)) system.addWorld(world);
+        }
+        const wantedMoons = systemMoons?.get(landmarkId) ?? [];
+        const wantedMoonIds = new Set(wantedMoons.map((moon) => moon.id));
+        for (const moon of [...system.moons]) {
+          if (!wantedMoonIds.has(moon.id)) system.removeMoon(moon.id);
+        }
+        for (const moon of wantedMoons) {
+          if (system.moons.some((existing) => existing.id === moon.id)) continue;
+          const parent = system.worldById.get(moon.parentId);
+          if (!parent) continue;
+          system.addMoon({
+            parentId: moon.parentId,
+            id: moon.id,
+            moonAu: moon.moonAu,
+            periodDays: moon.periodDays,
+            hillAu: moon.hillAu,
+            color: parent.color,
+          });
         }
       }
       updateCosmicLandmarkField(

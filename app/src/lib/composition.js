@@ -1,9 +1,10 @@
 import { MAX_WORLDS, PHYSICS_MODEL } from "./physicsEngine.js";
 import { assertResonanceSeals } from "./gameProgress.js";
-import { cosmicLandmarkById } from "./cosmicInstrument.js";
+import { ATLAS_MODEL, cosmicLandmarkById } from "./cosmicInstrument.js";
 import { defaultVoiceForBody, isCosmicVoice, SONIFICATION_MODEL } from "./sonification.js";
 
-const FORMAT = "tau-record/6";
+const FORMAT = "tau-record/7";
+const SIXTH_FORMAT = "tau-record/6";
 const FIFTH_FORMAT = "tau-record/5";
 const FOURTH_FORMAT = "tau-record/4";
 const THIRD_FORMAT = "tau-record/3";
@@ -137,8 +138,104 @@ function assertPhysicalState(initialState, bodies) {
   }
 }
 
-function assertEvent(event, previousTime, aliveIds, kindsById, parentById) {
+function escapePattern(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Per-system alive state while a journey score is validated: which guest
+ * worlds and moons a performer has made in each visited system so far. The
+ * measured worlds come from the atlas itself; the handmade ones must be
+ * tracked here, because a pluck is only legal on something that exists.
+ */
+function journeySystemState(journey, systemId) {
+  let state = journey.get(systemId);
+  if (!state) {
+    state = { guests: new Map(), moons: new Map() };
+    journey.set(systemId, state);
+  }
+  return state;
+}
+
+function assertJourneyLandmark(systemId) {
+  if (typeof systemId !== "string" || systemId.length === 0 || systemId.length > 64) {
+    throw new Error("Invalid journey system id");
+  }
+  const landmark = cosmicLandmarkById(systemId);
+  if (!landmark.system) throw new Error(`Score journey names a landmark without a system: ${systemId}`);
+  return landmark;
+}
+
+function assertJourneyEvent(event, journey) {
+  if (event.kind === "system-pluck") {
+    const landmark = assertJourneyLandmark(event.systemId);
+    const state = journeySystemState(journey, event.systemId);
+    const exists = landmark.system.bodies.some((body) => body.id === event.bodyId)
+      || state.guests.has(event.bodyId)
+      || state.moons.has(event.bodyId);
+    if (typeof event.bodyId !== "string" || !exists) {
+      throw new Error(`Score journey touches a world that is not there: ${event.bodyId ?? "missing"}`);
+    }
+    if (event.offset !== undefined && !isFiniteNumber(event.offset, 0, 1)) throw new Error("Invalid pluck offset");
+    if (event.strength !== undefined && !isFiniteNumber(event.strength, 0, 1)) throw new Error("Invalid pluck strength");
+    return;
+  }
+
+  if (event.kind === "add-guest-world") {
+    const landmark = assertJourneyLandmark(event.systemId);
+    const state = journeySystemState(journey, event.systemId);
+    const world = event.world;
+    const idPattern = new RegExp(`^${escapePattern(event.systemId)}-yours-\\d{1,2}$`, "u");
+    if (!world || typeof world.id !== "string" || !idPattern.test(world.id)) {
+      throw new Error(`Invalid journey world: ${world?.id ?? "missing"}`);
+    }
+    if (state.guests.has(world.id)) throw new Error(`Score journey births a world already alive: ${world.id}`);
+    if (landmark.system.bodies.length + state.guests.size + state.moons.size >= MAX_WORLDS) {
+      throw new Error("Too many worlds in the journey score");
+    }
+    if (!isFiniteNumber(world.orbitAu, 0.001, 100_000)) throw new Error(`Invalid journey orbit for ${world.id}`);
+    if (!isFiniteNumber(world.periodDays, 0.001, 100_000_000)) throw new Error(`Invalid journey period for ${world.id}`);
+    state.guests.set(world.id, world);
+    return;
+  }
+
+  if (event.kind === "add-guest-moon") {
+    const landmark = assertJourneyLandmark(event.systemId);
+    const state = journeySystemState(journey, event.systemId);
+    const parentAlive = landmark.system.bodies.some((body) => body.id === event.planetId)
+      || state.guests.has(event.planetId);
+    if (typeof event.planetId !== "string" || !parentAlive) {
+      throw new Error(`Score journey moon has no live parent: ${event.planetId ?? "missing"}`);
+    }
+    const moon = event.moon;
+    const idPattern = new RegExp(`^${escapePattern(event.planetId)}-moon-\\d{1,2}$`, "u");
+    if (!moon || typeof moon.id !== "string" || !idPattern.test(moon.id)) {
+      throw new Error(`Invalid journey moon: ${moon?.id ?? "missing"}`);
+    }
+    if (state.moons.has(moon.id)) throw new Error(`Score journey births a moon already alive: ${moon.id}`);
+    const heldByParent = [...state.moons.values()]
+      .filter((held) => held.parentId === event.planetId).length;
+    if (heldByParent >= 2) throw new Error(`Journey world already holds two moons: ${event.planetId}`);
+    if (landmark.system.bodies.length + state.guests.size + state.moons.size >= MAX_WORLDS) {
+      throw new Error("Too many worlds in the journey score");
+    }
+    if (!isFiniteNumber(moon.moonAu, 1e-6, 10)) throw new Error(`Invalid journey moon orbit for ${moon.id}`);
+    if (!isFiniteNumber(moon.hillAu, 1e-6, 100)) throw new Error(`Invalid journey Hill radius for ${moon.id}`);
+    if (!isFiniteNumber(moon.periodDays, 1e-4, 100_000)) throw new Error(`Invalid journey moon period for ${moon.id}`);
+    state.moons.set(moon.id, { parentId: event.planetId });
+    return;
+  }
+
+  throw new Error(`Unsupported score event: ${event.kind ?? "missing"}`);
+}
+
+function assertEvent(event, previousTime, aliveIds, kindsById, parentById, journey) {
   if (!event || !isFiniteNumber(event.at, 0, 3_600) || event.at < previousTime) throw new Error("Invalid score event");
+
+  if (event.kind === "system-pluck" || event.kind === "add-guest-world" || event.kind === "add-guest-moon") {
+    assertJourneyEvent(event, journey);
+    return;
+  }
 
   if (event.kind === "add-body") {
     assertCreatedSpec(event.body, { withState: true });
@@ -210,6 +307,7 @@ function assertComposition(value) {
   if (!value || value.format !== FORMAT) throw new Error(`Unsupported score format: ${value?.format ?? "missing"}`);
   if (value.physics !== PHYSICS_MODEL) throw new Error(`Unsupported physics model: ${value.physics ?? "missing"}`);
   if (value.sonification !== SONIFICATION_MODEL) throw new Error(`Unsupported sonification model: ${value.sonification ?? "missing"}`);
+  if (value.atlas !== ATLAS_MODEL) throw new Error(`Unsupported atlas: ${value.atlas ?? "missing"}`);
   if (!VALID_THEMES.has(value.preferredTheme)) throw new Error(`Unsupported theme: ${value.preferredTheme}`);
   if (!isFiniteNumber(value.duration, 1, 3_600)) throw new Error("Invalid score duration");
   if (typeof value.message !== "string" || value.message.length > 120) throw new Error("Invalid score message");
@@ -231,9 +329,10 @@ function assertComposition(value) {
   const parentById = new Map(value.bodies
     .filter((body) => body.kind === "moon")
     .map((body) => [body.id, body.parentId]));
+  const journey = new Map();
   let previousTime = -Infinity;
   for (const event of value.events) {
-    assertEvent(event, previousTime, aliveIds, kindsById, parentById);
+    assertEvent(event, previousTime, aliveIds, kindsById, parentById, journey);
     previousTime = event.at;
   }
 }
@@ -241,6 +340,12 @@ function assertComposition(value) {
 function addDefaultResonanceSeals(value) {
   const normalized = clone(value);
   if (normalized.resonances === undefined) normalized.resonances = [];
+  return normalized;
+}
+
+function addDefaultAtlas(value) {
+  const normalized = clone(value);
+  if (normalized.atlas === undefined) normalized.atlas = ATLAS_MODEL;
   return normalized;
 }
 
@@ -255,16 +360,23 @@ function addDefaultVoices(value) {
   return migrated;
 }
 
-function migrateFourthComposition(value) {
+function migrateSixthComposition(value) {
   if (!Array.isArray(value?.bodies) || !Array.isArray(value?.events)) throw new Error("Invalid score payload");
-  const migrated = { ...clone(value), format: FORMAT };
+  const migrated = { ...addDefaultAtlas(clone(value)), format: FORMAT };
   assertComposition(migrated);
   return migrated;
 }
 
 function migrateFifthComposition(value) {
   if (!Array.isArray(value?.bodies) || !Array.isArray(value?.events)) throw new Error("Invalid score payload");
-  const migrated = { ...clone(value), format: FORMAT };
+  const migrated = { ...addDefaultAtlas(clone(value)), format: FORMAT };
+  assertComposition(migrated);
+  return migrated;
+}
+
+function migrateFourthComposition(value) {
+  if (!Array.isArray(value?.bodies) || !Array.isArray(value?.events)) throw new Error("Invalid score payload");
+  const migrated = { ...addDefaultAtlas(clone(value)), format: FORMAT };
   assertComposition(migrated);
   return migrated;
 }
@@ -272,7 +384,7 @@ function migrateFifthComposition(value) {
 function migrateThirdComposition(value) {
   if (!Array.isArray(value?.bodies) || !Array.isArray(value?.events)) throw new Error("Invalid score payload");
   const migrated = {
-    ...addDefaultResonanceSeals(clone(value)),
+    ...addDefaultResonanceSeals(addDefaultAtlas(clone(value))),
     format: FORMAT,
     sonification: SONIFICATION_MODEL,
   };
@@ -283,7 +395,7 @@ function migrateThirdComposition(value) {
 function migratePreviousComposition(value) {
   if (!Array.isArray(value?.bodies) || !Array.isArray(value?.events)) throw new Error("Invalid score payload");
   const migrated = {
-    ...addDefaultResonanceSeals(addDefaultVoices(value)),
+    ...addDefaultResonanceSeals(addDefaultAtlas(addDefaultVoices(value))),
     format: FORMAT,
     sonification: SONIFICATION_MODEL,
   };
@@ -294,7 +406,7 @@ function migratePreviousComposition(value) {
 function migrateLegacyComposition(value) {
   if (!Array.isArray(value?.bodies) || !Array.isArray(value?.events)) throw new Error("Invalid score payload");
   const migrated = {
-    ...addDefaultResonanceSeals(addDefaultVoices(value)),
+    ...addDefaultResonanceSeals(addDefaultAtlas(addDefaultVoices(value))),
     format: FORMAT,
     physics: PHYSICS_MODEL,
     sonification: SONIFICATION_MODEL,
@@ -313,6 +425,7 @@ export function createDefaultComposition() {
     format: FORMAT,
     physics: PHYSICS_MODEL,
     sonification: SONIFICATION_MODEL,
+    atlas: ATLAS_MODEL,
     seed: "tau-1905",
     createdAt: null,
     duration: 64,
@@ -400,6 +513,7 @@ export function createReplyComposition(parent, frame, preferredTheme) {
     format: FORMAT,
     physics: PHYSICS_MODEL,
     sonification: SONIFICATION_MODEL,
+    atlas: ATLAS_MODEL,
     createdAt: null,
     preferredTheme,
     message: "",
@@ -437,7 +551,8 @@ export function decodeComposition(encoded) {
   if (value?.format === THIRD_FORMAT) return migrateThirdComposition(value);
   if (value?.format === FOURTH_FORMAT) return migrateFourthComposition(value);
   if (value?.format === FIFTH_FORMAT) return migrateFifthComposition(value);
-  const normalized = addDefaultResonanceSeals(value);
+  if (value?.format === SIXTH_FORMAT) return migrateSixthComposition(value);
+  const normalized = addDefaultResonanceSeals(addDefaultAtlas(value));
   assertComposition(normalized);
   return normalized;
 }

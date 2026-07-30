@@ -1,5 +1,6 @@
 import { GRAVITATIONAL_CONSTANT, PHYSICS_MODEL, createInitialPhysicsState } from "./physicsEngine.js";
 import { SONIFICATION_MODEL, keplerPitch } from "./sonification.js";
+import { ATLAS_MODEL } from "./cosmicInstrument.js";
 import { createDefaultComposition } from "./composition.js";
 
 const TAU = Math.PI * 2;
@@ -97,9 +98,10 @@ export function createHarpComposition(harpId) {
   const initialState = createInitialPhysicsState(fullSpecs);
 
   return {
-    format: "tau-record/6",
+    format: "tau-record/7",
     physics: PHYSICS_MODEL,
     sonification: SONIFICATION_MODEL,
+    atlas: ATLAS_MODEL,
     seed: `harp-${harp.id}`,
     createdAt: null,
     duration: 64,

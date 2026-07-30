@@ -84,6 +84,14 @@ export function landmarkPlacement({ slot, aspect, fovDegrees, distance, fill = 0
   };
 }
 
+/**
+ * The revision of the cosmic atlas a score was written against. Pinned in the
+ * record next to the physics and sonification models: when the catalogue data
+ * is revised, an old plate must say so out loud instead of quietly playing a
+ * different sky.
+ */
+export const ATLAS_MODEL = "cosmic-atlas/1";
+
 export const COSMIC_DESTINATIONS = Object.freeze({
   system: Object.freeze({
     id: "system",

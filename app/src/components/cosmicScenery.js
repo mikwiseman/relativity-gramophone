@@ -1000,6 +1000,59 @@ export function createStarSystemObject(system, {
       world.impulse = 1;
       return world;
     },
+    /**
+     * Un-make a world the player's universe no longer owns. The scene adopts
+     * guest worlds from React state, and when a new universe starts with none,
+     * the stranger has to leave the sky too — geometry, touch target and all —
+     * or its ring would keep sounding in a universe that never made it.
+     */
+    removeWorld(planetId) {
+      const index = worlds.findIndex((world) => world.planet.id === planetId);
+      if (index < 0) return false;
+      const world = worlds[index];
+      for (const moon of [...world.moons]) api.removeMoon(moon.id);
+      world.orbit.geometry.dispose();
+      world.orbit.material.dispose();
+      world.body.geometry.dispose();
+      world.body.material.dispose();
+      world.halo.material.dispose();
+      world.rings?.geometry.dispose();
+      world.rings?.material.dispose();
+      world.touchArea.geometry.dispose();
+      world.touchArea.material.dispose();
+      world.label.material.map.dispose();
+      world.label.material.dispose();
+      group.remove(world.orbit);
+      group.remove(world.body);
+      group.remove(world.halo);
+      group.remove(world.touchArea);
+      group.remove(world.label);
+      if (world.rings) group.remove(world.rings);
+      worlds.splice(index, 1);
+      api.worldById.delete(planetId);
+      api.touchAreas = api.touchAreas.filter((area) => area !== world.touchArea);
+      measureNeighbourGaps(worlds);
+      return true;
+    },
+    /** The same forgetting for a moon. */
+    removeMoon(moonId) {
+      const moon = api.moons.find((candidate) => candidate.id === moonId);
+      if (!moon) return false;
+      moon.mesh.geometry.dispose();
+      moon.mesh.material.dispose();
+      moon.ring.geometry.dispose();
+      moon.ring.material.dispose();
+      moon.touchArea.geometry.dispose();
+      moon.touchArea.material.dispose();
+      group.remove(moon.mesh);
+      group.remove(moon.ring);
+      group.remove(moon.touchArea);
+      const parent = api.worldById.get(moon.parentId);
+      if (parent) parent.moons = parent.moons.filter((candidate) => candidate !== moon);
+      api.moons = api.moons.filter((candidate) => candidate !== moon);
+      api.touchAreas = api.touchAreas.filter((area) => area !== moon.touchArea);
+      return true;
+    },
     worldById: new Map(worlds.map((world) => [world.planet.id, world])),
     /**
      * Names are drawn in world units, so a phone standing twice as far back to

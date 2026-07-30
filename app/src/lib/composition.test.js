@@ -47,7 +47,7 @@ test("a composition survives a URL-safe round trip including unicode", () => {
 test("the default score speaks the harp-capable format and Kepler sonification", () => {
   const composition = createDefaultComposition();
 
-  assert.equal(composition.format, "tau-record/6");
+  assert.equal(composition.format, "tau-record/7");
   assert.equal(composition.sonification, "cosmic-voices/2");
 });
 
@@ -120,7 +120,7 @@ test("an existing tau-record/4 link migrates into the harp format unchanged", ()
 
   const migrated = decodeComposition(encoded);
 
-  assert.equal(migrated.format, "tau-record/6");
+  assert.equal(migrated.format, "tau-record/7");
   assert.equal(migrated.sonification, "cosmic-voices/2");
   assert.equal(migrated.events.length, 1);
   assert.equal(migrated.events[0].kind, "add-body");
@@ -134,7 +134,7 @@ test("an existing tau-record/5 link migrates without changing its recorded dance
 
   const migrated = decodeComposition(encoded);
 
-  assert.equal(migrated.format, "tau-record/6");
+  assert.equal(migrated.format, "tau-record/7");
   assert.deepEqual(migrated.events, previous.events);
   assert.deepEqual(migrated.bodies, previous.bodies);
 });
@@ -148,7 +148,7 @@ test("an existing tau-record/3 link migrates and keeps its voices and seals", ()
 
   const decoded = decodeComposition(encoded);
 
-  assert.equal(decoded.format, "tau-record/6");
+  assert.equal(decoded.format, "tau-record/7");
   assert.equal(decoded.sonification, "cosmic-voices/2");
   assert.deepEqual(decoded.resonances, ["3:2"]);
   assert.deepEqual(decoded.bodies.map((body) => body.voice), ["earth", "moon", "light"]);
@@ -269,7 +269,7 @@ test("a tau-record/2 link gains deterministic cosmic voice imprints", () => {
 
   const migrated = decodeComposition(encoded);
 
-  assert.equal(migrated.format, "tau-record/6");
+  assert.equal(migrated.format, "tau-record/7");
   assert.equal(migrated.sonification, "cosmic-voices/2");
   assert.deepEqual(migrated.bodies.map((body) => body.voice), ["earth", "moon", "light"]);
   assert.deepEqual(migrated.resonances, []);
@@ -286,7 +286,7 @@ test("a tau-record/1 link migrates into the deterministic N-body format", () => 
 
   const migrated = decodeComposition(encoded);
 
-  assert.equal(migrated.format, "tau-record/6");
+  assert.equal(migrated.format, "tau-record/7");
   assert.equal(migrated.physics, PHYSICS_MODEL);
   assert.equal(migrated.sonification, "cosmic-voices/2");
   assert.deepEqual(migrated.bodies.map((body) => body.voice), ["earth", "moon", "light"]);
@@ -334,4 +334,121 @@ test("malformed or oversized physical event payloads are rejected", () => {
   }));
 
   assert.throws(() => encodeComposition(composition), /Too many score events/);
+});
+
+test("a journey performance survives the share format whole", () => {
+  // The gap tau-record/7 closes: a concert played inside a visited system —
+  // the guest world born of its star, a moon hung on a measured world, and
+  // the plucks themselves — used to vanish from the plate at the border of
+  // the home system.
+  const composition = createDefaultComposition();
+  composition.events.push(
+    { kind: "cosmic-landmark", at: 1, landmarkId: "gj-876" },
+    { kind: "add-guest-world", at: 2, systemId: "gj-876", world: { id: "gj-876-yours-1", orbitAu: 0.25, periodDays: 70 } },
+    { kind: "add-guest-moon", at: 3, systemId: "gj-876", planetId: "gj-876-b", moon: { id: "gj-876-b-moon-1", moonAu: 0.002, hillAu: 0.006, periodDays: 7 } },
+    { kind: "system-pluck", at: 4, systemId: "gj-876", bodyId: "gj-876-c" },
+    { kind: "system-pluck", at: 5, systemId: "gj-876", bodyId: "gj-876-yours-1", offset: 0.3, strength: 0.7 },
+    { kind: "system-pluck", at: 6, systemId: "gj-876", bodyId: "gj-876-b-moon-1", offset: 0.8, strength: 0.5 },
+  );
+
+  const decoded = decodeComposition(encodeComposition(composition));
+  assert.deepEqual(decoded, composition);
+  assert.equal(decoded.atlas, "cosmic-atlas/1");
+});
+
+test("the atlas is pinned in the record and a foreign atlas is refused out loud", () => {
+  // Without the pin, a future NASA data revision would quietly change the sky
+  // under every old plate — a delayed-action breach of the determinism vow.
+  const composition = createDefaultComposition();
+  assert.equal(composition.atlas, "cosmic-atlas/1");
+  const tampered = { ...composition, atlas: "cosmic-atlas/99" };
+  const encoded = Buffer.from(JSON.stringify(tampered), "utf8").toString("base64")
+    .replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+  assert.throws(() => decodeComposition(encoded), /Unsupported atlas/);
+});
+
+test("a tau-record/6 link migrates into the journey format untouched", () => {
+  const sixth = createDefaultComposition();
+  sixth.format = "tau-record/6";
+  delete sixth.atlas;
+  sixth.events.push(
+    { kind: "pluck", at: 0.5, bodyId: "io", offset: 0.25, strength: 0.8 },
+    { kind: "cosmic-landmark", at: 1, landmarkId: "trappist-1" },
+  );
+  const encoded = Buffer.from(JSON.stringify(sixth), "utf8").toString("base64")
+    .replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+  const migrated = decodeComposition(encoded);
+  assert.equal(migrated.format, "tau-record/7");
+  assert.equal(migrated.atlas, "cosmic-atlas/1");
+  assert.deepEqual(migrated.events, sixth.events);
+});
+
+test("a journey pluck is only legal on a world that exists", () => {
+  const composition = createDefaultComposition();
+  // A measured world of the system: fine.
+  composition.events.push({ kind: "system-pluck", at: 1, systemId: "gj-876", bodyId: "gj-876-d" });
+  assert.doesNotThrow(() => decodeComposition(encodeComposition(composition)));
+
+  // The same world nobody made yet: not there.
+  const tooEarly = createDefaultComposition();
+  tooEarly.events.push({ kind: "system-pluck", at: 1, systemId: "gj-876", bodyId: "gj-876-yours-1" });
+  assert.throws(() => decodeComposition(encodeComposition(tooEarly)), /not there/);
+
+  // A landmark that is not a planetary system at all.
+  const notASystem = createDefaultComposition();
+  notASystem.events.push({ kind: "system-pluck", at: 1, systemId: "milky-way", bodyId: "x" });
+  assert.throws(() => decodeComposition(encodeComposition(notASystem)));
+});
+
+test("journey births obey the same sky rules as home births", () => {
+  // Duplicate world, moon without a living parent, a third moon on one world,
+  // and a thirteenth body: all refused, exactly as they are at home.
+  const duplicate = createDefaultComposition();
+  duplicate.events.push(
+    { kind: "add-guest-world", at: 1, systemId: "gj-876", world: { id: "gj-876-yours-1", orbitAu: 0.25, periodDays: 70 } },
+    { kind: "add-guest-world", at: 2, systemId: "gj-876", world: { id: "gj-876-yours-1", orbitAu: 0.3, periodDays: 90 } },
+  );
+  assert.throws(() => decodeComposition(encodeComposition(duplicate)), /already alive/);
+
+  const orphanMoon = createDefaultComposition();
+  orphanMoon.events.push(
+    { kind: "add-guest-moon", at: 1, systemId: "gj-876", planetId: "gj-876-yours-9", moon: { id: "gj-876-yours-9-moon-1", moonAu: 0.002, hillAu: 0.006, periodDays: 7 } },
+  );
+  assert.throws(() => decodeComposition(encodeComposition(orphanMoon)), /no live parent/);
+
+  const thirdMoon = createDefaultComposition();
+  thirdMoon.events.push(
+    { kind: "add-guest-moon", at: 1, systemId: "gj-876", planetId: "gj-876-b", moon: { id: "gj-876-b-moon-1", moonAu: 0.002, hillAu: 0.006, periodDays: 7 } },
+    { kind: "add-guest-moon", at: 2, systemId: "gj-876", planetId: "gj-876-b", moon: { id: "gj-876-b-moon-2", moonAu: 0.003, hillAu: 0.006, periodDays: 12 } },
+    { kind: "add-guest-moon", at: 3, systemId: "gj-876", planetId: "gj-876-b", moon: { id: "gj-876-b-moon-3", moonAu: 0.004, hillAu: 0.006, periodDays: 20 } },
+  );
+  assert.throws(() => decodeComposition(encodeComposition(thirdMoon)), /two moons/);
+
+  // GLIESE 876 has 4 measured worlds, so 8 guests fill the sky; the 9th overflows.
+  const full = createDefaultComposition();
+  let at = 0;
+  for (let index = 1; index <= 8; index += 1) {
+    full.events.push({
+      kind: "add-guest-world",
+      at: (at += 1),
+      systemId: "gj-876",
+      world: { id: `gj-876-yours-${index}`, orbitAu: 0.2 + index * 0.05, periodDays: 60 + index },
+    });
+  }
+  assert.doesNotThrow(() => decodeComposition(encodeComposition(full)));
+  full.events.push({
+    kind: "add-guest-world",
+    at: 20,
+    systemId: "gj-876",
+    world: { id: "gj-876-yours-9", orbitAu: 0.9, periodDays: 400 },
+  });
+  assert.throws(() => decodeComposition(encodeComposition(full)), /Too many worlds/);
+
+  // And a moon may be hung on a guest world, because it can be hung on one live.
+  const moonOnGuest = createDefaultComposition();
+  moonOnGuest.events.push(
+    { kind: "add-guest-world", at: 1, systemId: "gj-876", world: { id: "gj-876-yours-1", orbitAu: 0.25, periodDays: 70 } },
+    { kind: "add-guest-moon", at: 2, systemId: "gj-876", planetId: "gj-876-yours-1", moon: { id: "gj-876-yours-1-moon-1", moonAu: 0.002, hillAu: 0.006, periodDays: 7 } },
+  );
+  assert.doesNotThrow(() => decodeComposition(encodeComposition(moonOnGuest)));
 });

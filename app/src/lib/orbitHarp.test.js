@@ -476,7 +476,7 @@ test("a moon birth survives the share format and listener replay contract", () =
   });
   const decoded = decodeComposition(encoded);
 
-  assert.equal(decoded.format, "tau-record/6");
+  assert.equal(decoded.format, "tau-record/7");
   assert.equal(decoded.events[0].body.kind, "moon");
   assert.equal(decoded.events[0].body.parentId, "europa");
 });

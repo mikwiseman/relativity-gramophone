@@ -118,6 +118,12 @@ export function App() {
   const [shellIndex, setShellIndex] = useState(0);
   const [guestWorlds, setGuestWorlds] = useState(() => new Map());
   const [systemMoons, setSystemMoons] = useState(() => new Map());
+  // Synchronous mirrors of the two maps. A replayed journey can fire two
+  // births inside one frame, and two reads of the same stale React state
+  // would mint the same id twice — the ref is the write-through source of
+  // truth for every handler, so ids and caps are exact at any event rate.
+  const guestWorldsRef = useRef(new Map());
+  const systemMoonsRef = useRef(new Map());
   const [guestPreview, setGuestPreview] = useState(null);
   const [journey, setJourney] = useState(IDLE_JOURNEY);
   const journeyTarget = journey.journeyTarget;
@@ -135,7 +141,13 @@ export function App() {
   const [interactionCancelToken, setInteractionCancelToken] = useState(0);
 
   const audioRef = useRef(new AudioEngine());
-  if (import.meta.env.DEV && typeof window !== "undefined") window.__rgAudio = audioRef.current;
+  if (import.meta.env.DEV && typeof window !== "undefined") {
+    window.__rgAudio = audioRef.current;
+    // The live score, exposed to the same QA harness the audio engine above is
+    // exposed to: an E2E can read the events a tour just recorded, hand them
+    // back as a link, and demand the listener hear the identical concert.
+    window.__rgComposition = composition;
+  }
   const physicsFrameRef = useRef(null);
   const lastPhysicsPaintRef = useRef(0);
   const eventCountRef = useRef(composition.events.length);
@@ -203,6 +215,13 @@ export function App() {
     cancelDirectGestures();
     setComposition(nextComposition);
     setIsListener(Boolean(score));
+    // A new universe owns nothing in another star's sky: worlds and moons the
+    // player made in visited systems belong to the universe that made them,
+    // or one person's TRAPPIST-1 edits would leak into every score they open.
+    guestWorldsRef.current = new Map();
+    systemMoonsRef.current = new Map();
+    setGuestWorlds(new Map());
+    setSystemMoons(new Map());
     setIsPlaying(score ? false : INITIAL_PLAYBACK);
     setAudioState(audioRef.current.getState() === "running" ? "running" : "locked");
     setElapsed(0);
@@ -538,10 +557,17 @@ export function App() {
     // Sound that is already running does not need to be started again, and
     // re-running the gesture handshake would put its clock-verification probe
     // in front of every single note. An instrument has to answer immediately.
-    // Deliberately does not touch the field: whether the continuous voice of
-    // the system is sounding belongs to the transport, and a single note must
-    // not switch it on under a paused transport or off under a playing one.
-    if (audioRef.current.getState() === "running") return Promise.resolve("running");
+    // The shortcut must still SAY the sound is running: in any environment
+    // where the context is born already running, skipping this line leaves the
+    // TOUCH TO HEAR gate up over a live universe forever.
+    if (audioRef.current.getState() === "running") {
+      hasSoundedRef.current = true;
+      setAudioState("running");
+      // Still deliberately not touching the field: whether the continuous
+      // voice sounds belongs to the transport, and a single note must not
+      // switch it on under a paused transport or off under a playing one.
+      return Promise.resolve("running");
+    }
     let request;
     request = audioRef.current.activateFromGesture(activateField)
       .then((state) => {
@@ -865,7 +891,7 @@ export function App() {
       // the player pulled out of its star, so a tap on the star and a walk
       // across the worlds are the same music heard two ways.
       audioRef.current.playCosmicLandmark(
-        withGuestWorlds(landmark, guestWorlds.get(landmark.id) ?? []),
+        withGuestWorlds(landmark, guestWorldsRef.current.get(landmark.id) ?? []),
       );
       if (landmark.system) {
         // Entering a system supersedes any flight still in the air. The camera
@@ -905,6 +931,23 @@ export function App() {
    * the whole point: you can hear where a world of your own would sit inside
    * TRAPPIST-1's rhythm.
    */
+  const handleBodyGesture = useCallback((event) => {
+    if (isListener) return;
+    if (eventCountRef.current >= MAX_SCORE_EVENTS) {
+      setRuntimeError("This performance is full. Share it, then begin a new one.");
+      return;
+    }
+    if (event.at > 3600) {
+      setRuntimeError("This performance has reached one hour");
+      return;
+    }
+    eventCountRef.current += 1;
+    shareRequestRef.current += 1;
+    setShareLink("");
+    setInscribed(null);
+    setComposition((current) => ({ ...current, events: [...current.events, event] }));
+  }, [isListener]);
+
   /**
    * A moon the player hangs on a world of a system they travelled to.
    *
@@ -918,10 +961,10 @@ export function App() {
       const landmark = cosmicLandmarkById(landmarkId);
       // The world may be one the player added themselves — the effective
       // system counts measured and guest worlds alike.
-      const effective = withGuestWorlds(landmark, guestWorlds.get(landmarkId) ?? []);
+      const effective = withGuestWorlds(landmark, guestWorldsRef.current.get(landmarkId) ?? []);
       const planet = effective.system.bodies.find((body) => body.id === planetId);
       if (!planet?.massEarth) throw new Error("Nobody has weighed this world, so it cannot hold a moon");
-      const held = systemMoons.get(landmarkId) ?? [];
+      const held = systemMoonsRef.current.get(landmarkId) ?? [];
       if (held.filter((moon) => moon.parentId === planetId).length >= 2) {
         setRuntimeError("This world already holds two moons.");
         return;
@@ -934,10 +977,23 @@ export function App() {
         hillAu,
         periodDays,
       });
-      setSystemMoons((current) => {
-        const next = new Map(current);
-        next.set(landmarkId, [...(current.get(landmarkId) ?? []), moon]);
-        return next;
+      const nextMoons = new Map(systemMoonsRef.current);
+      nextMoons.set(landmarkId, [...(systemMoonsRef.current.get(landmarkId) ?? []), moon]);
+      systemMoonsRef.current = nextMoons;
+      setSystemMoons(nextMoons);
+      // The journey is part of the performance: the plate carries the moon's
+      // full handmade spec, and the listener re-births it from those numbers.
+      handleBodyGesture({
+        kind: "add-guest-moon",
+        at: Number((physicsFrameRef.current?.time ?? 0).toFixed(6)),
+        systemId: landmarkId,
+        planetId,
+        moon: {
+          id: moon.id,
+          moonAu: moon.moonAu,
+          hillAu: moon.hillAu,
+          periodDays: moon.periodDays,
+        },
       });
       await startAudio(true);
       // A moon sounds its own first note: an overtone of its parent's voice
@@ -952,12 +1008,12 @@ export function App() {
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : "That moon could not form");
     }
-  }, [announceSonicCue, guestWorlds, performHaptic, startAudio, systemMoons]);
+  }, [announceSonicCue, handleBodyGesture, performHaptic, startAudio]);
 
   const handleGuestWorld = useCallback(async ({ landmark, orbitAu }) => {
     try {
-      const heldMoons = systemMoons.get(landmark.id) ?? [];
-      const existing = guestWorlds.get(landmark.id) ?? [];
+      const heldMoons = systemMoonsRef.current.get(landmark.id) ?? [];
+      const existing = guestWorldsRef.current.get(landmark.id) ?? [];
       if (landmark.system.bodies.length + existing.length + heldMoons.length >= MAX_WORLDS) {
         setRuntimeError("The sky is full. Remove a world before adding another.");
         return;
@@ -980,10 +1036,21 @@ export function App() {
         eccentricity: 0,
         guest: true,
       });
-      setGuestWorlds((current) => {
-        const next = new Map(current);
-        next.set(landmark.id, [...(current.get(landmark.id) ?? []), world]);
-        return next;
+      const nextWorlds = new Map(guestWorldsRef.current);
+      nextWorlds.set(landmark.id, [...existing, world]);
+      guestWorldsRef.current = nextWorlds;
+      setGuestWorlds(nextWorlds);
+      // Written into the score like every other gesture: a concert in someone
+      // else's sky is still a concert, and the plate must carry it home.
+      handleBodyGesture({
+        kind: "add-guest-world",
+        at: Number((physicsFrameRef.current?.time ?? 0).toFixed(6)),
+        systemId: landmark.id,
+        world: {
+          id: world.id,
+          orbitAu: world.orbitAu,
+          periodDays: world.periodDays,
+        },
       });
       await startAudio(true);
       audioRef.current.playSystemWorld(
@@ -998,7 +1065,7 @@ export function App() {
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : "That world could not form");
     }
-  }, [announceSonicCue, guestWorlds, performHaptic, startAudio, systemMoons]);
+  }, [announceSonicCue, handleBodyGesture, performHaptic, startAudio]);
 
   /**
    * One world of a visited system, touched on its own — measured, guest or
@@ -1014,13 +1081,23 @@ export function App() {
       // hard it is struck — exactly as the harp works at home.
       if (pluck) setHasPluckedOrbit(true);
       await startAudio(true);
-      const effective = withGuestWorlds(landmark, guestWorlds.get(landmark.id) ?? []);
-      const moons = systemMoons.get(landmark.id) ?? [];
+      const effective = withGuestWorlds(landmark, guestWorldsRef.current.get(landmark.id) ?? []);
+      const moons = systemMoonsRef.current.get(landmark.id) ?? [];
       const moon = moons.find((candidate) => candidate.id === planetId);
       const voice = moon
         ? audioRef.current.playSystemMoon(effective, moon.parentId, moon, pluck)
         : audioRef.current.playSystemWorld(effective, planetId, pluck);
       if (!voice) return;
+      // Every touch on a visited system is part of the performance and goes
+      // onto the plate: the tap or the pluck, the world, guest or moon it
+      // caught, and where along the string it landed.
+      handleBodyGesture({
+        kind: "system-pluck",
+        at: Number((physicsFrameRef.current?.time ?? 0).toFixed(6)),
+        systemId: landmark.id,
+        bodyId: planetId,
+        ...(pluck ?? {}),
+      });
       const days = voice.planet.periodDays;
       const year = days >= 365
         ? `${(days / 365.25).toFixed(days / 365.25 >= 10 ? 0 : 1)} YEARS`
@@ -1036,7 +1113,7 @@ export function App() {
       setAudioState("locked");
       setRuntimeError(error instanceof Error ? error.message : "That world could not sound");
     }
-  }, [announceSonicCue, guestWorlds, performHaptic, startAudio, systemMoons]);
+  }, [announceSonicCue, handleBodyGesture, performHaptic, startAudio]);
 
   useEffect(() => {
     const onEscape = (event) => {
@@ -1228,23 +1305,6 @@ export function App() {
       setRuntimeError(error instanceof Error ? error.message : "The forming voice could not start");
     }
   }, [audioState, startAudio]);
-
-  const handleBodyGesture = useCallback((event) => {
-    if (isListener) return;
-    if (eventCountRef.current >= MAX_SCORE_EVENTS) {
-      setRuntimeError("This performance is full. Share it, then begin a new one.");
-      return;
-    }
-    if (event.at > 3600) {
-      setRuntimeError("This performance has reached one hour");
-      return;
-    }
-    eventCountRef.current += 1;
-    shareRequestRef.current += 1;
-    setShareLink("");
-    setInscribed(null);
-    setComposition((current) => ({ ...current, events: [...current.events, event] }));
-  }, [isListener]);
 
   const saveShareScore = useCallback(async (score) => {
     const requestId = shareRequestRef.current + 1;
