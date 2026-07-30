@@ -13,12 +13,16 @@ import {
   blackbodyColor,
   compressedOrbitRadius,
   habitableZone,
+  lightCurveBreathSeconds,
   planetAppearance,
+  sampleLightCurve,
 } from "../lib/cosmicAtlas.js";
+import { PULSAR_BEAM_DIVISION } from "../lib/variableStars.js";
 import { buildClusterCloud, buildGalaxyCloud } from "../lib/galaxyShape.js";
 import { seededRandom, stringSeed } from "../lib/seededRandom.js";
 import { systemTouchRadius } from "../lib/soundflight.js";
 
+const TAU = Math.PI * 2;
 const galaxyVertexShader = `
   attribute float aSize;
   attribute vec3 aColor;
@@ -581,6 +585,40 @@ export function createStarSystemObject(system, {
   );
   group.add(star.group);
 
+  // A star that sings by itself gets to show it. A pulsar's beam rotates at
+  // the measured rotation rate divided by a stated factor — 160 Hz drawn at
+  // 2.5, because light you cannot see is light you cannot read — and its halo
+  // ticks at the same divided rate, never strobing past three a second. A
+  // cepheid breathes its measured light curve through both skirts of its own
+  // glow. Either way the flicker IS the measurement, not decoration.
+  const oscillation = system.star.oscillation ?? null;
+  let beam = null;
+  let pulseHz = 0;
+  let breathSeconds = 0;
+  let oscillationLevel = 1;
+  if (oscillation?.kind === "pulsar") {
+    pulseHz = oscillation.frequencyHz / PULSAR_BEAM_DIVISION;
+    beam = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 0.035),
+      new THREE.MeshBasicMaterial({
+        color: 0xdfe9ff,
+        transparent: true,
+        opacity: 0.75,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    beam.geometry.translate(0.5, 0, 0);
+    beam.scale.set(innerRadius * 1.35, 1, 1);
+    beam.rotation.x = -Math.PI / 2;
+    beam.renderOrder = 4;
+    group.add(beam);
+  } else if (oscillation?.kind === "cepheid") {
+    breathSeconds = lightCurveBreathSeconds(oscillation.periodDays);
+  }
+
   const zone = habitableZone(system.star.luminositySuns);
   const zoneInner = compressedOrbitRadius(
     Math.min(Math.max(zone.inner, minimumAu * 0.55), maximumAu * 1.8),
@@ -1098,6 +1136,18 @@ export function createStarSystemObject(system, {
       star.material.uniforms.uTime.value = elapsed;
       star.material.uniforms.uImpulse.value = starImpulse;
       starImpulse *= Math.exp(-decayDelta * 2.4);
+      if (oscillation?.kind === "pulsar") {
+        const phase = elapsed * pulseHz;
+        // The beam sweeps at the divided rate and the halo ticks with it —
+        // under three a second, so nobody's eyes are the price of honesty.
+        if (beam) beam.rotation.z = -phase * TAU;
+        oscillationLevel = (phase % 1) < 0.15 ? 1 : 0.12;
+      } else if (oscillation?.kind === "cepheid") {
+        oscillationLevel = (1 - (oscillation.amplitude ?? 0.5))
+          + (oscillation.amplitude ?? 0.5) * sampleLightCurve(oscillation.curve, (elapsed / breathSeconds) % 1);
+      } else {
+        oscillationLevel = 1;
+      }
       for (const world of worlds) {
         const revolutions = delta / (secondsPerFastestOrbit
           * (world.planet.periodDays / fastestPeriod));
@@ -1178,8 +1228,9 @@ export function createStarSystemObject(system, {
       // Seen from across the neighbourhood a system is 50 pixels wide; a corona
       // sized for arrival would bloom over its own worlds and leave a white
       // smudge where eight planets should be.
-      star.glow.material.opacity = opacity * (0.2 + labelMix * 0.3);
-      star.corona.material.opacity = opacity * labelMix * 0.13;
+      star.glow.material.opacity = opacity * (0.2 + labelMix * 0.3) * (0.45 + 0.55 * oscillationLevel);
+      star.corona.material.opacity = opacity * labelMix * 0.13 * (0.55 + 0.45 * oscillationLevel);
+      if (beam) beam.material.opacity = opacity * (0.28 + labelMix * 0.47) * (0.35 + 0.65 * oscillationLevel);
       habitableBand.material.opacity = opacity * 0.012 * (0.3 + labelMix * 0.7);
       for (const world of worlds) {
         // Eight rings of a distant system overlap into one white smear if each
@@ -1245,6 +1296,10 @@ export function createStarSystemObject(system, {
       star.material.dispose();
       star.glow.material.dispose();
       star.corona.material.dispose();
+      if (beam) {
+        beam.geometry.dispose();
+        beam.material.dispose();
+      }
       habitableBand.geometry.dispose();
       habitableBand.material.dispose();
     },

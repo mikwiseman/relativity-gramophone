@@ -140,6 +140,80 @@ export function findClosestResonance(periodicBodies, tolerance = 0.035) {
   return closest;
 }
 
+/**
+ * Every locked pair in the system, grouped into chains.
+ *
+ * The single closest resonance is what the engine reports to the sequencer,
+ * but a system like HD 110067 is a LADDER — b:c, c:d, d:e all locked at once
+ * — and the cathedral has to draw the whole figure, not one span of it. Two
+ * bodies linked by a locked ratio share a chain; chains of three and more are
+ * the ladders. Members come back in period order, with each pair's own ratio
+ * and strength, because the figure shows every span's own node count.
+ */
+export function findResonanceChains(periodicBodies, tolerance = 0.035, lockStrength = 0.5) {
+  const pairs = [];
+  for (let firstIndex = 0; firstIndex < periodicBodies.length; firstIndex += 1) {
+    for (let secondIndex = firstIndex + 1; secondIndex < periodicBodies.length; secondIndex += 1) {
+      const first = periodicBodies[firstIndex];
+      const second = periodicBodies[secondIndex];
+      if (!(first.period > 0) || !(second.period > 0)) continue;
+      const observedRatio = Math.max(first.period, second.period) / Math.min(first.period, second.period);
+      let best = null;
+      for (const ratio of RESONANCE_RATIOS) {
+        const target = ratio.numerator / ratio.denominator;
+        const relativeError = Math.abs(observedRatio - target) / target;
+        if (relativeError > tolerance) continue;
+        const strength = 1 - relativeError / tolerance;
+        if (!best || strength > best.strength) {
+          best = {
+            numerator: ratio.numerator,
+            denominator: ratio.denominator,
+            strength,
+            error: relativeError,
+          };
+        }
+      }
+      if (best && best.strength >= lockStrength) {
+        pairs.push({ first: first.id, second: second.id, ...best });
+      }
+    }
+  }
+
+  const parent = new Map();
+  const find = (id) => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root);
+    return root;
+  };
+  for (const pair of pairs) {
+    if (!parent.has(pair.first)) parent.set(pair.first, pair.first);
+    if (!parent.has(pair.second)) parent.set(pair.second, pair.second);
+    parent.set(find(pair.first), find(pair.second));
+  }
+  const membersByRoot = new Map();
+  for (const id of parent.keys()) {
+    const root = find(id);
+    if (!membersByRoot.has(root)) membersByRoot.set(root, []);
+    membersByRoot.get(root).push(id);
+  }
+
+  const periodById = new Map(periodicBodies.map((body) => [body.id, body.period]));
+  return [...membersByRoot.values()]
+    .map((memberIds) => {
+      const memberSet = new Set(memberIds);
+      const spans = pairs.filter((pair) => memberSet.has(pair.first) && memberSet.has(pair.second));
+      return {
+        memberIds: memberIds.sort((first, second) => periodById.get(first) - periodById.get(second)),
+        spans,
+        meanStrength: spans.length > 0
+          ? spans.reduce((sum, span) => sum + span.strength, 0) / spans.length
+          : 0,
+      };
+    })
+    .filter((chain) => chain.memberIds.length >= 2)
+    .sort((first, second) => second.memberIds.length - first.memberIds.length);
+}
+
 function initialPlanetState(body) {
   const eccentricity = clamp(body.eccentricity, 0, 0.72);
   const eccentricAnomaly = body.phase;

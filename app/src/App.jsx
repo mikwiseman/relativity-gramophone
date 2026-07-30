@@ -12,6 +12,7 @@ import {
 } from "@phosphor-icons/react";
 
 import { InscriptionDialog } from "./components/InscriptionDialog.jsx";
+import { SonificationLens } from "./components/SonificationLens.jsx";
 import { SoundflightStage } from "./components/SoundflightStage.jsx";
 import { AudioEngine } from "./lib/audioEngine.js";
 import {
@@ -138,6 +139,7 @@ export function App() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [lightOpen, setLightOpen] = useState(false);
   const [utilityOpen, setUtilityOpen] = useState(false);
+  const [lensOpen, setLensOpen] = useState(false);
   const [interactionCancelToken, setInteractionCancelToken] = useState(0);
 
   const audioRef = useRef(new AudioEngine());
@@ -273,6 +275,20 @@ export function App() {
     cosmicScale.id === "orbit" ? "system" : cosmicScale.id,
   );
   const visitedSystem = visitedSystemId ? cosmicLandmarkById(visitedSystemId) : null;
+  // Standing inside a pulsar's system starts its metronome — quietly, in the
+  // pulsar's own tempo, never nudged toward the player's. Leaving the system,
+  // pausing the universe or losing sound stops it again.
+  const visitedPulsarHz = visitedSystem?.system?.star?.oscillation?.kind === "pulsar"
+    ? visitedSystem.system.star.oscillation.frequencyHz
+    : null;
+  useEffect(() => {
+    if (visitedPulsarHz && audioState === "running" && isPlaying) {
+      audioRef.current.startPulsarTick(visitedPulsarHz);
+      return () => audioRef.current.stopPulsarTick();
+    }
+    audioRef.current.stopPulsarTick();
+    return undefined;
+  }, [audioState, isPlaying, visitedPulsarHz]);
   const hasCosmicScore = isListener
     && composition.events.some((event) => event.kind === "cosmic-landmark");
   const isAwaitingCosmicScore = hasCosmicScore
@@ -887,6 +903,33 @@ export function App() {
   const handleCosmicAudition = useCallback(async (landmark) => {
     try {
       await startAudio(true);
+      if (landmark.oscillation?.kind === "pulsar") {
+        // A lone pulsar carries no chord: its audition IS its measured tick,
+        // at exactly the frequency timing measured — multiplier one, said so.
+        const tick = audioRef.current.playPulsarTick(landmark.oscillation.frequencyHz);
+        setRuntimeError(null);
+        announceSonicCue(
+          `${landmark.name} · ${tick.frequency.toFixed(1)} HZ · ×1 ROTATION, NO OCTAVE SHIFT`,
+          3600,
+        );
+        performHaptic({ kind: "audition", strength: 0.7 });
+        return;
+      }
+      if (landmark.oscillation?.kind === "cepheid") {
+        // A lone cepheid carries no chord either: its audition is the start of
+        // one measured breath, compressed by the stated factor, with the full
+        // breath's length said out loud.
+        const breath = audioRef.current.playCepheidBreath(landmark.oscillation);
+        const breathSeconds = breath?.breathSeconds ?? 0;
+        const periodDays = landmark.oscillation.periodDays;
+        setRuntimeError(null);
+        announceSonicCue(
+          `${landmark.name} · BREATH ${breathSeconds.toFixed(1)} S = ${periodDays.toFixed(2)} DAYS ×10 S`,
+          3600,
+        );
+        performHaptic({ kind: "audition", strength: 0.7 });
+        return;
+      }
       // The chord is the system as it actually is — measured worlds plus any
       // the player pulled out of its star, so a tap on the star and a walk
       // across the worlds are the same music heard two ways.
@@ -912,15 +955,20 @@ export function App() {
       setIsPlaying(true);
       setDialogOpen(false);
       setRuntimeError(null);
+      const cepheid = landmark.system?.star?.oscillation?.kind === "cepheid"
+        ? landmark.system.star.oscillation
+        : null;
       announceSonicCue(
-        `${landmark.name} · ${landmark.lesson ?? landmark.system?.label ?? landmark.detail}`,
+        cepheid
+          ? `${landmark.name} · ${landmark.lesson ?? landmark.system?.label} · BREATH ${(cepheid.periodDays * 10).toFixed(1)} S = ${cepheid.periodDays.toFixed(2)} DAYS ×10 S`
+          : `${landmark.name} · ${landmark.lesson ?? landmark.system?.label ?? landmark.detail}`,
         3400,
       );
     } catch (error) {
       setAudioState("locked");
       setRuntimeError(error instanceof Error ? error.message : "The cosmic voice could not start");
     }
-  }, [announceSonicCue, guestWorlds, startAudio]);
+  }, [announceSonicCue, performHaptic, startAudio]);
 
   /**
    * A world the player adds to a real system.
@@ -1130,6 +1178,10 @@ export function App() {
         setUtilityOpen(false);
         return;
       }
+      if (lensOpen) {
+        setLensOpen(false);
+        return;
+      }
       if (dialogOpen) return;
       if (visitedSystem) {
         handleCosmicTravel("neighborhood");
@@ -1146,6 +1198,7 @@ export function App() {
     guideOpen,
     handleCloseLight,
     handleCosmicTravel,
+    lensOpen,
     lightOpen,
     utilityOpen,
     visitedSystem,
@@ -1734,6 +1787,16 @@ export function App() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => {
+                    setLensOpen(true);
+                    setUtilityOpen(false);
+                  }}
+                >
+                  <Waveform aria-hidden="true" weight="thin" />
+                  <span>SONIFICATION</span>
+                </button>
+                <button
+                  type="button"
                   onClick={isListener ? openListenerShare : handleInscribe}
                   disabled={!isListener && liveBodies.length === 0 && composition.events.length === 0}
                 >
@@ -1832,6 +1895,16 @@ export function App() {
           <button type="button" onClick={() => setRuntimeError(null)}>DISMISS</button>
         </div>
       )}
+
+      <SonificationLens
+        open={lensOpen}
+        onClose={() => setLensOpen(false)}
+        selectedBody={selectedBody}
+        visitedSystem={visitedSystem}
+        guestWorlds={visitedSystem ? guestWorldsRef.current.get(visitedSystem.id) : undefined}
+        physicsFrame={physicsFrame}
+        resonances={composition.resonances}
+      />
 
       <InscriptionDialog
         bodies={isListener ? recordedBodies : liveBodies.length ? liveBodies : recordedBodies}

@@ -11,6 +11,7 @@ import {
   createInitialPhysicsState,
   dopplerFactor,
   findClosestResonance,
+  findResonanceChains,
   physicalMassForDisplay,
   totalEnergy,
 } from "./physicsEngine.js";
@@ -312,4 +313,34 @@ test("a radial gesture changes orbital scale while preserving a bound tangential
   assert.ok(after.period > before);
   assert.ok(after.eccentricity < 0.1);
   assert.ok(Number.isFinite(after.vy));
+});
+
+test("a locked ladder is found whole, in period order, with every span's own ratio", () => {
+  // HD 110067's unbroken chain: four neighbouring locks of ~3:2, so the
+  // cathedral must draw six worlds, not one span of them.
+  const ladder = [
+    { id: "b", period: 9.11 },
+    { id: "c", period: 13.67 },
+    { id: "d", period: 20.52 },
+    { id: "e", period: 30.79 },
+    { id: "f", period: 41.06 },
+    { id: "g", period: 54.77 },
+  ];
+  const chains = findResonanceChains(ladder);
+  assert.equal(chains.length, 1);
+  assert.deepEqual(chains[0].memberIds, ["b", "c", "d", "e", "f", "g"]);
+  assert.ok(chains[0].meanStrength > 0.8);
+  const spanKeys = chains[0].spans.map((span) => `${span.first}|${span.second}`);
+  assert.ok(spanKeys.includes("b|c") && spanKeys.includes("f|g"));
+
+  // A lone pair is a pair, not a chain — the old arch still applies.
+  const pair = findResonanceChains([{ id: "a", period: 8 }, { id: "b", period: 12 }]);
+  assert.equal(pair.length, 1);
+  assert.equal(pair[0].memberIds.length, 2);
+
+  // And an unrelated world is never invited into the figure: alone it forms
+  // no chain at all, because a chain is two or more locked bodies.
+  const withStranger = findResonanceChains([...ladder, { id: "h", period: 117.4 }]);
+  assert.equal(withStranger.length, 1);
+  assert.ok(withStranger.every((chain) => !chain.memberIds.includes("h")));
 });

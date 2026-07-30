@@ -358,17 +358,27 @@ test("no world in the catalogue is drawn wider than physics allows", () => {
   for (const system of STAR_SYSTEMS) {
     const starRadiusEarth = system.star.radiusSolar * 109.076;
     for (const body of system.bodies) {
-      assert.ok(
-        body.radiusEarth <= 25,
-        `${body.name} is ${body.radiusEarth} Earth radii; the widest planets known are about 22`,
-      );
+      // Some residents are not planets at all: Polaris Ab is an F6 V dwarf —
+      // a star — and says so. Stellar companions are exempt from planet sizing.
+      if (!body.stellar) {
+        assert.ok(
+          body.radiusEarth <= 25,
+          `${body.name} is ${body.radiusEarth} Earth radii; the widest planets known are about 22`,
+        );
+      }
       // A giant around an M-dwarf really is a large fraction of its star —
       // Gliese 876 b and c sit at about 42% and are not wrong. Seventy per
-      // cent is not a system, it is an arithmetic error.
-      assert.ok(
-        body.radiusEarth < starRadiusEarth * 0.6,
-        `${body.name} is ${(body.radiusEarth / starRadiusEarth * 100).toFixed(0)}% as wide as its own star`,
-      );
+      // cent is not a system, it is an arithmetic error. The one honest way
+      // past the line is a remnant host: WD 1856+534 b really is eight times
+      // wider than the white dwarf it orbits — the star died and shrank, the
+      // planet did not grow.
+      const remnantHost = system.star.radiusSolar < 0.05;
+      if (!remnantHost) {
+        assert.ok(
+          body.radiusEarth < starRadiusEarth * 0.6,
+          `${body.name} is ${(body.radiusEarth / starRadiusEarth * 100).toFixed(0)}% as wide as its own star`,
+        );
+      }
     }
   }
 });
@@ -447,7 +457,7 @@ test("every world you can visit carries a mass, and says whether anyone weighed 
       if (body.massSource === "measured") measured += 1; else inferred += 1;
     }
   }
-  assert.equal(measured + inferred, 131);
+  assert.equal(measured + inferred, 136);
   // Seven Kepler-90 worlds are transit-only, and Kepler-80 f's archive mass is
   // impossible for its size, so its mass is forecast too.
   assert.ok(inferred <= 8, `only the unweighable worlds may be forecast; ${inferred} are`);

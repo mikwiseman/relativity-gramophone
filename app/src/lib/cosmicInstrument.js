@@ -1,5 +1,6 @@
-import { blackbodyColor } from "./cosmicAtlas.js";
+import { blackbodyColor, lightCurveBreathSeconds } from "./cosmicAtlas.js";
 import { STAR_SYSTEMS_BY_ID } from "./starSystems.js";
+import { VARIABLE_STARS_BY_ID } from "./variableStars.js";
 import { STAR_CLUSTERS_BY_ID } from "./starClusters.js";
 import { GALAXIES_BY_ID } from "./galaxyRotation.js";
 import { GALAXY_CLUSTERS_BY_ID } from "./galaxyClusters.js";
@@ -205,6 +206,7 @@ export const NEIGHBOURHOOD_SHELLS = Object.freeze([
       Object.freeze(["v1298-tau", [-0.5, -0.95]]),
       Object.freeze(["toi-178", [-1, -0.22]]),
       Object.freeze(["hd-10180", [-0.83, 0.6]]),
+      Object.freeze(["hd-80606", [0.42, 0.3]]),
     ]),
   }),
   Object.freeze({
@@ -222,6 +224,25 @@ export const NEIGHBOURHOOD_SHELLS = Object.freeze([
       Object.freeze(["kepler-11", [-0.72, -0.82]]),
       Object.freeze(["kepler-62", [-1, -0.05]]),
       Object.freeze(["kepler-186", [-0.78, 0.66]]),
+    ]),
+  }),
+  // The sixth sky, and the first whose stars speak for themselves. A pulsar's
+  // tick is a measured rotation frequency — no octave shift, multiplier one —
+  // and a cepheid's breath is a measured light curve. The orbits still give
+  // the pitches; the oscillation gives the beat and the breath.
+  Object.freeze({
+    id: "singing-stars",
+    label: "THE SINGING STARS",
+    measure: "400 TO 2,600 LIGHT-YEARS",
+    guidance: "TOUCH A STAR THAT SINGS BY ITSELF",
+    guidanceDetail: "TWO PULSARS · THREE BREATHING CEPHEIDS · MULTIPLIER ×1",
+    members: Object.freeze([
+      Object.freeze(["psr-b1257", [0, 1]]),
+      Object.freeze(["polaris", [0.83, 0.6]]),
+      Object.freeze(["vela-pulsar", [1, -0.22]]),
+      Object.freeze(["delta-cephei", [0.5, -0.95]]),
+      Object.freeze(["rr-lyrae", [-0.5, -0.95]]),
+      Object.freeze(["psr-j0437", [-0.83, 0.6]]),
     ]),
   }),
   // The fifth sky, and the first that is not made of planets. A globular
@@ -299,8 +320,7 @@ const SOLAR_SYSTEM_LANDMARK = Object.freeze({
     });
 
 /** One system or cluster of the catalogue, as a landmark of its shell. */
-function catalogueLandmark(system, shellIndex, slot, order) {
-  // A cluster is a system in every sense this instrument means — a central
+function catalogueLandmark(system, shellIndex, slot, order) {  // A cluster is a system in every sense this instrument means — a central
   // mass with things going round it at measured radii — so it becomes a
   // landmark by exactly the same route, and every gesture already written
   // works inside one. Only the line under its name differs: a cluster is
@@ -336,11 +356,41 @@ function catalogueLandmark(system, shellIndex, slot, order) {
   });
 }
 
+/**
+ * A star that sings by itself, as a landmark of its shell. It has no orbiting
+ * worlds — its voice is its own measured oscillation, so the landmark carries
+ * the oscillation and its own note is the literal measured frequency: the one
+ * place in the instrument where the multiplier is exactly one.
+ */
+function variableStarLandmark(star, shellIndex, slot, order) {
+  return Object.freeze({
+    id: star.id,
+    scale: "neighborhood",
+    shell: shellIndex,
+    name: star.name,
+    detail: `${Math.round(star.distanceLy).toLocaleString("en-US")} LIGHT-YEARS · ${star.kind.toUpperCase()}`,
+    voice: star.voice,
+    // A pulsar's note is its literal rotation frequency; a cepheid's is the
+    // rate of its measured breath. Both are the honest frequencies of these
+    // stars — no octave shift in either direction.
+    frequency: star.oscillation.kind === "pulsar"
+      ? star.oscillation.frequencyHz
+      : 1 / lightCurveBreathSeconds(star.oscillation.periodDays),
+    color: 0x9fb6ff,
+    position: Object.freeze([slot[0] * 2.4, slot[1] * 2.4, ((order % 3) - 1) * 0.7]),
+    slot: Object.freeze([...slot]),
+    lesson: star.lesson,
+    oscillation: star.oscillation,
+  });
+}
+
 const NEIGHBOURHOOD_LANDMARKS = Object.freeze(
   NEIGHBOURHOOD_SHELLS.flatMap((shell, shellIndex) => shell.members.map(([id, slot], order) => {
     if (id === "solar-system") {
       return Object.freeze({ ...SOLAR_SYSTEM_LANDMARK, shell: shellIndex, slot: Object.freeze([...slot]) });
     }
+    const variable = VARIABLE_STARS_BY_ID.get(id);
+    if (variable) return variableStarLandmark(variable, shellIndex, slot, order);
     const system = STAR_SYSTEMS_BY_ID.get(id) ?? STAR_CLUSTERS_BY_ID.get(id);
     if (!system) throw new Error(`Unknown catalogue system in a shell: ${id}`);
     return catalogueLandmark(system, shellIndex, slot, order);

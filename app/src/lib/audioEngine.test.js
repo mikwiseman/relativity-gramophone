@@ -71,3 +71,37 @@ test("a trusted gesture schedules audible output before awaiting WebKit resume",
   assert.deepEqual(calls, ["graph", "chime", "resume", "clock", "field"]);
   assert.equal(engine.audioSession.type, "playback");
 });
+
+test("the polyphony ceiling fades the oldest notes first, every time", () => {
+  // The rule is first-in-first-out and device-independent: when a strum would
+  // pile more than twenty-four one-shot notes on the bus, the oldest fade over
+  // thirty milliseconds instead of letting the browser steal whatever it likes.
+  const engine = new AudioEngine();
+  const faded = [];
+  engine.context = { currentTime: 10 };
+  const makeGain = () => ({
+    gain: {
+      cancelScheduledValues: () => {},
+      setTargetAtTime: (value, at, constant) => {
+        if (value < 1) faded.push({ at, constant });
+      },
+    },
+  });
+
+  for (let index = 0; index < 24; index += 1) {
+    engine.trackOneShot(makeGain(), { onended: null });
+  }
+  assert.equal(engine.oneShots.size, 24);
+  assert.equal(faded.length, 0, "no one fades at the ceiling itself");
+
+  engine.trackOneShot(makeGain(), { onended: null });
+  assert.equal(engine.oneShots.size, 24, "the 25th note replaces the oldest");
+  assert.equal(faded.length, 1);
+  assert.equal(faded[0].at, 10);
+  assert.ok(faded[0].constant > 0 && faded[0].constant <= 0.05, "a fast musical fade, not a click");
+
+  engine.trackOneShot(makeGain(), { onended: null });
+  engine.trackOneShot(makeGain(), { onended: null });
+  assert.equal(engine.oneShots.size, 24);
+  assert.equal(faded.length, 3);
+});

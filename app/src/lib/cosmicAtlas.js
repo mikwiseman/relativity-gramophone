@@ -357,6 +357,41 @@ function clamp01(value) {
 }
 
 /**
+ * The measured brightness of a pulsating star at one phase of its cycle.
+ * Curves are stored as [phase, luminosity] knots of the real photometry and
+ * read by linear interpolation — never smoothed into a sine, because a
+ * cepheid's fast rise and slow fall is the whole story.
+ */
+export function sampleLightCurve(curve, phase) {
+  if (!Array.isArray(curve) || curve.length < 2) {
+    throw new Error("A light curve needs at least two measured knots");
+  }
+  const wrapped = ((phase % 1) + 1) % 1;
+  for (let index = 1; index < curve.length; index += 1) {
+    const [x1, y1] = curve[index - 1];
+    const [x2, y2] = curve[index];
+    if (wrapped > x2) continue;
+    const span = x2 - x1;
+    const local = span > 0 ? (wrapped - x1) / span : 0;
+    return y1 + (y2 - y1) * local;
+  }
+  return curve[curve.length - 1][1];
+}
+
+/**
+ * The one stated time compression every light curve breathes by: one day of
+ * the star's life plays as ten seconds of yours. Picked once, shown to the
+ * listener, and applied to every cepheid alike.
+ */
+export const LIGHTCURVE_TIME_COMPRESSION = 8640;
+
+/** Seconds one breath of a pulsating star takes on the listener's clock. */
+export function lightCurveBreathSeconds(periodDays) {
+  assertPositive(periodDays, "A light-curve breath requires a positive period in days");
+  return (periodDays * 86_400) / LIGHTCURVE_TIME_COMPRESSION;
+}
+
+/**
  * Turn a system's real orbital periods into one playable chord.
  *
  * One shared whole-octave transposition moves the whole system into the audible

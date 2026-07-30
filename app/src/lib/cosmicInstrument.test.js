@@ -202,7 +202,13 @@ test("real cosmic landmarks are sparse, playable, and bound to one semantic worl
       `${shell.id} keeps the centre clear for the player's own star`,
     );
     assert.ok(
-      members.every((landmark) => landmark.system?.bodies?.length >= 2),
+      members.every((landmark) => landmark.system?.bodies?.length >= 2
+        // The singing stars are allowed to be singular: a lone oscillator
+        // carries its measured tick or breath instead of a chord, and HD
+        // 80606's one dive at its star is the story of the system by itself.
+        || landmark.oscillation
+        || landmark.system?.star?.oscillation
+        || landmark.system?.bodies?.some((body) => body.eccentricity >= 0.5)),
       `${shell.id} holds only real systems with real worlds`,
     );
   }
@@ -242,11 +248,17 @@ test("every nearby star opens as a small real system instead of a decorative dot
   const solar = cosmicLandmarkById("solar-system");
 
   assert.ok(neighborhood.every((landmark) => (
-    landmark.system
+    (landmark.system
     && ["planetary", "binary", "open", "globular", "galaxy", "galaxy-cluster"].includes(landmark.system.kind)
     && Number.isInteger(landmark.system.worlds)
-    // A system with one body has a one-note chord and is not a system.
-    && landmark.system.worlds >= 2
+    // A system with one body has a one-note chord and is not a system — unless
+    // the single body is itself the measured story: HD 80606 b dives at its
+    // star at e = 0.93, and Polaris breathes as the nearest cepheid. Singular
+    // objects with a stated measured reason are the point of the catalogue,
+    // not filler.
+    && (landmark.system.worlds >= 2
+      || landmark.system.star.oscillation
+      || landmark.system.bodies.some((body) => body.eccentricity >= 0.5))
     && landmark.system.worlds <= 8
     && landmark.system.label.length > 0
     && landmark.system.worlds === landmark.system.bodies.length
@@ -260,12 +272,17 @@ test("every nearby star opens as a small real system instead of a decorative dot
       && body.orbitAu > 0
       && Number.isFinite(body.radiusEarth)
       && body.radiusEarth > 0
-    ))
+    )))
+    // A star that sings by itself carries no system at all: the lone pulsars
+    // and cepheids hold their measured oscillation instead, and that is their
+    // whole shape.
+    || (landmark.oscillation && !landmark.system)
   )));
 
   // Honest rendering needs the host star, not just its worlds: colour comes
   // from temperature and the habitable zone comes from luminosity.
   assert.ok(neighborhood.every((landmark) => (
+    !landmark.system || (
     landmark.system.star
     && landmark.system.star.name
     && landmark.system.star.spectralType
@@ -273,10 +290,11 @@ test("every nearby star opens as a small real system instead of a decorative dot
     && landmark.system.star.temperature < 60_000
     && landmark.system.star.radiusSolar > 0
     && landmark.system.star.luminositySuns > 0
-  )), "every visitable star carries its measured temperature, radius and luminosity");
+  ))), "every visitable star carries its measured temperature, radius and luminosity");
 
   // Worlds are listed outward, so the drawn order is the real order.
   for (const landmark of neighborhood) {
+    if (!landmark.system) continue;
     const orbits = landmark.system.bodies.map((body) => body.orbitAu);
     assert.deepEqual(orbits, [...orbits].sort((first, second) => first - second),
       `${landmark.name} must list its worlds outward`);
@@ -308,6 +326,9 @@ test("every nearby star opens as a small real system instead of a decorative dot
 
 test("real orbital periods become audible without changing their octave identity", () => {
   for (const landmark of cosmicLandmarksForScale("neighborhood")) {
+    // A lone oscillator has no orbiting bodies: its note is its measured
+    // frequency itself, multiplier ×1 — the one honest octave shift there is.
+    if (!landmark.system) continue;
     for (const body of landmark.system.bodies) {
       const frequency = orbitalSonificationFrequency(body.periodDays);
       const rawFrequency = 1 / (body.periodDays * 86_400);
@@ -323,6 +344,8 @@ test("real orbital periods become audible without changing their octave identity
 
 test("touching a real system plays a chord that falls as the orbits widen", () => {
   for (const landmark of cosmicLandmarksForScale("neighborhood")) {
+    // Lone oscillators carry their own measured frequency instead of a chord.
+    if (!landmark.system) continue;
     const periods = landmark.system.bodies.map((body) => body.periodDays);
     const voices = systemVoiceFrequencies(periods);
 

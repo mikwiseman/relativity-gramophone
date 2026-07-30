@@ -16,6 +16,7 @@ import {
   MAX_WORLDS,
   PhysicsEngine,
   createInitialPhysicsState,
+  findResonanceChains,
   orbitPathForBody,
 } from "../lib/physicsEngine.js";
 import {
@@ -57,6 +58,7 @@ import {
 } from "../lib/soundflight.js";
 import { nearestStringPoint, stringsAlongSweep } from "../lib/harpStrings.js";
 import { MILKY_WAY } from "../lib/cosmicAtlas.js";
+import { PULSAR_BEAM_DIVISION } from "../lib/variableStars.js";
 import { galaxyArmGeometry } from "../lib/galaxyShape.js";
 import {
   createGalaxyObject,
@@ -73,6 +75,7 @@ import {
   COSMIC_DESTINATIONS,
   cathedralIntensity,
   nextCathedralLevel,
+  CATHEDRAL_LOCK_STRENGTH,
   cosmicDestination,
   cosmicLandmarkById,
   cosmicLandmarksForScale,
@@ -521,6 +524,35 @@ function nearestOrbitPointIndex(points, position) {
 }
 
 function updateNotePulse(visual, now) {
+  // A world's first lap is its birth announcement: the pulse runs the whole
+  // string in exactly the new orbit's own period — the tempo of the voice is
+  // visible before the first note — opening with a flash in the voice's
+  // colour. Every later pulse is a short pluck ripple.
+  const birthAge = now - visual.birthPulseAt;
+  const birthActive = visual.birthPulsePeriod > 0
+    && birthAge >= 0
+    && birthAge <= visual.birthPulsePeriod
+    && visual.orbitPoints.length >= 2;
+  if (birthActive) {
+    const progress = birthAge / visual.birthPulsePeriod;
+    const span = visual.orbitPoints.length - 1;
+    const index = Math.floor((visual.pulseStartIndex + progress * span) % span);
+    const nextIndex = (index + 1) % span;
+    const localProgress = (visual.pulseStartIndex + progress * span) % 1;
+    const current = visual.orbitPoints[index];
+    const next = visual.orbitPoints[nextIndex];
+    visual.notePulse.position.set(
+      THREE.MathUtils.lerp(current.x, next.x, localProgress),
+      0.12,
+      THREE.MathUtils.lerp(current.z, next.z, localProgress),
+    );
+    const flash = Math.max(0, 1 - birthAge / 0.55);
+    const travel = Math.sin(Math.min(1, progress) * Math.PI);
+    visual.notePulse.material.opacity = Math.min(1, travel * 0.9 + flash);
+    visual.notePulse.scale.setScalar(0.22 + travel * 0.34 + flash * 0.85);
+    visual.notePulse.visible = true;
+    return;
+  }
   const age = now - visual.pulseAt;
   if (age < 0 || age > NOTE_PULSE_DURATION || visual.orbitPoints.length < 2) {
     visual.notePulse.visible = false;
@@ -696,6 +728,8 @@ function createPlanetVisual(opalTexture, radialTexture, body) {
     orbitUpdatedAt: -Infinity,
     pulseAt: -Infinity,
     pulseStartIndex: 0,
+    birthPulseAt: -Infinity,
+    birthPulsePeriod: 0,
     impulse: 0,
   };
 }
@@ -1242,6 +1276,13 @@ function updateCosmicLandmarkField(
     visual.glow.material.opacity = opacity * (
       isFocusedSystem ? 0.5 + visual.impulse * 0.42 : 0.34 + visual.impulse * 0.56
     );
+    // A lone pulsar in the field ticks at its measured rate divided by the
+    // stated factor — under three a second, so the sky never strobes.
+    if (visual.landmark.oscillation?.kind === "pulsar") {
+      const phase = (field.elapsed ?? 0)
+        * (visual.landmark.oscillation.frequencyHz / PULSAR_BEAM_DIVISION);
+      visual.glow.material.opacity *= ((phase % 1) < 0.15 ? 1 : 0.35);
+    }
     // A name belongs to its own scale. Letting it bleed through from a
     // neighbouring scale is what made the sky unreadable.
     visual.label.material.opacity = isFocusedSystem || !focused ? 0 : opacity * 0.82;
@@ -1276,7 +1317,10 @@ function updateCosmicLandmarkField(
   }
   const webOpacity = scale.universeMix * (scale.id === "universe" ? 1 : 0.1);
   field.web.group.visible = webOpacity > 0.02;
-  if (!reducedMotion) field.web.elapsed += delta;
+  if (!reducedMotion) {
+    field.web.elapsed += delta;
+    field.elapsed = (field.elapsed ?? 0) + delta;
+  }
   for (const path of field.web.paths) {
     path.line.material.opacity = webOpacity * 0.2;
     path.mote.material.opacity = webOpacity * 0.52;
@@ -1584,7 +1628,7 @@ function updateMemoryComet(comet, bodyVisuals, now, resolution) {
 
 function createResonanceCathedral() {
   const group = new THREE.Group();
-  const arches = Array.from({ length: 7 }, (_, index) => {
+  const arches = Array.from({ length: 12 }, (_, index) => {
     const arch = createOrbitString(index % 2 === 0 ? 0xe7bd72 : 0x72edff, {
       opacity: 0,
       linewidth: 1.2,
@@ -1608,7 +1652,11 @@ function updateResonanceCathedral(
   // Fired by a lock being won, then left to fade. Chasing the *presence* of a
   // resonance lit these arches permanently, because the opening composition is
   // in exact 3:2 resonance from its first frame.
-  const strength = Number.isFinite(resonance?.strength) ? resonance.strength : null;
+  const chains = findResonanceChains([...bodiesById.values()], 0.035, CATHEDRAL_LOCK_STRENGTH);
+  const chain = chains.find((candidate) => candidate.memberIds.length >= 3);
+  const strength = chain
+    ? chain.meanStrength
+    : Number.isFinite(resonance?.strength) ? resonance.strength : null;
   cathedral.intensity = nextCathedralLevel({
     level: cathedral.intensity,
     strength,
@@ -1617,7 +1665,61 @@ function updateResonanceCathedral(
     delta: Number.isFinite(delta) ? delta : 0,
   });
   cathedral.lastStrength = strength;
-  if (cathedral.intensity < 0.015 || !resonance?.bodyIds) {
+  if (cathedral.intensity < 0.015) {
+    cathedral.group.visible = false;
+    return cathedral.intensity;
+  }
+
+  // A locked ladder draws its whole figure: one span per neighbouring pair in
+  // period order, each span showing its own ratio as a node count, closing
+  // back to the first world. A single locked pair still draws the old arch.
+  if (chain && chain.memberIds.every((id) => stageBodies.has(id) && bodiesById.has(id))) {
+    cathedral.group.visible = true;
+    const spanByKey = new Map();
+    for (const span of chain.spans) {
+      spanByKey.set(`${span.first}|${span.second}`, span);
+      spanByKey.set(`${span.second}|${span.first}`, span);
+    }
+    let archIndex = 0;
+    const drawSpan = (fromId, toId, closing) => {
+      const arch = cathedral.arches[archIndex];
+      archIndex += 1;
+      if (!arch) return;
+      const span = spanByKey.get(`${fromId}|${toId}`);
+      const nodes = Math.max(1, Math.min(5, span?.numerator ?? 2));
+      const first = stageBodies.get(fromId);
+      const second = stageBodies.get(toId);
+      const firstColor = new THREE.Color(voiceVisual(bodiesById.get(fromId)?.voice).color);
+      const secondColor = new THREE.Color(voiceVisual(bodiesById.get(toId)?.voice).color);
+      const positions = [];
+      for (let index = 0; index <= 56; index += 1) {
+        const progress = index / 56;
+        const lateral = Math.sin(progress * Math.PI * nodes) * 0.09 * cathedral.intensity;
+        positions.push(
+          THREE.MathUtils.lerp(first.x, second.x, progress) + lateral,
+          0.08 + Math.sin(progress * Math.PI) * (0.7 + (archIndex % 4) * 0.3),
+          THREE.MathUtils.lerp(first.z, second.z, progress) + lateral * 0.6,
+        );
+      }
+      arch.geometry.setPositions(positions);
+      arch.computeLineDistances();
+      arch.material.color.copy(firstColor).lerp(secondColor, 0.5);
+      arch.material.opacity = cathedral.intensity
+        * (closing ? 0.2 : 0.24 + (span?.strength ?? 0.5) * 0.22);
+      arch.material.linewidth = 0.75 + cathedral.intensity * 1.4;
+      arch.material.resolution.set(resolution.width, resolution.height);
+    };
+    for (let index = 1; index < chain.memberIds.length; index += 1) {
+      drawSpan(chain.memberIds[index - 1], chain.memberIds[index], false);
+    }
+    drawSpan(chain.memberIds[chain.memberIds.length - 1], chain.memberIds[0], true);
+    for (let index = archIndex; index < cathedral.arches.length; index += 1) {
+      cathedral.arches[index].material.opacity = 0;
+    }
+    return cathedral.intensity;
+  }
+
+  if (!resonance?.bodyIds) {
     cathedral.group.visible = false;
     return cathedral.intensity;
   }
@@ -1928,6 +2030,8 @@ export function SoundflightStage(props) {
         visual.orbitPoints = [];
         visual.orbitUpdatedAt = -Infinity;
         visual.pulseAt = -Infinity;
+        visual.birthPulseAt = -Infinity;
+        visual.birthPulsePeriod = 0;
         visual.impulse = 0;
       }
     }
@@ -2651,6 +2755,23 @@ export function SoundflightStage(props) {
       }
       visual.pulseAt = at;
       visual.pulseStartIndex = nearestOrbitPointIndex(visual.orbitPoints, visual.group.position);
+    };
+
+    /**
+     * The first lap of a newborn world: one pulse, one full orbit, exactly the
+     * orbit's own period. The tempo of the voice arrives visibly, before the
+     * first note — and the star answers with a flash, because light released
+     * by capture is light with a reason to exist.
+     */
+    const triggerBirthPulse = (bodyId, period, at = performance.now() / 1000) => {
+      runtime.starVisual.impulse = 1;
+      const visual = runtime.bodyVisuals.get(bodyId);
+      if (!visual) return;
+      visual.birthPulseAt = at;
+      visual.birthPulsePeriod = Number.isFinite(period) && period > 0 ? period : 0;
+      visual.pulseStartIndex = visual.orbitPoints.length >= 2
+        ? nearestOrbitPointIndex(visual.orbitPoints, visual.group.position)
+        : 0;
     };
 
     const performCosmicAudition = (landmark) => {
@@ -3644,6 +3765,7 @@ export function SoundflightStage(props) {
           const birthEvent = engine.addBody(spec);
           propsRef.current.onBodySelect(spec.id);
           propsRef.current.onBodyGesture(birthEvent);
+          triggerBirthPulse(spec.id, engine.getBody(spec.id)?.period);
           propsRef.current.onMoonBloom({ ...engine.getBody(spec.id) }, { ...parent });
           propsRef.current.onMoonComplete(spec.id, parent.id);
         } catch (error) {
@@ -3670,7 +3792,7 @@ export function SoundflightStage(props) {
           birthCountRef.current += 1;
           propsRef.current.onBodySelect(spec.id);
           propsRef.current.onBodyGesture(birthEvent);
-          triggerOrbitPulse(spec.id);
+          triggerBirthPulse(spec.id, engine.getBody(spec.id)?.period);
           propsRef.current.onBirthBloom({ ...engine.getBody(spec.id) });
           propsRef.current.onLaunchComplete(spec.id);
         } catch (error) {
@@ -3834,9 +3956,12 @@ export function SoundflightStage(props) {
             if (born) {
               if (born.kind === "moon") {
                 const parent = engine.getBody(born.parentId);
-                if (parent) currentProps.onMoonBloom({ ...born }, { ...parent });
+                if (parent) {
+                  triggerBirthPulse(born.id, born.period);
+                  currentProps.onMoonBloom({ ...born }, { ...parent });
+                }
               } else {
-                runtime.pendingOrbitPulses.set(born.id, performance.now() / 1000);
+                triggerBirthPulse(born.id, born.period);
                 currentProps.onBirthBloom({ ...born });
               }
             }

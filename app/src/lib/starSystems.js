@@ -632,6 +632,91 @@ export const STAR_SYSTEMS = Object.freeze([
       Object.freeze({ id: "lp-890-9-c", name: "LP 890-9 C", kind: "planet", periodDays: 8.457463, orbitAu: 0.03984, radiusEarth: 1.367, massEarth: 25.3, massSource: "measured", eccentricity: 0 }),
     ]),
   }),
+  // The systems below widen the catalogue's architecture, not its count: the
+  // most eccentric giant ever found, the first planets humanity ever heard,
+  // and the North Star, breathing.
+  Object.freeze({
+    id: "hd-80606",
+    name: "HD 80606",
+    distanceLy: 217,
+    lesson: "A COMET-LIKE GIANT THAT DIVES AT ITS STAR EVERY 111 DAYS",
+    voice: "trautonium",
+    label: "1 WORLD · A YEAR OF 111 DAYS · ECCENTRICITY 0.93",
+    star: Object.freeze({
+      name: "HD 80606",
+      massSolar: 1.0,
+      spectralType: "G5 V",
+      temperature: 5645,
+      radiusSolar: 1.02,
+      luminositySuns: 0.98,
+    }),
+    bodies: Object.freeze([
+      // Six seconds of arcseconds-level precision matter here: e = 0.933 is
+      // what makes the instrument's second Kepler law audible — weeks of near
+      // silence at apastron, then one screaming rush through periastron.
+      Object.freeze({ id: "hd-80606-b", name: "HD 80606 B", kind: "planet", periodDays: 111.436, orbitAu: 0.453, radiusEarth: 10.24, massEarth: 1271.2, massSource: "measured", eccentricity: 0.933 }),
+    ]),
+  }),
+  Object.freeze({
+    id: "psr-b1257",
+    name: "PSR B1257+12",
+    distanceLy: 2300,
+    lesson: "THE FIRST EXOPLANETS EVER FOUND — AND THEY WERE HEARD, NOT SEEN",
+    voice: "trautonium",
+    label: "3 WORLDS · YEARS OF 25 TO 98 DAYS · AROUND A PULSAR",
+    star: Object.freeze({
+      // A millisecond pulsar: a city-sized ember spinning 160.79 times a second.
+      // Its tick is a measured frequency, so this star's voice has no octave
+      // shift at all — the one place the instrument multiplies by exactly one.
+      name: "PSR B1257+12 (LICH)",
+      massSolar: 1.4,
+      spectralType: "PSR",
+      temperature: 25000,
+      radiusSolar: 0.000014,
+      luminositySuns: 0.000001,
+      oscillation: Object.freeze({ kind: "pulsar", frequencyHz: 160.787, note: "ROTATION PERIOD 6.2187 MS, MEASURED TO 15 DIGITS" }),
+    }),
+    bodies: Object.freeze([
+      // Dracau, Poltergeist and Phobetor. Their masses come from timing the
+      // pulsar itself; nobody has seen them transit, so radii are forecast.
+      Object.freeze({ id: "psr-b1257-b", name: "PSR B1257+12 B", kind: "planet", periodDays: 25.262, orbitAu: 0.19, radiusEarth: 0.338, massEarth: 0.02, massSource: "measured", eccentricity: 0 }),
+      Object.freeze({ id: "psr-b1257-c", name: "PSR B1257+12 C", kind: "planet", periodDays: 66.5419, orbitAu: 0.36, radiusEarth: 1.91, massEarth: 4.3, massSource: "measured", eccentricity: 0 }),
+      Object.freeze({ id: "psr-b1257-d", name: "PSR B1257+12 D", kind: "planet", periodDays: 98.2114, orbitAu: 0.46, radiusEarth: 1.8, massEarth: 3.9, massSource: "measured", eccentricity: 0 }),
+    ]),
+  }),
+  Object.freeze({
+    id: "polaris",
+    name: "POLARIS",
+    distanceLy: 433,
+    lesson: "THE NORTH STAR ITSELF IS A CEPHEID, BREATHING EVERY 3.97 DAYS",
+    voice: "ondes",
+    label: "A BREATHING SUPERGIANT · COMPANION EVERY 29.6 YEARS",
+    star: Object.freeze({
+      // Polaris Aa, an F7 Ib supergiant: the nearest classical cepheid, and
+      // the standard candle's standard candle. Its breath is photometry, not
+      // poetry — and its envelope modulates everything this system says.
+      name: "POLARIS Aa",
+      massSolar: 5.4,
+      spectralType: "F7 Ib",
+      temperature: 6015,
+      radiusSolar: 37.5,
+      luminositySuns: 2500,
+      oscillation: Object.freeze({
+        kind: "cepheid",
+        periodDays: 3.9717,
+        // Fast rise, slow fall — the measured asymmetry that makes a cepheid's
+        // curve a natural envelope rather than a drawn one.
+        curve: Object.freeze([[0, 0.06], [0.13, 1], [0.42, 0.42], [0.75, 0.18], [1, 0.06]]),
+        amplitude: 0.5,
+        note: "PHOTOMETRIC LIGHT CURVE, TIME COMPRESSED ×8640 AND SAID SO",
+      }),
+    }),
+    bodies: Object.freeze([
+      // Polaris Ab, an F6 V dwarf on a measured 29.59-year orbit — a main
+      // sequence star, not a planet, and the light curve's own rhythm section.
+      Object.freeze({ id: "polaris-ab", name: "POLARIS Ab", kind: "planet", periodDays: 10805, orbitAu: 18.2, radiusEarth: 113, massEarth: 420_000, massSource: "measured", eccentricity: 0.63, stellar: true }),
+    ]),
+  }),
 ]);
 
 export const STAR_SYSTEMS_BY_ID = Object.freeze(new Map(

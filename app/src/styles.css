@@ -4513,3 +4513,58 @@ input:focus-visible {
     --glass-stroke: rgb(255 249 233 / 38%);
   }
 }
+
+/* The honesty lens: a wider cousin of the instrument menu, same glass. */
+.sonification-lens {
+  width: min(400px, calc(100vw - 36px));
+  gap: 12px;
+}
+
+.sonification-lens__law {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--rg-gold) 62%, transparent);
+}
+
+.sonification-lens__card {
+  display: grid;
+  gap: 4px;
+  padding-block: 10px 4px;
+  border-top: 1px solid color-mix(in srgb, var(--rg-gold) 18%, transparent);
+}
+
+.sonification-lens__card > span {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  color: color-mix(in srgb, var(--rg-gold) 55%, transparent);
+}
+
+.sonification-lens__card > strong {
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  color: var(--rg-gold-bright);
+}
+
+.sonification-lens__card p {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--rg-gold) 80%, transparent);
+}
+
+.sonification-lens__worlds {
+  display: grid;
+  gap: 3px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+}
+
+.sonification-lens__worlds li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: color-mix(in srgb, var(--rg-gold) 74%, transparent);
+}

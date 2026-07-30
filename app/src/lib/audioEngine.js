@@ -6,10 +6,11 @@ import {
   voicePluckParameters,
   systemChordVoicing,
 } from "./sonification.js";
-import { systemMoonFrequency, systemVoiceFrequencies, systemWorldVoice } from "./cosmicAtlas.js";
+import { systemMoonFrequency, systemVoiceFrequencies, systemWorldVoice, sampleLightCurve, lightCurveBreathSeconds } from "./cosmicAtlas.js";
 
 const REVERB_SECONDS = 3.1;
 const AUDIO_CLOCK_PROBE_MS = 90;
+const MAX_ONESHOT_VOICES = 24;
 
 function browserAudioContextClass() {
   return globalThis.AudioContext ?? globalThis.webkitAudioContext ?? null;
@@ -68,6 +69,32 @@ export class AudioEngine {
   voiceWaves = null;
   noiseBuffer = null;
   latestFrame = null;
+  oneShots = new Set();
+
+  /**
+   * The polyphony ceiling, as a rule rather than a device. One-shot notes —
+   * plucks, blooms, chords, sweeps — are tracked as they start; when a new
+   * note would push the count past MAX_ONESHOT_VOICES, the OLDEST notes fade
+   * out over thirty milliseconds. First in, first out, every time, on every
+   * device: the alternative was whatever the browser happened to steal.
+   */
+  trackOneShot(gain, oscillator) {
+    if (!this.context) return;
+    const entry = { gain, oscillator };
+    this.oneShots.add(entry);
+    oscillator.onended = () => this.oneShots.delete(entry);
+    if (this.oneShots.size <= MAX_ONESHOT_VOICES) return;
+    let excess = this.oneShots.size - MAX_ONESHOT_VOICES;
+    const now = this.context.currentTime;
+    for (const oldest of [...this.oneShots]) {
+      if (excess <= 0) break;
+      if (oldest === entry) break;
+      oldest.gain.gain.cancelScheduledValues(now);
+      oldest.gain.gain.setTargetAtTime(0.0001, now, 0.03);
+      this.oneShots.delete(oldest);
+      excess -= 1;
+    }
+  }
   cosmicPerspective = Object.freeze({
     systemMix: 1,
     neighborhoodMix: 0,
@@ -303,6 +330,7 @@ export class AudioEngine {
       gain.gain.exponentialRampToValueAtTime(0.0001, end);
       oscillator.connect(gain).connect(this.master);
       gain.connect(this.reverb);
+      this.trackOneShot(gain, oscillator);
       oscillator.start(start);
       oscillator.stop(end + 0.02);
     });
@@ -636,6 +664,7 @@ export class AudioEngine {
     panner.connect(this.delay);
     panner.connect(reverbSend).connect(this.reverb);
 
+    this.trackOneShot(gain, fundamental);
     fundamental.start(now);
     partial.start(now);
     sub.start(now);
@@ -705,6 +734,7 @@ export class AudioEngine {
     strike.start(now);
     strike.stop(now + 0.09);
 
+    this.trackOneShot(gain, first);
     for (const oscillator of [first, second, octave]) {
       oscillator.start(now);
       oscillator.stop(now + duration + 0.1);
@@ -953,6 +983,7 @@ export class AudioEngine {
     panner.connect(this.delay);
     panner.connect(reverbSend).connect(this.reverb);
 
+    this.trackOneShot(gain, fundamental);
     for (const oscillator of [fundamental, shimmer, sub]) {
       oscillator.start(now);
       oscillator.stop(now + duration + 0.1);
@@ -1006,6 +1037,7 @@ export class AudioEngine {
     gain.connect(this.delay);
     gain.connect(reverbSend).connect(this.reverb);
 
+    this.trackOneShot(gain, fall);
     for (const oscillator of [fall, thump]) {
       oscillator.start(now);
       oscillator.stop(now + duration + 0.1);
@@ -1057,6 +1089,13 @@ export class AudioEngine {
 
     const now = this.context.currentTime;
     const duration = 1.7 + frequencies.length * 0.2;
+    // A cepheid host breathes through everything its system says: the chord's
+    // envelope follows the measured light curve, at the one stated compression
+    // of a stellar day to ten seconds — and the surface says the factor.
+    const cepheid = landmark.system?.star?.oscillation?.kind === "cepheid"
+      ? landmark.system.star.oscillation
+      : null;
+    const breathSeconds = cepheid ? lightCurveBreathSeconds(cepheid.periodDays) : 0;
     frequencies.forEach((frequency, index) => {
       const oscillator = this.context.createOscillator();
       const filter = this.context.createBiquadFilter();
@@ -1080,13 +1119,38 @@ export class AudioEngine {
       panner.pan.value = voicing.pan;
       reverbSend.gain.value = voicing.reverb;
 
-      gain.gain.setValueAtTime(0.0001, onset);
-      gain.gain.exponentialRampToValueAtTime(peak, onset + 0.055 + index * 0.018);
-      gain.gain.exponentialRampToValueAtTime(peak * 0.38, onset + 0.52);
-      gain.gain.exponentialRampToValueAtTime(0.0001, onset + duration);
+      if (cepheid) {
+        const attackS = 0.055 + index * 0.018;
+        const sustainS = 0.52;
+        const envelopeAt = (elapsed) => {
+          if (elapsed <= 0) return 0.0001;
+          if (elapsed <= attackS) return Math.max(0.0001, (peak * elapsed) / attackS);
+          if (elapsed <= sustainS) return peak * (1 - 0.62 * ((elapsed - attackS) / (sustainS - attackS)));
+          return Math.max(0.0001, peak * 0.38 * (1 - (elapsed - sustainS) / (duration - sustainS)));
+        };
+        const depth = cepheid.amplitude ?? 0.5;
+        const points = 24;
+        for (let point = 0; point <= points; point += 1) {
+          const elapsed = (duration * point) / points;
+          const at = onset + elapsed;
+          const breathPhase = (at % breathSeconds) / breathSeconds;
+          const level = Math.max(
+            0.0001,
+            envelopeAt(elapsed) * ((1 - depth) + depth * sampleLightCurve(cepheid.curve, breathPhase)),
+          );
+          if (point === 0) gain.gain.setValueAtTime(level, at);
+          else gain.gain.linearRampToValueAtTime(level, at);
+        }
+      } else {
+        gain.gain.setValueAtTime(0.0001, onset);
+        gain.gain.exponentialRampToValueAtTime(peak, onset + 0.055 + index * 0.018);
+        gain.gain.exponentialRampToValueAtTime(peak * 0.38, onset + 0.52);
+        gain.gain.exponentialRampToValueAtTime(0.0001, onset + duration);
+      }
 
       oscillator.connect(filter).connect(gain).connect(panner).connect(this.master);
       panner.connect(reverbSend).connect(this.reverb);
+      this.trackOneShot(gain, oscillator);
       oscillator.start(onset);
       oscillator.stop(onset + duration + 0.08);
     });
@@ -1138,6 +1202,7 @@ export class AudioEngine {
 
     oscillator.connect(filter).connect(gain).connect(panner).connect(this.master);
     panner.connect(reverbSend).connect(this.reverb);
+    this.trackOneShot(gain, oscillator);
     oscillator.start(now);
     oscillator.stop(now + duration + 0.08);
     return voice;
@@ -1194,6 +1259,7 @@ export class AudioEngine {
 
     oscillator.connect(filter).connect(gain).connect(panner).connect(this.master);
     panner.connect(reverbSend).connect(this.reverb);
+    this.trackOneShot(gain, oscillator);
     oscillator.start(now);
     oscillator.stop(now + duration + 0.08);
     return {
@@ -1204,6 +1270,150 @@ export class AudioEngine {
         periodDays: moon.periodDays,
       },
     };
+  }
+
+  /**
+   * A pulsar heard once: three seconds of ticks at exactly the measured
+   * rotation frequency. The tick rate IS the tone — 173.688 Hz is played as
+   * 173.688 Hz, the one voice in the instrument with no octave shift at all.
+   */
+  playPulsarTick(frequencyHz, { duration = 3.2, peak = 0.11 } = {}) {
+    if (!this.context || this.context.state !== "running") return null;
+    if (!Number.isFinite(frequencyHz) || frequencyHz <= 0) {
+      throw new Error("A pulsar tick requires its measured rotation frequency");
+    }
+    const now = this.context.currentTime;
+    const source = this.context.createBufferSource();
+    source.buffer = this.noiseBuffer;
+    source.loop = true;
+    const filter = this.context.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 2400;
+    filter.Q.value = 2.2;
+    const gate = this.context.createGain();
+    gate.gain.value = 0;
+    const lfo = this.context.createOscillator();
+    lfo.type = "square";
+    lfo.frequency.value = frequencyHz;
+    const depth = this.context.createGain();
+    depth.gain.value = 0.5;
+    const base = this.context.createConstantSource();
+    base.offset.value = 0.5;
+    base.connect(depth);
+    lfo.connect(depth);
+    depth.connect(gate.gain);
+    const master = this.context.createGain();
+    master.gain.setValueAtTime(0.0001, now);
+    master.gain.exponentialRampToValueAtTime(peak, now + 0.03);
+    master.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    source.connect(filter).connect(gate).connect(master).connect(this.master);
+    master.connect(this.reverb);
+    this.trackOneShot(master, source);
+    source.start(now);
+    lfo.start(now);
+    base.start(now);
+    source.stop(now + duration);
+    lfo.stop(now + duration);
+    base.stop(now + duration);
+    return { frequency: frequencyHz };
+  }
+
+  /**
+   * A cepheid heard once: the start of one measured breath. The gain follows
+   * the real photometric curve at the instrument's one stated compression —
+   * a stellar day as ten seconds — and the cue says the full breath's length,
+   * so a six-second audition is announced as part of a longer breath, never
+   * as a whole one.
+   */
+  playCepheidBreath(oscillation, { seconds = 6, peak = 0.085 } = {}) {
+    if (!this.context || this.context.state !== "running") return null;
+    if (oscillation?.kind !== "cepheid" || !Array.isArray(oscillation.curve)) {
+      throw new Error("A cepheid breath requires its measured light curve");
+    }
+    const breathSeconds = lightCurveBreathSeconds(oscillation.periodDays);
+    const depth = oscillation.amplitude ?? 0.5;
+    const now = this.context.currentTime;
+    const source = this.context.createBufferSource();
+    source.buffer = this.noiseBuffer;
+    source.loop = true;
+    const filter = this.context.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 640;
+    filter.Q.value = 1.1;
+    const gain = this.context.createGain();
+    const points = 36;
+    for (let point = 0; point <= points; point += 1) {
+      const at = now + (seconds * point) / points;
+      const phase = (at % breathSeconds) / breathSeconds;
+      const level = Math.max(
+        0.0001,
+        peak * ((1 - depth) + depth * sampleLightCurve(oscillation.curve, phase))
+          * Math.min(1, (seconds - (seconds * point) / points) / 0.9),
+      );
+      if (point === 0) gain.gain.setValueAtTime(level, at);
+      else gain.gain.linearRampToValueAtTime(level, at);
+    }
+    source.connect(filter).connect(gain).connect(this.master);
+    gain.connect(this.reverb);
+    this.trackOneShot(gain, source);
+    source.start(now);
+    source.stop(now + seconds + 0.05);
+    return { breathSeconds };
+  }
+
+  /**
+   * The same tick, kept running quietly while you stand inside the pulsar's
+   * system — the metronome the planets dance to. It is never quantised to
+   * anyone's tempo: the fifteen digits of the period are the whole point.
+   */
+  startPulsarTick(frequencyHz, { peak = 0.028 } = {}) {
+    if (!this.context || this.context.state !== "running") return;
+    this.stopPulsarTick();
+    const source = this.context.createBufferSource();
+    source.buffer = this.noiseBuffer;
+    source.loop = true;
+    const filter = this.context.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.value = 2400;
+    filter.Q.value = 2.2;
+    const gate = this.context.createGain();
+    gate.gain.value = 0;
+    const lfo = this.context.createOscillator();
+    lfo.type = "square";
+    lfo.frequency.value = frequencyHz;
+    const depth = this.context.createGain();
+    depth.gain.value = 0.5;
+    const base = this.context.createConstantSource();
+    base.offset.value = 0.5;
+    base.connect(depth);
+    lfo.connect(depth);
+    depth.connect(gate.gain);
+    const master = this.context.createGain();
+    master.gain.setTargetAtTime(peak, this.context.currentTime, 0.4);
+    source.connect(filter).connect(gate).connect(master).connect(this.master);
+    master.connect(this.reverb);
+    source.start();
+    lfo.start();
+    base.start();
+    this.pulsarTick = { source, lfo, base, master };
+  }
+
+  stopPulsarTick() {
+    if (!this.pulsarTick) return;
+    const tick = this.pulsarTick;
+    this.pulsarTick = null;
+    if (this.context) {
+      tick.master.gain.setTargetAtTime(0.0001, this.context.currentTime, 0.05);
+    }
+    window.setTimeout(() => {
+      try {
+        tick.source.stop();
+        tick.lfo.stop();
+        tick.base.stop();
+      } catch {
+        // The nodes may already be stopped if the context went away mid-fade.
+      }
+    }, 400);
   }
 
   playChallengeSuccess() {
@@ -1218,6 +1428,7 @@ export class AudioEngine {
       gain.gain.exponentialRampToValueAtTime(0.045, now + index * 0.08 + 0.018);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.88 + index * 0.08);
       oscillator.connect(gain).connect(this.master);
+      this.trackOneShot(gain, oscillator);
       oscillator.start(now + index * 0.08);
       oscillator.stop(now + 1 + index * 0.08);
     }
